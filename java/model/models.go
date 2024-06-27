@@ -14,6 +14,11 @@
 
 package model
 
+const (
+	LOOP_BACK_IP     = "127.0.0.1"
+	ARK_SERVICE_PORT = 1238
+)
+
 type BuildVirtualNodeConfig struct {
 	// NodeIP is the ip of the node
 	NodeIP string `json:"nodeIP"`

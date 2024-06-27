@@ -17,11 +17,12 @@ package root
 import (
 	"context"
 	"crypto/tls"
+	"github.com/koupleless/arkctl/v1/service/ark"
 	"net/http"
 	"runtime"
 
-	podlet "github.com/koupleless/module-controller/java/pod/let"
-	podnode "github.com/koupleless/module-controller/java/pod/node"
+	podlet "github.com/koupleless/virtual-kubelet/java/pod/let"
+	podnode "github.com/koupleless/virtual-kubelet/java/pod/node"
 	"github.com/spf13/cobra"
 	"github.com/virtual-kubelet/virtual-kubelet/errdefs"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
@@ -74,10 +75,11 @@ func runRootCommand(ctx context.Context, c Opts) error {
 	cm, err := nodeutil.NewNode(
 		c.NodeName,
 		func(config nodeutil.ProviderConfig) (nodeutil.Provider, node.NodeProvider, error) {
-			nodeProvider := podnode.NewVirtualKubeletNode()
+			arkService := ark.BuildService(context.Background())
+			nodeProvider := podnode.NewVirtualKubeletNode(arkService)
 			// initialize node spec on bootstrap
+			provider = podlet.NewBaseProvider(config.Node.Namespace, arkService)
 			nodeProvider.Register(ctx, config.Node)
-			provider = podlet.NewBaseProvider(config.Node.Namespace)
 			return provider, nodeProvider, nil
 		},
 		func(cfg *nodeutil.NodeConfig) error {

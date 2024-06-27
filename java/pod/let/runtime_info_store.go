@@ -18,7 +18,7 @@ import (
 	"sync"
 
 	"github.com/koupleless/arkctl/v1/service/ark"
-	"github.com/koupleless/module-controller/java/common"
+	"github.com/koupleless/virtual-kubelet/java/common"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -28,7 +28,6 @@ type RuntimeInfoStore struct {
 	modelUtils common.ModelUtils
 
 	podKeyToPod                map[string]*corev1.Pod
-	podKeyToDeletePod          map[string]*corev1.Pod
 	podKeyToBizModels          map[string][]*ark.BizModel
 	bizIdentityToRelatedPodKey map[string]string
 }
@@ -60,14 +59,28 @@ func (r *RuntimeInfoStore) PutPod(pod *corev1.Pod) {
 	// create or update
 	r.podKeyToPod[podKey] = pod
 	r.podKeyToBizModels[podKey] = r.modelUtils.GetBizModelsFromCoreV1Pod(pod)
-	for _, bizModels := range r.podKeyToBizModels {
-		for _, bizModel := range bizModels {
-			// the biz identity naming convention should guarantee there would be no potential conflict
-			// for now we use bizName:version as the identity, the constraint cannot be applied.
-			// further mechnanism to avoid this is required, for now we just leave the risk here.
-			r.bizIdentityToRelatedPodKey[r.getBizIdentity(bizModel)] = podKey
-		}
+	for _, bizModel := range r.podKeyToBizModels[podKey] {
+		// the biz identity naming convention should guarantee there would be no potential conflict
+		// for now we use bizName:version as the identity, the constraint cannot be applied.
+		// further mechnanism to avoid this is required, for now we just leave the risk here.
+		r.bizIdentityToRelatedPodKey[r.getBizIdentity(bizModel)] = podKey
 	}
+}
+
+func (r *RuntimeInfoStore) DeletePod(podKey string) {
+	r.Lock()
+	defer r.Unlock()
+
+	// create or update
+	for _, bizModel := range r.podKeyToBizModels[podKey] {
+		// the biz identity naming convention should guarantee there would be no potential conflict
+		// for now we use bizName:version as the identity, the constraint cannot be applied.
+		// further mechnanism to avoid this is required, for now we just leave the risk here.
+		delete(r.bizIdentityToRelatedPodKey, r.getBizIdentity(bizModel))
+	}
+
+	delete(r.podKeyToBizModels, podKey)
+	delete(r.podKeyToPod, podKey)
 }
 
 func (r *RuntimeInfoStore) GetRelatedPodKeyByBizIdentity(bizIdentity string) string {

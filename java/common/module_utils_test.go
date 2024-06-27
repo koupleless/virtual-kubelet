@@ -2,7 +2,7 @@ package common
 
 import (
 	"github.com/koupleless/arkctl/v1/service/ark"
-	"github.com/koupleless/module-controller/java/model"
+	"github.com/koupleless/virtual-kubelet/java/model"
 	"gotest.tools/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -158,10 +158,10 @@ func TestModelUtils_TranslateArkBizInfoToV1ContainerStatus(t *testing.T) {
 		BizState:   "DEACTIVATED",
 		BizVersion: "1.1.1",
 	}
-	assert.Assert(t, moduleUtils.TranslateArkBizInfoToV1ContainerStatus(bizModel, infoNotInstalled).State.Waiting.Reason == "BizPending")
-	assert.Assert(t, moduleUtils.TranslateArkBizInfoToV1ContainerStatus(bizModel, infoResolved).State.Waiting.Reason == "BizNotActivated")
-	assert.Assert(t, moduleUtils.TranslateArkBizInfoToV1ContainerStatus(bizModel, infoActivated).State.Running != nil)
-	assert.Assert(t, moduleUtils.TranslateArkBizInfoToV1ContainerStatus(bizModel, infoDeactivated).State.Terminated != nil)
+	assert.Assert(t, moduleUtils.TranslateArkBizInfoToV1ContainerStatus(bizModel, infoNotInstalled, false).State.Waiting.Reason == "BizPending")
+	assert.Assert(t, moduleUtils.TranslateArkBizInfoToV1ContainerStatus(bizModel, infoResolved, false).State.Waiting.Reason == "BizNotActivated")
+	assert.Assert(t, moduleUtils.TranslateArkBizInfoToV1ContainerStatus(bizModel, infoActivated, false).State.Running != nil)
+	assert.Assert(t, moduleUtils.TranslateArkBizInfoToV1ContainerStatus(bizModel, infoDeactivated, false).State.Terminated != nil)
 }
 
 func TestModelUtils_TranslateContainerToSummaryContainerStats(t *testing.T) {

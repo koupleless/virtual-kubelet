@@ -17,7 +17,7 @@ package base_pod
 import (
 	"context"
 	"fmt"
-	"github.com/koupleless/module-controller/common/queue"
+	"github.com/koupleless/virtual-kubelet/common/queue"
 	"github.com/pkg/errors"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
 	"github.com/virtual-kubelet/virtual-kubelet/node/nodeutil"
@@ -176,7 +176,24 @@ func (pc *BasePodController) syncVNodeStatusFromProviderHandler(ctx context.Cont
 	node, err := pc.vNodeLister.Get(name)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			log.G(ctx).WithError(err).Debug("Skipping vnode status update for vnode missing in Kubernetes")
+			// in vnode deletion process, delete all the pods known
+			pc.knownVPods.Range(func(key, value any) bool {
+				vpod := value.(*vPod)
+				vpod.Lock()
+				vpodCopy := vpod.lastPodStatusReceivedFromProvider.DeepCopy()
+				vpod.Unlock()
+				err := pc.vPodClient.Pods(vpodCopy.Namespace).EvictV1beta1(ctx, &policyv1beta1.Eviction{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      vpodCopy.Name,
+						Namespace: vpodCopy.Namespace,
+					},
+					DeleteOptions: &metav1.DeleteOptions{},
+				})
+				if err != nil {
+					log.G(ctx).WithError(err).Error("Error deleting vpod")
+				}
+				return true
+			})
 			return nil
 		}
 		return errors.Wrap(err, "error looking up vnode")
@@ -227,7 +244,7 @@ func (pc *BasePodController) vPodOperationHandler(ctx context.Context, key strin
 	if err != nil {
 		return errors.Wrap(err, "error splitting cache key")
 	}
-	moduleFinalizerKey := formatModuleFinalizerKey(name)
+	moduleFinalizerKey := FormatModuleFinalizerKey(name)
 
 	pod, err := pc.vPodLister.Pods(namespace).Get(name)
 	if err != nil {
@@ -319,35 +336,7 @@ func (pc *BasePodController) updateVNodeStatus(ctx context.Context, nodeFromKube
 	// sync local vNode status, for status updating
 	pc.vNodeInfo.Lock()
 	pc.vNodeInfo.lastNodeStatusReceivedFromKubernetes = nodeFromKubernetes
-	// check contains module taint label
-	containsModuleEvictionTaint := false
-	for _, taint := range nodeFromKubernetes.Spec.Taints {
-		if taint.Key == VNodeDeletionTaintKey {
-			containsModuleEvictionTaint = true
-			break
-		}
-	}
 	pc.vNodeInfo.Unlock()
-	if containsModuleEvictionTaint {
-		// in base pod deletion process, delete all the pods known
-		pc.knownVPods.Range(func(key, value any) bool {
-			vpod := value.(*vPod)
-			vpod.Lock()
-			vpodCopy := vpod.lastPodStatusReceivedFromProvider.DeepCopy()
-			vpod.Unlock()
-			err := pc.vPodClient.Pods(vpodCopy.Namespace).EvictV1beta1(ctx, &policyv1beta1.Eviction{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      vpodCopy.Name,
-					Namespace: vpodCopy.Namespace,
-				},
-				DeleteOptions: &metav1.DeleteOptions{},
-			})
-			if err != nil {
-				log.G(ctx).WithError(err).Error("Error deleting vpod")
-			}
-			return true
-		})
-	}
 
 	return nil
 }
@@ -397,36 +386,10 @@ func (pc *BasePodController) processPodDeletion(ctx context.Context, podFromKube
 	currVNodeStatus := pc.vNodeInfo.lastNodeStatusReceivedFromKubernetes.DeepCopy()
 	pc.vNodeInfo.Unlock()
 	if podFromKubernetes.DeletionTimestamp != nil {
-		deletionTaint := corev1.Taint{
-			Key:    VNodeDeletionTaintKey,
-			Effect: corev1.TaintEffectNoExecute,
-			Value:  "True",
-		}
-		currVNodeStatus.Spec.Taints = append(currVNodeStatus.Spec.Taints, deletionTaint)
-
-		patchOps := PatchOps{
-			{
-				OP:    PatchOpTypeAdd,
-				Path:  "/spec/taints/-",
-				Value: deletionTaint,
-			},
-		}
-
-		resultVNode, err := pc.vNodeClient.Nodes().Patch(ctx, currVNodeStatus.Name, types.JSONPatchType, patchOps.bytes(), metav1.PatchOptions{})
+		// discover base pod in deletion, delete vnode directly
+		err := pc.vNodeClient.Nodes().Delete(ctx, currVNodeStatus.Name, metav1.DeleteOptions{})
 		if err != nil {
-			log.G(ctx).WithError(err).Error("Error deleting base pod finalizers")
-		}
-		pc.vNodeInfo.lastNodeStatusReceivedFromKubernetes = resultVNode.DeepCopy()
-	} else {
-		// check if there is taint key in vnode, remove
-		indexOfTaint := -1
-		for index, taint := range currVNodeStatus.Spec.Taints {
-			if taint.Key == VNodeDeletionTaintKey {
-				indexOfTaint = index
-			}
-		}
-		if indexOfTaint != -1 {
-			currVNodeStatus.Spec.Taints = append(currVNodeStatus.Spec.Taints[:indexOfTaint], currVNodeStatus.Spec.Taints[indexOfTaint+1:]...)
+			log.G(ctx).WithError(err).Error("Error deleting vnode")
 		}
 	}
 
@@ -552,6 +515,25 @@ func (pc *BasePodController) VNodeUpdateHandler(oldObj, newObj interface{}) {
 	}
 }
 
+func (pc *BasePodController) VNodeDeleteHandler(obj interface{}) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ctx, span := trace.StartSpan(ctx, "DeleteVPodFunc")
+	defer span.End()
+
+	oldPod := obj.(*corev1.Node)
+
+	// At this point we know that something in .metadata or .spec has changed, so we must proceed to sync the pod.
+	// notice: there will be a request of update in every resync period
+	if key, err := cache.MetaNamespaceKeyFunc(oldPod); err != nil {
+		log.G(ctx).Error(err)
+	} else {
+		// key: namespace/name
+		ctx = span.WithField(ctx, "key", key)
+		pc.syncVNodeStatusFromProvider.Enqueue(ctx, key)
+	}
+}
+
 func (pc *BasePodController) VPodAddHandler(obj interface{}) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -653,6 +635,7 @@ func (pc *BasePodController) Run(ctx context.Context, podSyncWorkers int) (retEr
 	var vNodeEventHandler cache.ResourceEventHandler = cache.ResourceEventHandlerFuncs{
 		AddFunc:    pc.VNodeAddHandler,
 		UpdateFunc: pc.VNodeUpdateHandler,
+		DeleteFunc: pc.VNodeDeleteHandler,
 	}
 
 	var vPodEventHandler cache.ResourceEventHandler = cache.ResourceEventHandlerFuncs{
@@ -667,6 +650,7 @@ func (pc *BasePodController) Run(ctx context.Context, podSyncWorkers int) (retEr
 	go pc.syncVNodeStatusFromProvider.Run(ctx, podSyncWorkers)
 	log.G(ctx).Info("started workers")
 
+	// init base pod, need to clear all the finalizers created before
 	_, err := pc.basePodsInformer.Informer().AddEventHandler(basePodEventHandler)
 	if err != nil {
 		log.G(ctx).Error(err)
@@ -744,7 +728,7 @@ func defaultRetryFunc(ctx context.Context, key string, timesTried int, originall
 	return &duration, nil
 }
 
-func formatModuleFinalizerKey(key string) string {
+func FormatModuleFinalizerKey(key string) string {
 	return fmt.Sprintf(ModuleFinalizerPattern, key)
 }
 

@@ -16,12 +16,14 @@ package node
 
 import (
 	"context"
+	"github.com/koupleless/arkctl/v1/service/ark"
+	"github.com/pkg/errors"
 	"os"
 	"strconv"
 
-	"github.com/koupleless/module-controller/common/helper"
-	"github.com/koupleless/module-controller/java/common"
-	"github.com/koupleless/module-controller/java/model"
+	"github.com/koupleless/virtual-kubelet/common/helper"
+	"github.com/koupleless/virtual-kubelet/java/common"
+	"github.com/koupleless/virtual-kubelet/java/model"
 	"github.com/virtual-kubelet/virtual-kubelet/node"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -38,9 +40,11 @@ var modelUtils = common.ModelUtils{}
 
 type VirtualKubeletNode struct {
 	nodeConfig *model.BuildVirtualNodeConfig
+	arkService ark.Service
+	notify     func(*corev1.Node)
 }
 
-func NewVirtualKubeletNode() *VirtualKubeletNode {
+func NewVirtualKubeletNode(arkService ark.Service) *VirtualKubeletNode {
 	techStack := os.Getenv("TECH_STACK")
 	vNodeCapacityStr := os.Getenv("VNODE_POD_CAPACITY")
 	if len(vNodeCapacityStr) == 0 {
@@ -48,7 +52,7 @@ func NewVirtualKubeletNode() *VirtualKubeletNode {
 	}
 
 	vnode := model.BuildVirtualNodeConfig{
-		NodeIP:       os.Getenv("POD_IP"),
+		NodeIP:       os.Getenv("BASE_POD_IP"),
 		TechStack:    techStack,
 		Version:      os.Getenv("VNODE_VERSION"),
 		VPodCapacity: int(helper.MustReturnFirst[int64](strconv.ParseInt(vNodeCapacityStr, 10, 64))),
@@ -56,20 +60,29 @@ func NewVirtualKubeletNode() *VirtualKubeletNode {
 
 	return &VirtualKubeletNode{
 		nodeConfig: &vnode,
+		arkService: arkService,
 	}
 }
 
 func (v *VirtualKubeletNode) Register(_ context.Context, node *corev1.Node) error {
-	modelUtils.BuildVirtualNode(v.nodeConfig, node)
+	modelUtils.BuildVirtualNode(v.nodeConfig, v.arkService, node)
 	return nil
 }
 
-func (v *VirtualKubeletNode) Ping(_ context.Context) error {
-	// TODO implement base instance healthy check
+func (v *VirtualKubeletNode) Ping(ctx context.Context) error {
+	// TODO implement base instance healthy check, waiting for arklet to support base liveness check, default 10 second
+	_, err := v.arkService.QueryAllBiz(ctx, ark.QueryAllArkBizRequest{
+		HostName: model.LOOP_BACK_IP,
+		Port:     model.ARK_SERVICE_PORT,
+	})
+	if err != nil {
+		return errors.Wrap(err, "base not activated")
+	}
 	return nil
 }
 
-func (v *VirtualKubeletNode) NotifyNodeStatus(_ context.Context, _ func(*corev1.Node)) {
+func (v *VirtualKubeletNode) NotifyNodeStatus(_ context.Context, cb func(*corev1.Node)) {
 	// todo: sync base status to k8s, call the callback func to submit the node status
 	// can only update node status, Annotations and labels, implement it if need to update these information
+	v.notify = cb
 }

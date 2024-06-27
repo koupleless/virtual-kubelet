@@ -36,7 +36,7 @@ func TestBaseProvider_CreatePod(t *testing.T) {
 			Containers: []corev1.Container{
 				{
 					Name:  "biz1-web-single-host",
-					Image: "file:///biz1-web-single-host-0.0.1-SNAPSHOT-ark-biz.jar",
+					Image: "https://serverless-opensource.oss-cn-shanghai.aliyuncs.com/module-packages/stable/biz1-web-single-host-0.0.1-SNAPSHOT-ark-biz.jar",
 					Env: []corev1.EnvVar{
 						{
 							Name:  "BIZ_VERSION",
@@ -95,7 +95,7 @@ func TestBaseProvider_UpdatePod(t *testing.T) {
 			Containers: []corev1.Container{
 				{
 					Name:  "biz2-web-single-host",
-					Image: "file:///biz2-web-single-host-0.0.1-SNAPSHOT-ark-biz.jar",
+					Image: "https://serverless-opensource.oss-cn-shanghai.aliyuncs.com/module-packages/stable/biz2-web-single-host-0.0.1-SNAPSHOT-ark-biz.jar",
 					Env: []corev1.EnvVar{
 						{
 							Name:  "BIZ_VERSION",
@@ -234,7 +234,7 @@ func TestBaseProvider_DeletePod(t *testing.T) {
 			Containers: []corev1.Container{
 				{
 					Name:  "biz2-web-single-host",
-					Image: "file:///biz2-web-single-host-0.0.1-SNAPSHOT-ark-biz.jar",
+					Image: "https://serverless-opensource.oss-cn-shanghai.aliyuncs.com/module-packages/stable/biz2-web-single-host-0.0.1-SNAPSHOT-ark-biz.jar",
 					Env: []corev1.EnvVar{
 						{
 							Name:  "BIZ_VERSION",

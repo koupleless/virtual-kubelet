@@ -22,7 +22,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/koupleless/module-controller/commands/root"
+	"github.com/koupleless/virtual-kubelet/commands/root"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"

@@ -3,7 +3,7 @@ package node
 import (
 	"context"
 	"fmt"
-	podlet "github.com/koupleless/module-controller/java/pod/let"
+	podlet "github.com/koupleless/virtual-kubelet/java/pod/let"
 	"github.com/virtual-kubelet/virtual-kubelet/node"
 	"github.com/virtual-kubelet/virtual-kubelet/node/nodeutil"
 	"gotest.tools/assert"

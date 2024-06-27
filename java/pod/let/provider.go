@@ -17,13 +17,16 @@ package let
 import (
 	"context"
 	"errors"
+	"github.com/koupleless/virtual-kubelet/java/model"
 	"io"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"os"
+	"sync"
 	"time"
 
 	"github.com/koupleless/arkctl/v1/service/ark"
-	"github.com/koupleless/module-controller/common/queue"
-	"github.com/koupleless/module-controller/java/common"
+	"github.com/koupleless/virtual-kubelet/common/queue"
+	"github.com/koupleless/virtual-kubelet/java/common"
 	"github.com/prometheus/client_model/go"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
 	"github.com/virtual-kubelet/virtual-kubelet/node/api"
@@ -35,8 +38,6 @@ import (
 
 var _ nodeutil.Provider = &BaseProvider{}
 
-const LOOP_BACK_IP = "127.0.0.1"
-
 type BaseProvider struct {
 	namespace string
 
@@ -47,17 +48,31 @@ type BaseProvider struct {
 	installOperationQueue   *queue.Queue
 	uninstallOperationQueue *queue.Queue
 
+	bas *baseArkletStatus
+
 	port int
 }
 
-func NewBaseProvider(namespace string) *BaseProvider {
+type baseArkletStatus struct {
+	sync.Mutex
+	lastStatus bool
+}
+
+func NewBaseProvider(namespace string, arkService ark.Service) *BaseProvider {
+	localIP := os.Getenv("BASE_POD_IP")
+	if localIP == "" {
+		localIP = model.LOOP_BACK_IP
+	}
 	provider := &BaseProvider{
 		namespace:        namespace,
-		localIP:          LOOP_BACK_IP, //todo: get the local ip
-		arkService:       ark.BuildService(context.Background()),
+		localIP:          localIP,
+		arkService:       arkService,
 		modelUtils:       common.ModelUtils{},
 		runtimeInfoStore: NewRuntimeInfoStore(),
-		port:             1238,
+		bas: &baseArkletStatus{
+			lastStatus: true,
+		},
+		port: model.ARK_SERVICE_PORT,
 	}
 
 	provider.installOperationQueue = queue.New(
@@ -88,11 +103,53 @@ func NewBaseProvider(namespace string) *BaseProvider {
 func (b *BaseProvider) Run(ctx context.Context) {
 	go b.installOperationQueue.Run(ctx, 1)
 	go b.uninstallOperationQueue.Run(ctx, 1)
+	//go b.checkAndUninstallDanglingBiz(context.WithValue(ctx, "timed task", "check and uninstall dangling biz"), time.Second*5)
+}
+
+// checkAndUninstallDanglingBiz mainly process a pod being deleted before biz activated, in resolved status, biz can't uninstall
+func (b *BaseProvider) checkAndUninstallDanglingBiz(ctx context.Context, interval time.Duration) {
+	logger := log.G(ctx)
+	ticker := time.NewTicker(interval)
+	for {
+		select {
+		case <-ticker.C:
+			bindingModels := make(map[string]bool)
+			for _, pod := range b.runtimeInfoStore.GetPods() {
+				if pod.DeletionTimestamp != nil {
+					// skip pod in deletion
+					continue
+				}
+				podKey := b.modelUtils.GetPodKey(pod)
+				bizModels := b.runtimeInfoStore.GetRelatedBizModels(podKey)
+				for _, bizModel := range bizModels {
+					bizIdentity := b.modelUtils.GetBizIdentityFromBizModel(bizModel)
+					bindingModels[bizIdentity] = true
+				}
+			}
+			// query all modules loading now, if not in binding, queue to uninstall
+			bizInfos, err := b.queryAllBiz(ctx)
+			if err != nil {
+				logger.WithError(err).Error("query biz info error")
+				continue
+			}
+			for _, bizInfo := range bizInfos {
+				if bizInfo.BizState == "RESOLVED" {
+					continue
+				}
+				bizIdentity := b.modelUtils.GetBizIdentityFromBizInfo(&bizInfo)
+				if !bindingModels[bizIdentity] {
+					// not binding,send to uninstall
+					b.uninstallOperationQueue.Enqueue(ctx, bizIdentity)
+					logger.WithField("bizName", bizInfo.BizName).WithField("bizVersion", bizInfo.BizVersion).Info("ItemEnqueued")
+				}
+			}
+		}
+	}
 }
 
 func (b *BaseProvider) queryAllBiz(ctx context.Context) ([]ark.ArkBizInfo, error) {
 	resp, err := b.arkService.QueryAllBiz(ctx, ark.QueryAllArkBizRequest{
-		HostName: LOOP_BACK_IP,
+		HostName: model.LOOP_BACK_IP,
 		Port:     b.port,
 	})
 	if err != nil {
@@ -130,7 +187,7 @@ func (b *BaseProvider) installBiz(ctx context.Context, bizModel *ark.BizModel) e
 		BizModel: *bizModel,
 		TargetContainer: ark.ArkContainerRuntimeInfo{
 			RunType:    ark.ArkContainerRunTypeLocal,
-			Coordinate: LOOP_BACK_IP,
+			Coordinate: model.LOOP_BACK_IP,
 			Port:       &b.port,
 		},
 	}); err != nil {
@@ -145,7 +202,7 @@ func (b *BaseProvider) unInstallBiz(ctx context.Context, bizModel *ark.BizModel)
 		BizModel: *bizModel,
 		TargetContainer: ark.ArkContainerRuntimeInfo{
 			RunType:    ark.ArkContainerRunTypeLocal,
-			Coordinate: LOOP_BACK_IP,
+			Coordinate: model.LOOP_BACK_IP,
 			Port:       &b.port,
 		},
 	}); err != nil {
@@ -161,9 +218,9 @@ func (b *BaseProvider) handleInstallOperation(ctx context.Context, bizIdentity s
 
 	bizModel := b.runtimeInfoStore.GetBizModel(bizIdentity)
 	if bizModel == nil {
-		// for installation, this should never happen
+		// for installation, this should never happen, no retry here
 		logger.Error("Installing non-existent defaultPod")
-		return errors.New("installing non-existent defaultPod")
+		return nil
 	}
 	bizInfo, err := b.queryBiz(ctx, bizIdentity)
 	if err != nil {
@@ -229,7 +286,7 @@ func (b *BaseProvider) CreatePod(ctx context.Context, pod *corev1.Pod) error {
 	logger.Info("CreatePodStarted")
 
 	// update the baseline info so the async handle logic can see them first
-	b.runtimeInfoStore.PutPod(pod)
+	b.runtimeInfoStore.PutPod(pod.DeepCopy())
 	bizModels := b.modelUtils.GetBizModelsFromCoreV1Pod(pod)
 	for _, bizModel := range bizModels {
 		b.installOperationQueue.Enqueue(ctx, b.modelUtils.GetBizIdentityFromBizModel(bizModel))
@@ -239,23 +296,15 @@ func (b *BaseProvider) CreatePod(ctx context.Context, pod *corev1.Pod) error {
 	return nil
 }
 
-// UpdatePod uninstall then install
+// UpdatePod install directly
 func (b *BaseProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 	podKey := b.modelUtils.GetPodKey(pod)
 	logger := log.G(ctx).WithField("podKey", podKey)
 	logger.Info("UpdatePodStarted")
 
-	oldModels := b.runtimeInfoStore.GetRelatedBizModels(podKey)
-
-	// delete old models
-	for _, oldModel := range oldModels {
-		b.uninstallOperationQueue.Enqueue(ctx, b.modelUtils.GetBizIdentityFromBizModel(oldModel))
-		logger.WithField("bizName", oldModel.BizName).WithField("bizVersion", oldModel.BizVersion).Info("ItemEnqueued")
-	}
-
 	newModels := b.modelUtils.GetBizModelsFromCoreV1Pod(pod)
 
-	b.runtimeInfoStore.PutPod(pod)
+	b.runtimeInfoStore.PutPod(pod.DeepCopy())
 
 	// check pod deletion timestamp
 	if pod.ObjectMeta.DeletionTimestamp == nil {
@@ -275,13 +324,10 @@ func (b *BaseProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 	logger := log.G(ctx).WithField("podKey", podKey)
 	logger.Info("DeletePodStarted")
 
-	bizModels := b.runtimeInfoStore.GetRelatedBizModels(podKey)
-	b.runtimeInfoStore.PutPod(pod)
-	for _, bizModel := range bizModels {
-		bizIdentity := b.modelUtils.GetBizIdentityFromBizModel(bizModel)
-		b.uninstallOperationQueue.Enqueue(ctx, bizIdentity)
-		logger.WithField("bizName", bizModel.BizName).WithField("bizVersion", bizModel.BizVersion).Info("ItemEnqueued")
-	}
+	// set deletion timestamp
+	pod.DeletionTimestamp = &metav1.Time{Time: time.Now()}
+
+	b.runtimeInfoStore.PutPod(pod.DeepCopy())
 
 	return nil
 }
@@ -300,61 +346,115 @@ func (b *BaseProvider) GetPod(_ context.Context, namespace, name string) (*corev
 //
 //	当未来 arklet 提供了更多的信息时，我们可以相应的设置时间。
 func (b *BaseProvider) GetPodStatus(ctx context.Context, namespace, name string) (*corev1.PodStatus, error) {
-	bizInfos, err := b.queryAllBiz(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	pod := b.runtimeInfoStore.GetPodByKey(namespace + "/" + name)
+	podKey := namespace + "/" + name
+	pod := b.runtimeInfoStore.GetPodByKey(podKey)
 	podStatus := &corev1.PodStatus{}
+	logger := log.G(ctx)
 	if pod == nil {
-		log.G(ctx).Info("Get Pod Status Failed Because Pod Not Found In Local Runtime")
+		logger.Info("Get Pod Status Failed Because Pod Not Found In Local Runtime")
 		return nil, nil
 	}
-
-	bizModels := b.modelUtils.GetBizModelsFromCoreV1Pod(pod)
-	// bizIdentity
-	bizRuntimeInfos := make(map[string]*ark.ArkBizInfo)
-	for _, info := range bizInfos {
-		bizRuntimeInfos[b.modelUtils.GetBizIdentityFromBizInfo(&info)] = &info
-	}
-
-	// bizName -> container status
-	containerStatuses := make(map[string]*corev1.ContainerStatus)
+	// check pod in deletion
 	isAllContainerReady := true
 	isSomeContainerFailed := false
-	/**
-	todo: if arklet return installed timestamp, we can submit corresponding event and start time accordingly
-	      for now, we can just keep them empty
-	if further info is provided, we can set the time accordingly
-	failedTime would be the earliest time of the failed container
-	successTime would be the latest time of the success container
-	startTime would be the earliest time of the all container
-	*/
-	for _, bizModel := range bizModels {
-		info := bizRuntimeInfos[b.modelUtils.GetBizIdentityFromBizModel(bizModel)]
-		containerStatus := b.modelUtils.TranslateArkBizInfoToV1ContainerStatus(bizModel, info)
-		containerStatuses[bizModel.BizName] = containerStatus
+	isInDeletion := false
+	if pod.DeletionTimestamp == nil {
+		// not in deletion
+		bizModels := b.modelUtils.GetBizModelsFromCoreV1Pod(pod)
 
-		if !containerStatus.Ready {
-			isAllContainerReady = false
+		bizInfos, err := b.queryAllBiz(ctx)
+		b.bas.Lock()
+		if err != nil {
+			b.bas.lastStatus = false
+		} else {
+			// check last status is down
+			if b.bas.lastStatus == false {
+				// do module playback
+				logger.Info("StartModulePlayback")
+				for _, podBizModels := range b.runtimeInfoStore.podKeyToBizModels {
+					for _, bizModel := range podBizModels {
+						b.installOperationQueue.Enqueue(ctx, b.modelUtils.GetBizIdentityFromBizModel(bizModel))
+						logger.WithField("bizName", bizModel.BizName).WithField("bizVersion", bizModel.BizVersion).Info("ItemEnqueued")
+					}
+				}
+			}
+			b.bas.lastStatus = true
+		}
+		b.bas.Unlock()
+
+		// bizIdentity
+		bizRuntimeInfos := make(map[string]*ark.ArkBizInfo)
+		for _, info := range bizInfos {
+			bizRuntimeInfos[b.modelUtils.GetBizIdentityFromBizInfo(&info)] = &info
+		}
+		// bizName -> container status
+		containerStatuses := make(map[string]*corev1.ContainerStatus)
+		/**
+		todo: if arklet return installed timestamp, we can submit corresponding event and start time accordingly
+		      for now, we can just keep them empty
+		if further info is provided, we can set the time accordingly
+		failedTime would be the earliest time of the failed container
+		successTime would be the latest time of the success container
+		startTime would be the earliest time of the all container
+		*/
+		for _, bizModel := range bizModels {
+			info := bizRuntimeInfos[b.modelUtils.GetBizIdentityFromBizModel(bizModel)]
+			containerStatus := b.modelUtils.TranslateArkBizInfoToV1ContainerStatus(bizModel, info, b.bas.lastStatus)
+			containerStatuses[bizModel.BizName] = containerStatus
+
+			if !containerStatus.Ready {
+				isAllContainerReady = false
+			}
+
+			if containerStatus.State.Terminated != nil {
+				isSomeContainerFailed = true
+			}
 		}
 
-		if containerStatus.State.Terminated != nil {
-			isSomeContainerFailed = true
+		podStatus.PodIP = b.localIP
+		podStatus.PodIPs = []corev1.PodIP{{IP: b.localIP}}
+
+		podStatus.ContainerStatuses = make([]corev1.ContainerStatus, 0)
+		for _, status := range containerStatuses {
+			podStatus.ContainerStatuses = append(podStatus.ContainerStatuses, *status)
 		}
+	} else {
+		isInDeletion = true
 	}
 
-	podStatus.PodIP = b.localIP
-	podStatus.PodIPs = []corev1.PodIP{{IP: b.localIP}}
-
-	podStatus.ContainerStatuses = make([]corev1.ContainerStatus, 0)
-	for _, status := range containerStatuses {
-		podStatus.ContainerStatuses = append(podStatus.ContainerStatuses, *status)
-	}
+	defer func() {
+		if isInDeletion {
+			for _, bizModel := range b.runtimeInfoStore.GetRelatedBizModels(podKey) {
+				b.uninstallOperationQueue.Enqueue(ctx, b.modelUtils.GetBizIdentityFromBizModel(bizModel))
+				logger.WithField("bizName", bizModel.BizName).WithField("bizVersion", bizModel.BizVersion).Info("ItemEnqueued")
+			}
+			// lazy delete from local store
+			b.runtimeInfoStore.DeletePod(podKey)
+		}
+	}()
 
 	podStatus.Phase = corev1.PodPending
-	if isAllContainerReady {
+	if isInDeletion {
+		podStatus.Phase = corev1.PodSucceeded
+		podStatus.Conditions = []corev1.PodCondition{
+			{
+				Type:   "module.koupleless.io/installed",
+				Status: corev1.ConditionFalse,
+			},
+			{
+				Type:   "module.koupleless.io/ready",
+				Status: corev1.ConditionFalse,
+			},
+			{
+				Type:   "Ready",
+				Status: corev1.ConditionFalse,
+			},
+			{
+				Type:   "ContainersReady",
+				Status: corev1.ConditionFalse,
+			},
+		}
+	} else if isAllContainerReady {
 		podStatus.Phase = corev1.PodRunning
 		podStatus.Conditions = []corev1.PodCondition{
 			{
@@ -363,6 +463,14 @@ func (b *BaseProvider) GetPodStatus(ctx context.Context, namespace, name string)
 			},
 			{
 				Type:   "module.koupleless.io/ready",
+				Status: corev1.ConditionTrue,
+			},
+			{
+				Type:   "Ready",
+				Status: corev1.ConditionTrue,
+			},
+			{
+				Type:   "ContainersReady",
 				Status: corev1.ConditionTrue,
 			},
 		}
@@ -377,6 +485,14 @@ func (b *BaseProvider) GetPodStatus(ctx context.Context, namespace, name string)
 			},
 			{
 				Type:   "basement.koupleless.io/ready",
+				Status: corev1.ConditionFalse,
+			},
+			{
+				Type:   "Ready",
+				Status: corev1.ConditionFalse,
+			},
+			{
+				Type:   "ContainersReady",
 				Status: corev1.ConditionFalse,
 			},
 		}

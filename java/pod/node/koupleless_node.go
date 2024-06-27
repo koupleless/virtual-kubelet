@@ -2,7 +2,7 @@ package node
 
 import (
 	"context"
-	base_pod "github.com/koupleless/module-controller/java/pod/base_pod_controller"
+	base_pod "github.com/koupleless/virtual-kubelet/java/pod/base_pod_controller"
 	"github.com/pkg/errors"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
 	"github.com/virtual-kubelet/virtual-kubelet/node/nodeutil"
@@ -30,54 +30,39 @@ func (n *KouplelessNode) Run(ctx context.Context, podSyncWorkers int) (retErr er
 		cancel()
 
 		n.err = retErr
-		close(n.done)
 	}()
 
-	if n.bpc != nil {
-		go n.bpc.Run(ctx, podSyncWorkers) //nolint:errcheck
+	go n.bpc.Run(ctx, podSyncWorkers) //nolint:errcheck
 
-		defer func() {
-			cancel()
-			<-n.bpc.Done()
-		}()
+	defer func() {
+		cancel()
+		<-n.bpc.Done()
+	}()
 
-		select {
-		case <-ctx.Done():
-			n.err = ctx.Err()
-			return n.err
-		case <-n.bpc.Ready():
-		case <-n.bpc.Done():
-			return n.bpc.Err()
-		}
-
-		log.G(ctx).Debug("base pod controller ready")
+	select {
+	case <-ctx.Done():
+		n.err = ctx.Err()
+		return n.err
+	case <-n.bpc.Ready():
+	case <-n.bpc.Done():
+		return n.bpc.Err()
 	}
+
+	log.G(ctx).Debug("base pod controller ready")
 
 	go n.runVNode(ctx)
 
-	if n.bpc != nil {
-		select {
-		case <-ctx.Done():
-			cancel()
-			n.err = ctx.Err()
-			return n.err
-		case <-n.Done():
-			cancel()
-			return n.err
-		case <-n.bpc.Done():
-			cancel()
-			return n.bpc.Err()
-		}
-	} else {
-		select {
-		case <-ctx.Done():
-			cancel()
-			n.err = ctx.Err()
-			return n.err
-		case <-n.Done():
-			cancel()
-			return n.err
-		}
+	select {
+	case <-ctx.Done():
+		cancel()
+		n.err = ctx.Err()
+		return n.err
+	case <-n.Done():
+		cancel()
+		return n.err
+	case <-n.bpc.Done():
+		cancel()
+		return n.bpc.Err()
 	}
 }
 

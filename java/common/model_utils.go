@@ -15,9 +15,10 @@
 package common
 
 import (
+	"context"
 	"github.com/koupleless/arkctl/common/fileutil"
 	"github.com/koupleless/arkctl/v1/service/ark"
-	"github.com/koupleless/module-controller/java/model"
+	"github.com/koupleless/virtual-kubelet/java/model"
 	"github.com/virtual-kubelet/virtual-kubelet/node/api/statsv1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -72,7 +73,7 @@ func (c ModelUtils) GetBizModelsFromCoreV1Pod(pod *corev1.Pod) []*ark.BizModel {
 	return ret
 }
 
-func (c ModelUtils) TranslateArkBizInfoToV1ContainerStatus(bizModel *ark.BizModel, bizInfo *ark.ArkBizInfo) *corev1.ContainerStatus {
+func (c ModelUtils) TranslateArkBizInfoToV1ContainerStatus(bizModel *ark.BizModel, bizInfo *ark.ArkBizInfo, baseProcessRunning bool) *corev1.ContainerStatus {
 	// todo: wait arklet support the timestamp return in bizInfo
 	started :=
 		bizInfo != nil && bizInfo.BizState == "ACTIVATED"
@@ -89,9 +90,16 @@ func (c ModelUtils) TranslateArkBizInfoToV1ContainerStatus(bizModel *ark.BizMode
 
 	if bizInfo == nil {
 		// not installing
-		ret.State.Waiting = &corev1.ContainerStateWaiting{
-			Reason:  "BizPending",
-			Message: "Biz is waiting for installing",
+		if !baseProcessRunning {
+			ret.State.Waiting = &corev1.ContainerStateWaiting{
+				Reason:  "BaseDown",
+				Message: "Base process down, waiting for restart",
+			}
+		} else {
+			ret.State.Waiting = &corev1.ContainerStateWaiting{
+				Reason:  "BizPending",
+				Message: "Biz is waiting for installing",
+			}
 		}
 		return ret
 	}
@@ -99,8 +107,8 @@ func (c ModelUtils) TranslateArkBizInfoToV1ContainerStatus(bizModel *ark.BizMode
 	if bizInfo.BizState == "RESOLVED" {
 		// installing
 		ret.State.Waiting = &corev1.ContainerStateWaiting{
-			Reason:  "BizNotActivated",
-			Message: "Biz is not activated",
+			Reason:  "BizResolved",
+			Message: "Biz resolved",
 		}
 		return ret
 	}
@@ -130,7 +138,7 @@ func (c ModelUtils) TranslateArkBizInfoToV1ContainerStatus(bizModel *ark.BizMode
 	return ret
 }
 
-func (c ModelUtils) BuildVirtualNode(config *model.BuildVirtualNodeConfig, node *corev1.Node) {
+func (c ModelUtils) BuildVirtualNode(config *model.BuildVirtualNodeConfig, arkService ark.Service, node *corev1.Node) {
 	if node.ObjectMeta.Labels == nil {
 		node.ObjectMeta.Labels = make(map[string]string)
 	}
@@ -160,6 +168,32 @@ func (c ModelUtils) BuildVirtualNode(config *model.BuildVirtualNodeConfig, node 
 		Capacity: map[corev1.ResourceName]resource.Quantity{
 			corev1.ResourcePods: resource.MustParse(strconv.Itoa(config.VPodCapacity)),
 		},
+	}
+	// TODO add base process liveness check, now use query for check
+	_, err := arkService.QueryAllBiz(context.Background(), ark.QueryAllArkBizRequest{
+		HostName: model.LOOP_BACK_IP,
+		Port:     model.ARK_SERVICE_PORT,
+	})
+	if err != nil {
+		// base process not ready
+		node.Status = corev1.NodeStatus{
+			Phase: corev1.NodePending,
+			Addresses: []corev1.NodeAddress{
+				{
+					Type:    corev1.NodeInternalIP,
+					Address: config.NodeIP,
+				},
+			},
+			Conditions: []corev1.NodeCondition{
+				{
+					Type:   corev1.NodeReady,
+					Status: corev1.ConditionFalse,
+				},
+			},
+			Capacity: map[corev1.ResourceName]resource.Quantity{
+				corev1.ResourcePods: resource.MustParse(strconv.Itoa(config.VPodCapacity)),
+			},
+		}
 	}
 }
 

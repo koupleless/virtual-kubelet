@@ -103,7 +103,7 @@ func NewBaseProvider(namespace string, arkService ark.Service) *BaseProvider {
 func (b *BaseProvider) Run(ctx context.Context) {
 	go b.installOperationQueue.Run(ctx, 1)
 	go b.uninstallOperationQueue.Run(ctx, 1)
-	//go b.checkAndUninstallDanglingBiz(context.WithValue(ctx, "timed task", "check and uninstall dangling biz"), time.Second*5)
+	go b.checkAndUninstallDanglingBiz(context.WithValue(ctx, "timed task", "check and uninstall dangling biz"), time.Second*5)
 }
 
 // checkAndUninstallDanglingBiz mainly process a pod being deleted before biz activated, in resolved status, biz can't uninstall
@@ -304,10 +304,9 @@ func (b *BaseProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 
 	newModels := b.modelUtils.GetBizModelsFromCoreV1Pod(pod)
 
-	b.runtimeInfoStore.PutPod(pod.DeepCopy())
-
 	// check pod deletion timestamp
 	if pod.ObjectMeta.DeletionTimestamp == nil {
+		b.runtimeInfoStore.PutPod(pod.DeepCopy())
 		// not in deletion, install new models
 		for _, newModel := range newModels {
 			b.installOperationQueue.Enqueue(ctx, b.modelUtils.GetBizIdentityFromBizModel(newModel))
@@ -324,10 +323,8 @@ func (b *BaseProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 	logger := log.G(ctx).WithField("podKey", podKey)
 	logger.Info("DeletePodStarted")
 
-	// set deletion timestamp
-	pod.DeletionTimestamp = &metav1.Time{Time: time.Now()}
-
-	b.runtimeInfoStore.PutPod(pod.DeepCopy())
+	// check is deleted
+	b.runtimeInfoStore.DeletePod(podKey)
 
 	return nil
 }
@@ -351,90 +348,6 @@ func (b *BaseProvider) GetPodStatus(ctx context.Context, namespace, name string)
 	podStatus := &corev1.PodStatus{}
 	logger := log.G(ctx)
 	if pod == nil {
-		logger.Info("Get Pod Status Failed Because Pod Not Found In Local Runtime")
-		return nil, nil
-	}
-	// check pod in deletion
-	isAllContainerReady := true
-	isSomeContainerFailed := false
-	isInDeletion := false
-	if pod.DeletionTimestamp == nil {
-		// not in deletion
-		bizModels := b.modelUtils.GetBizModelsFromCoreV1Pod(pod)
-
-		bizInfos, err := b.queryAllBiz(ctx)
-		b.bas.Lock()
-		if err != nil {
-			b.bas.lastStatus = false
-		} else {
-			// check last status is down
-			if b.bas.lastStatus == false {
-				// do module playback
-				logger.Info("StartModulePlayback")
-				for _, podBizModels := range b.runtimeInfoStore.podKeyToBizModels {
-					for _, bizModel := range podBizModels {
-						b.installOperationQueue.Enqueue(ctx, b.modelUtils.GetBizIdentityFromBizModel(bizModel))
-						logger.WithField("bizName", bizModel.BizName).WithField("bizVersion", bizModel.BizVersion).Info("ItemEnqueued")
-					}
-				}
-			}
-			b.bas.lastStatus = true
-		}
-		b.bas.Unlock()
-
-		// bizIdentity
-		bizRuntimeInfos := make(map[string]*ark.ArkBizInfo)
-		for _, info := range bizInfos {
-			bizRuntimeInfos[b.modelUtils.GetBizIdentityFromBizInfo(&info)] = &info
-		}
-		// bizName -> container status
-		containerStatuses := make(map[string]*corev1.ContainerStatus)
-		/**
-		todo: if arklet return installed timestamp, we can submit corresponding event and start time accordingly
-		      for now, we can just keep them empty
-		if further info is provided, we can set the time accordingly
-		failedTime would be the earliest time of the failed container
-		successTime would be the latest time of the success container
-		startTime would be the earliest time of the all container
-		*/
-		for _, bizModel := range bizModels {
-			info := bizRuntimeInfos[b.modelUtils.GetBizIdentityFromBizModel(bizModel)]
-			containerStatus := b.modelUtils.TranslateArkBizInfoToV1ContainerStatus(bizModel, info, b.bas.lastStatus)
-			containerStatuses[bizModel.BizName] = containerStatus
-
-			if !containerStatus.Ready {
-				isAllContainerReady = false
-			}
-
-			if containerStatus.State.Terminated != nil {
-				isSomeContainerFailed = true
-			}
-		}
-
-		podStatus.PodIP = b.localIP
-		podStatus.PodIPs = []corev1.PodIP{{IP: b.localIP}}
-
-		podStatus.ContainerStatuses = make([]corev1.ContainerStatus, 0)
-		for _, status := range containerStatuses {
-			podStatus.ContainerStatuses = append(podStatus.ContainerStatuses, *status)
-		}
-	} else {
-		isInDeletion = true
-	}
-
-	defer func() {
-		if isInDeletion {
-			for _, bizModel := range b.runtimeInfoStore.GetRelatedBizModels(podKey) {
-				b.uninstallOperationQueue.Enqueue(ctx, b.modelUtils.GetBizIdentityFromBizModel(bizModel))
-				logger.WithField("bizName", bizModel.BizName).WithField("bizVersion", bizModel.BizVersion).Info("ItemEnqueued")
-			}
-			// lazy delete from local store
-			b.runtimeInfoStore.DeletePod(podKey)
-		}
-	}()
-
-	podStatus.Phase = corev1.PodPending
-	if isInDeletion {
 		podStatus.Phase = corev1.PodSucceeded
 		podStatus.Conditions = []corev1.PodCondition{
 			{
@@ -454,7 +367,73 @@ func (b *BaseProvider) GetPodStatus(ctx context.Context, namespace, name string)
 				Status: corev1.ConditionFalse,
 			},
 		}
-	} else if isAllContainerReady {
+		return podStatus, nil
+	}
+	// check pod in deletion
+	isAllContainerReady := true
+	isSomeContainerFailed := false
+	// not in deletion
+	bizModels := b.modelUtils.GetBizModelsFromCoreV1Pod(pod)
+
+	bizInfos, err := b.queryAllBiz(ctx)
+	b.bas.Lock()
+	if err != nil {
+		b.bas.lastStatus = false
+	} else {
+		// check last status is down
+		if b.bas.lastStatus == false {
+			// do module playback
+			logger.Info("StartModulePlayback")
+			for _, podBizModels := range b.runtimeInfoStore.podKeyToBizModels {
+				for _, bizModel := range podBizModels {
+					b.installOperationQueue.Enqueue(ctx, b.modelUtils.GetBizIdentityFromBizModel(bizModel))
+					logger.WithField("bizName", bizModel.BizName).WithField("bizVersion", bizModel.BizVersion).Info("ItemEnqueued")
+				}
+			}
+		}
+		b.bas.lastStatus = true
+	}
+	b.bas.Unlock()
+
+	// bizIdentity
+	bizRuntimeInfos := make(map[string]*ark.ArkBizInfo)
+	for _, info := range bizInfos {
+		bizRuntimeInfos[b.modelUtils.GetBizIdentityFromBizInfo(&info)] = &info
+	}
+	// bizName -> container status
+	containerStatuses := make(map[string]*corev1.ContainerStatus)
+	/**
+	todo: if arklet return installed timestamp, we can submit corresponding event and start time accordingly
+	      for now, we can just keep them empty
+	if further info is provided, we can set the time accordingly
+	failedTime would be the earliest time of the failed container
+	successTime would be the latest time of the success container
+	startTime would be the earliest time of the all container
+	*/
+	for _, bizModel := range bizModels {
+		info := bizRuntimeInfos[b.modelUtils.GetBizIdentityFromBizModel(bizModel)]
+		containerStatus := b.modelUtils.TranslateArkBizInfoToV1ContainerStatus(bizModel, info, b.bas.lastStatus)
+		containerStatuses[bizModel.BizName] = containerStatus
+
+		if !containerStatus.Ready {
+			isAllContainerReady = false
+		}
+
+		if containerStatus.State.Terminated != nil {
+			isSomeContainerFailed = true
+		}
+	}
+
+	podStatus.PodIP = b.localIP
+	podStatus.PodIPs = []corev1.PodIP{{IP: b.localIP}}
+
+	podStatus.ContainerStatuses = make([]corev1.ContainerStatus, 0)
+	for _, status := range containerStatuses {
+		podStatus.ContainerStatuses = append(podStatus.ContainerStatuses, *status)
+	}
+
+	podStatus.Phase = corev1.PodPending
+	if isAllContainerReady {
 		podStatus.Phase = corev1.PodRunning
 		podStatus.Conditions = []corev1.PodCondition{
 			{

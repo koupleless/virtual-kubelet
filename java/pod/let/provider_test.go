@@ -14,7 +14,8 @@ import (
 var baseProvider *BaseProvider
 
 func TestNewBaseProvider(t *testing.T) {
-	baseProvider = NewBaseProvider("default")
+	service := ark.BuildService(context.Background())
+	baseProvider = NewBaseProvider("default", service)
 	assert.Assert(t, baseProvider != nil)
 	assert.Equal(t, baseProvider.namespace, "default")
 }

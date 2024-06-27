@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"fmt"
+	"github.com/koupleless/arkctl/v1/service/ark"
 	podlet "github.com/koupleless/virtual-kubelet/java/pod/let"
 	"github.com/virtual-kubelet/virtual-kubelet/node"
 	"github.com/virtual-kubelet/virtual-kubelet/node/nodeutil"
@@ -67,10 +68,11 @@ func TestNewKouplelessNode(t *testing.T) {
 	cm, err := nodeutil.NewNode(
 		VNodeName,
 		func(config nodeutil.ProviderConfig) (nodeutil.Provider, node.NodeProvider, error) {
-			nodeProvider := NewVirtualKubeletNode()
+			service := ark.BuildService(context.Background())
+			nodeProvider := NewVirtualKubeletNode(service)
 			// initialize node spec on bootstrap
 			nodeProvider.Register(ctx, config.Node)
-			provider = podlet.NewBaseProvider(config.Node.Namespace)
+			provider = podlet.NewBaseProvider(config.Node.Namespace, service)
 			return provider, nodeProvider, nil
 		},
 		func(cfg *nodeutil.NodeConfig) error {

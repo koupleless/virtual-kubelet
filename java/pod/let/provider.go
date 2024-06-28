@@ -107,7 +107,7 @@ func NewBaseProvider(namespace string, arkService ark.Service, k8sClient *kubern
 func (b *BaseProvider) Run(ctx context.Context) {
 	go b.installOperationQueue.Run(ctx, 1)
 	go b.uninstallOperationQueue.Run(ctx, 1)
-	//go common.TimedTaskWithInterval("check and uninstall dangling biz", time.Second*5, b.checkAndUninstallDanglingBiz)
+	go common.TimedTaskWithInterval("check and uninstall dangling biz", time.Second*5, b.checkAndUninstallDanglingBiz)
 }
 
 // checkAndUninstallDanglingBiz mainly process a pod being deleted before biz activated, in resolved status, biz can't uninstall

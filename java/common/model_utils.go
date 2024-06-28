@@ -168,11 +168,13 @@ func (c ModelUtils) BuildVirtualNode(config *model.BuildVirtualNodeConfig, arkSe
 		Capacity: map[corev1.ResourceName]resource.Quantity{
 			corev1.ResourcePods: resource.MustParse(strconv.Itoa(config.VPodCapacity)),
 		},
+		Allocatable: map[corev1.ResourceName]resource.Quantity{},
 	}
 	// TODO add base process liveness check, now use query for check
+	// for init status, need to check mem
 	_, err := arkService.QueryAllBiz(context.Background(), ark.QueryAllArkBizRequest{
-		HostName: model.LOOP_BACK_IP,
-		Port:     model.ARK_SERVICE_PORT,
+		HostName: model.LoopBackIp,
+		Port:     model.ArkServicePort,
 	})
 	if err != nil {
 		// base process not ready
@@ -190,10 +192,12 @@ func (c ModelUtils) BuildVirtualNode(config *model.BuildVirtualNodeConfig, arkSe
 					Status: corev1.ConditionFalse,
 				},
 			},
-			Capacity: map[corev1.ResourceName]resource.Quantity{
-				corev1.ResourcePods: resource.MustParse(strconv.Itoa(config.VPodCapacity)),
+			NodeInfo: corev1.NodeSystemInfo{
+				KubeletVersion: model.VirtualKubeletVersion,
 			},
 		}
+	} else {
+		// TODO sync capacity
 	}
 }
 

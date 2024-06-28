@@ -14,8 +14,8 @@ var basePodController *BasePodController
 
 func TestNewBasePodController(t *testing.T) {
 	homeDir, _ := os.UserHomeDir()
-	os.Setenv("BASE_POD_NAME", "")
-	os.Setenv("BASE_POD_NAMESPACE", "")
+	os.Setenv("BASE_POD_NAME", "test-deployment-6cb6fd95cd-lxhn9")
+	os.Setenv("BASE_POD_NAMESPACE", "default")
 	var err error
 
 	kubeConfigPath := path.Join(homeDir, ".kube", "config")
@@ -36,4 +36,9 @@ func TestBasePodControllerRun(t *testing.T) {
 
 	err := basePodController.WaitReady(ctx, time.Minute)
 	assert.NilError(t, err)
+}
+
+func TestFormatModuleFinalizerKey(t *testing.T) {
+	key := FormatModuleFinalizerKey("test")
+	assert.Equal(t, key, "module-finalizer.koupleless.io/test")
 }

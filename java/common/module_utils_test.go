@@ -1,6 +1,7 @@
 package common
 
 import (
+	"context"
 	"github.com/koupleless/arkctl/v1/service/ark"
 	"github.com/koupleless/virtual-kubelet/java/model"
 	"gotest.tools/assert"
@@ -18,12 +19,13 @@ func TestModelUtils_BuildVirtualNode(t *testing.T) {
 		Spec:       corev1.NodeSpec{},
 		Status:     corev1.NodeStatus{},
 	}
+	arkService := ark.BuildService(context.Background())
 	moduleUtils.BuildVirtualNode(&model.BuildVirtualNodeConfig{
 		NodeIP:       "127.0.0.1",
 		TechStack:    "java",
 		Version:      "1.1.1",
 		VPodCapacity: 5,
-	}, node)
+	}, arkService, node)
 	assert.Assert(t, len(node.Labels) == 2)
 	assert.Assert(t, len(node.Spec.Taints) == 1)
 	assert.Assert(t, node.Status.Phase == corev1.NodeRunning)
@@ -158,10 +160,11 @@ func TestModelUtils_TranslateArkBizInfoToV1ContainerStatus(t *testing.T) {
 		BizState:   "DEACTIVATED",
 		BizVersion: "1.1.1",
 	}
-	assert.Assert(t, moduleUtils.TranslateArkBizInfoToV1ContainerStatus(bizModel, infoNotInstalled, false).State.Waiting.Reason == "BizPending")
-	assert.Assert(t, moduleUtils.TranslateArkBizInfoToV1ContainerStatus(bizModel, infoResolved, false).State.Waiting.Reason == "BizNotActivated")
-	assert.Assert(t, moduleUtils.TranslateArkBizInfoToV1ContainerStatus(bizModel, infoActivated, false).State.Running != nil)
-	assert.Assert(t, moduleUtils.TranslateArkBizInfoToV1ContainerStatus(bizModel, infoDeactivated, false).State.Terminated != nil)
+	assert.Assert(t, moduleUtils.TranslateArkBizInfoToV1ContainerStatus(bizModel, infoNotInstalled, true).State.Waiting.Reason == "BizPending")
+	assert.Assert(t, moduleUtils.TranslateArkBizInfoToV1ContainerStatus(bizModel, infoResolved, true).State.Waiting.Reason == "BizResolved")
+	assert.Assert(t, moduleUtils.TranslateArkBizInfoToV1ContainerStatus(bizModel, infoActivated, true).State.Running != nil)
+	assert.Assert(t, moduleUtils.TranslateArkBizInfoToV1ContainerStatus(bizModel, infoDeactivated, true).State.Terminated != nil)
+	assert.Assert(t, moduleUtils.TranslateArkBizInfoToV1ContainerStatus(bizModel, infoNotInstalled, false).State.Waiting.Reason == "BaseDown")
 }
 
 func TestModelUtils_TranslateContainerToSummaryContainerStats(t *testing.T) {

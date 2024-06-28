@@ -15,8 +15,9 @@
 package model
 
 const (
-	LOOP_BACK_IP     = "127.0.0.1"
-	ARK_SERVICE_PORT = 1238
+	LoopBackIp            = "127.0.0.1"
+	ArkServicePort        = 1238
+	VirtualKubeletVersion = "0.0.1"
 )
 
 type BuildVirtualNodeConfig struct {

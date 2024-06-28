@@ -20,6 +20,8 @@ import (
 	"github.com/koupleless/virtual-kubelet/java/model"
 	"io"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/utils/ptr"
 	"os"
 	"sync"
 	"time"
@@ -43,6 +45,7 @@ type BaseProvider struct {
 
 	localIP                 string
 	arkService              ark.Service
+	k8sClient               *kubernetes.Clientset
 	modelUtils              common.ModelUtils
 	runtimeInfoStore        *RuntimeInfoStore
 	installOperationQueue   *queue.Queue
@@ -58,21 +61,22 @@ type baseArkletStatus struct {
 	lastStatus bool
 }
 
-func NewBaseProvider(namespace string, arkService ark.Service) *BaseProvider {
+func NewBaseProvider(namespace string, arkService ark.Service, k8sClient *kubernetes.Clientset) *BaseProvider {
 	localIP := os.Getenv("BASE_POD_IP")
 	if localIP == "" {
-		localIP = model.LOOP_BACK_IP
+		localIP = model.LoopBackIp
 	}
 	provider := &BaseProvider{
 		namespace:        namespace,
 		localIP:          localIP,
 		arkService:       arkService,
+		k8sClient:        k8sClient,
 		modelUtils:       common.ModelUtils{},
 		runtimeInfoStore: NewRuntimeInfoStore(),
 		bas: &baseArkletStatus{
 			lastStatus: true,
 		},
-		port: model.ARK_SERVICE_PORT,
+		port: model.ArkServicePort,
 	}
 
 	provider.installOperationQueue = queue.New(
@@ -103,53 +107,47 @@ func NewBaseProvider(namespace string, arkService ark.Service) *BaseProvider {
 func (b *BaseProvider) Run(ctx context.Context) {
 	go b.installOperationQueue.Run(ctx, 1)
 	go b.uninstallOperationQueue.Run(ctx, 1)
-	go b.checkAndUninstallDanglingBiz(context.WithValue(ctx, "timed task", "check and uninstall dangling biz"), time.Second*5)
+	//go common.TimedTaskWithInterval("check and uninstall dangling biz", time.Second*5, b.checkAndUninstallDanglingBiz)
 }
 
 // checkAndUninstallDanglingBiz mainly process a pod being deleted before biz activated, in resolved status, biz can't uninstall
-func (b *BaseProvider) checkAndUninstallDanglingBiz(ctx context.Context, interval time.Duration) {
+func (b *BaseProvider) checkAndUninstallDanglingBiz(ctx context.Context) {
 	logger := log.G(ctx)
-	ticker := time.NewTicker(interval)
-	for {
-		select {
-		case <-ticker.C:
-			bindingModels := make(map[string]bool)
-			for _, pod := range b.runtimeInfoStore.GetPods() {
-				if pod.DeletionTimestamp != nil {
-					// skip pod in deletion
-					continue
-				}
-				podKey := b.modelUtils.GetPodKey(pod)
-				bizModels := b.runtimeInfoStore.GetRelatedBizModels(podKey)
-				for _, bizModel := range bizModels {
-					bizIdentity := b.modelUtils.GetBizIdentityFromBizModel(bizModel)
-					bindingModels[bizIdentity] = true
-				}
-			}
-			// query all modules loading now, if not in binding, queue to uninstall
-			bizInfos, err := b.queryAllBiz(ctx)
-			if err != nil {
-				logger.WithError(err).Error("query biz info error")
-				continue
-			}
-			for _, bizInfo := range bizInfos {
-				if bizInfo.BizState == "RESOLVED" {
-					continue
-				}
-				bizIdentity := b.modelUtils.GetBizIdentityFromBizInfo(&bizInfo)
-				if !bindingModels[bizIdentity] {
-					// not binding,send to uninstall
-					b.uninstallOperationQueue.Enqueue(ctx, bizIdentity)
-					logger.WithField("bizName", bizInfo.BizName).WithField("bizVersion", bizInfo.BizVersion).Info("ItemEnqueued")
-				}
-			}
+	bindingModels := make(map[string]bool)
+	for _, pod := range b.runtimeInfoStore.GetPods() {
+		if pod.DeletionTimestamp != nil {
+			// skip pod in deletion
+			continue
+		}
+		podKey := b.modelUtils.GetPodKey(pod)
+		bizModels := b.runtimeInfoStore.GetRelatedBizModels(podKey)
+		for _, bizModel := range bizModels {
+			bizIdentity := b.modelUtils.GetBizIdentityFromBizModel(bizModel)
+			bindingModels[bizIdentity] = true
+		}
+	}
+	// query all modules loading now, if not in binding, queue to uninstall
+	bizInfos, err := b.queryAllBiz(context.WithValue(context.Background(), "task", ""))
+	if err != nil {
+		logger.WithError(err).Error("query biz info error")
+		return
+	}
+	for _, bizInfo := range bizInfos {
+		if bizInfo.BizState == "RESOLVED" {
+			continue
+		}
+		bizIdentity := b.modelUtils.GetBizIdentityFromBizInfo(&bizInfo)
+		if !bindingModels[bizIdentity] {
+			// not binding,send to uninstall
+			b.uninstallOperationQueue.Enqueue(ctx, bizIdentity)
+			logger.WithField("bizName", bizInfo.BizName).WithField("bizVersion", bizInfo.BizVersion).Info("ItemEnqueued")
 		}
 	}
 }
 
 func (b *BaseProvider) queryAllBiz(ctx context.Context) ([]ark.ArkBizInfo, error) {
 	resp, err := b.arkService.QueryAllBiz(ctx, ark.QueryAllArkBizRequest{
-		HostName: model.LOOP_BACK_IP,
+		HostName: model.LoopBackIp,
 		Port:     b.port,
 	})
 	if err != nil {
@@ -187,7 +185,7 @@ func (b *BaseProvider) installBiz(ctx context.Context, bizModel *ark.BizModel) e
 		BizModel: *bizModel,
 		TargetContainer: ark.ArkContainerRuntimeInfo{
 			RunType:    ark.ArkContainerRunTypeLocal,
-			Coordinate: model.LOOP_BACK_IP,
+			Coordinate: model.LoopBackIp,
 			Port:       &b.port,
 		},
 	}); err != nil {
@@ -202,7 +200,7 @@ func (b *BaseProvider) unInstallBiz(ctx context.Context, bizModel *ark.BizModel)
 		BizModel: *bizModel,
 		TargetContainer: ark.ArkContainerRuntimeInfo{
 			RunType:    ark.ArkContainerRunTypeLocal,
-			Coordinate: model.LOOP_BACK_IP,
+			Coordinate: model.LoopBackIp,
 			Port:       &b.port,
 		},
 	}); err != nil {
@@ -326,6 +324,13 @@ func (b *BaseProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 	// check is deleted
 	b.runtimeInfoStore.DeletePod(podKey)
 
+	// delete pod with no grace period, mock kubelet
+	if b.k8sClient != nil {
+		return b.k8sClient.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{
+			// grace period for base pod controller deleting target finalizer
+			GracePeriodSeconds: ptr.To[int64](3),
+		})
+	}
 	return nil
 }
 

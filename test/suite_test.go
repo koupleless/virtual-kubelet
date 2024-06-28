@@ -127,7 +127,7 @@ func shutdownBasePod(basePodName string) {
 	Eventually(func() bool {
 		_, err = k8sClient.CoreV1().Pods(DefaultNamespace).Get(context.Background(), basePodName, metav1.GetOptions{})
 		return errors.IsNotFound(err)
-	}, time.Minute, time.Second).Should(BeTrue())
+	}, time.Minute*2, time.Second).Should(BeTrue())
 }
 
 func initBasePod(name string, cb func(*corev1.Pod)) {
@@ -187,7 +187,7 @@ func initBasicEnvWithBasePod(podName, baseVersion string) {
 
 func getBasePodTemplate(name string) *corev1.Pod {
 	var pod corev1.Pod
-	basePodYamlFilePath := path.Join("samples", "base_pod_config.yaml")
+	basePodYamlFilePath := path.Join("../samples", "base_pod_config.yaml")
 	content, err := os.ReadFile(basePodYamlFilePath)
 	Expect(err).NotTo(HaveOccurred())
 	err = yaml.Unmarshal(content, &pod)

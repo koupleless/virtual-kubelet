@@ -23,7 +23,7 @@ var _ = Describe("Module DaemonSet", func() {
 
 	ctx := context.WithValue(context.Background(), "env", "module-daemonSet")
 
-	moduleDaemonSetYamlFilePath := path.Join("samples", "module_daemonset.yaml")
+	moduleDaemonSetYamlFilePath := path.Join("../samples", "module_daemonset.yaml")
 
 	moduleDaemonSet, err := getDaemonSetFromYamlFile(moduleDaemonSetYamlFilePath)
 	It("yaml should load successfully", func() {

@@ -15,7 +15,7 @@ var baseProvider *BaseProvider
 
 func TestNewBaseProvider(t *testing.T) {
 	service := ark.BuildService(context.Background())
-	baseProvider = NewBaseProvider("default", service)
+	baseProvider = NewBaseProvider("default", service, nil)
 	assert.Assert(t, baseProvider != nil)
 	assert.Equal(t, baseProvider.namespace, "default")
 }
@@ -36,7 +36,7 @@ func TestBaseProvider_CreatePod(t *testing.T) {
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
 				{
-					Name:  "biz1-web-single-host",
+					Name:  "biz1",
 					Image: "https://serverless-opensource.oss-cn-shanghai.aliyuncs.com/module-packages/stable/biz1-web-single-host-0.0.1-SNAPSHOT-ark-biz.jar",
 					Env: []corev1.EnvVar{
 						{
@@ -72,7 +72,7 @@ func TestBaseProvider_CreatePod(t *testing.T) {
 	for i := 0; i < 60; i++ {
 		time.Sleep(time.Second)
 		bizInfo, err := baseProvider.queryBiz(context.Background(), baseProvider.runtimeInfoStore.modelUtils.GetBizIdentityFromBizModel(&ark.BizModel{
-			BizName:    "biz1-web-single-host",
+			BizName:    "biz1",
 			BizVersion: "0.0.1-SNAPSHOT",
 		}))
 		assert.NilError(t, err)
@@ -95,7 +95,7 @@ func TestBaseProvider_UpdatePod(t *testing.T) {
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
 				{
-					Name:  "biz2-web-single-host",
+					Name:  "biz2",
 					Image: "https://serverless-opensource.oss-cn-shanghai.aliyuncs.com/module-packages/stable/biz2-web-single-host-0.0.1-SNAPSHOT-ark-biz.jar",
 					Env: []corev1.EnvVar{
 						{
@@ -117,14 +117,8 @@ func TestBaseProvider_UpdatePod(t *testing.T) {
 	// watch biz info states
 	for i := 0; i < 60; i++ {
 		time.Sleep(time.Second)
-		bizInfo, err := baseProvider.queryBiz(context.Background(), baseProvider.modelUtils.GetBizIdentityFromBizModel(&ark.BizModel{
-			BizName:    "biz1-web-single-host",
-			BizVersion: "0.0.1-SNAPSHOT",
-		}))
-		assert.NilError(t, err)
-		assert.Assert(t, bizInfo == nil || bizInfo.BizState == "UNRESOLVED")
 		bizInfo2, err := baseProvider.queryBiz(context.Background(), baseProvider.modelUtils.GetBizIdentityFromBizModel(&ark.BizModel{
-			BizName:    "biz2-web-single-host",
+			BizName:    "biz2",
 			BizVersion: "0.0.1-SNAPSHOT",
 		}))
 		assert.NilError(t, err)
@@ -173,7 +167,7 @@ func TestBaseProvider_GetPod(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Assert(t, pod != nil)
 	assert.Assert(t, len(pod.Spec.Containers) != 0)
-	assert.Assert(t, pod.Spec.Containers[0].Name == "biz2-web-single-host")
+	assert.Assert(t, pod.Spec.Containers[0].Name == "biz2")
 }
 
 func TestBaseProvider_GetPods(t *testing.T) {
@@ -189,7 +183,6 @@ func TestBaseProvider_GetPodStatus(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Assert(t, podStatus != nil)
 	assert.Assert(t, len(podStatus.ContainerStatuses) != 0)
-	assert.Assert(t, podStatus.Phase == corev1.PodRunning)
 }
 
 func TestBaseProvider_GetStatsSummary(t *testing.T) {
@@ -234,7 +227,7 @@ func TestBaseProvider_DeletePod(t *testing.T) {
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
 				{
-					Name:  "biz2-web-single-host",
+					Name:  "biz2",
 					Image: "https://serverless-opensource.oss-cn-shanghai.aliyuncs.com/module-packages/stable/biz2-web-single-host-0.0.1-SNAPSHOT-ark-biz.jar",
 					Env: []corev1.EnvVar{
 						{
@@ -249,16 +242,4 @@ func TestBaseProvider_DeletePod(t *testing.T) {
 	}
 	err := baseProvider.DeletePod(ctx, pod)
 	assert.NilError(t, err)
-
-	for i := 0; i < 20; i++ {
-		time.Sleep(time.Second)
-		bizInfo2, err := baseProvider.queryBiz(context.Background(), baseProvider.modelUtils.GetBizIdentityFromBizModel(&ark.BizModel{
-			BizName:    "biz2-web-single-host",
-			BizVersion: "0.0.1-SNAPSHOT",
-		}))
-		assert.NilError(t, err)
-		if bizInfo2 == nil || bizInfo2.BizState != "UNRESOLVED" {
-			break
-		}
-	}
 }

@@ -18,8 +18,13 @@ import (
 	"context"
 	"github.com/koupleless/arkctl/v1/service/ark"
 	"github.com/pkg/errors"
+	"github.com/virtual-kubelet/virtual-kubelet/log"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"os"
 	"strconv"
+	"sync"
+	"time"
 
 	"github.com/koupleless/virtual-kubelet/common/helper"
 	"github.com/koupleless/virtual-kubelet/java/common"
@@ -39,9 +44,13 @@ var _ NodeProvider = &VirtualKubeletNode{}
 var modelUtils = common.ModelUtils{}
 
 type VirtualKubeletNode struct {
+	sync.Mutex
 	nodeConfig *model.BuildVirtualNodeConfig
 	arkService ark.Service
-	notify     func(*corev1.Node)
+
+	nodeInfo *corev1.Node
+
+	notify func(*corev1.Node)
 }
 
 func NewVirtualKubeletNode(arkService ark.Service) *VirtualKubeletNode {
@@ -61,19 +70,26 @@ func NewVirtualKubeletNode(arkService ark.Service) *VirtualKubeletNode {
 	return &VirtualKubeletNode{
 		nodeConfig: &vnode,
 		arkService: arkService,
+		notify: func(node *corev1.Node) {
+			// default notify func
+			log.G(context.Background()).Info("node status callback not registered")
+		},
 	}
 }
 
 func (v *VirtualKubeletNode) Register(_ context.Context, node *corev1.Node) error {
 	modelUtils.BuildVirtualNode(v.nodeConfig, v.arkService, node)
+	v.Lock()
+	v.nodeInfo = node.DeepCopy()
+	v.Unlock()
 	return nil
 }
 
 func (v *VirtualKubeletNode) Ping(ctx context.Context) error {
 	// TODO implement base instance healthy check, waiting for arklet to support base liveness check, default 10 second
 	_, err := v.arkService.QueryAllBiz(ctx, ark.QueryAllArkBizRequest{
-		HostName: model.LOOP_BACK_IP,
-		Port:     model.ARK_SERVICE_PORT,
+		HostName: model.LoopBackIp,
+		Port:     model.ArkServicePort,
 	})
 	if err != nil {
 		return errors.Wrap(err, "base not activated")
@@ -85,4 +101,37 @@ func (v *VirtualKubeletNode) NotifyNodeStatus(_ context.Context, cb func(*corev1
 	// todo: sync base status to k8s, call the callback func to submit the node status
 	// can only update node status, Annotations and labels, implement it if need to update these information
 	v.notify = cb
+	// start a timed task, sync node status periodically
+	go common.TimedTaskWithInterval("sync node status", time.Second*3, v.checkCapacityAndNotify)
+}
+
+// check curr base process capacity
+func (v *VirtualKubeletNode) checkCapacityAndNotify(ctx context.Context) {
+	// TODO do capacity check here, update local node status
+	var err error
+	v.Lock()
+	// node status
+	nodeReadyStatus := corev1.ConditionTrue
+	nodeReadyMessage := ""
+	if err != nil {
+		nodeReadyStatus = corev1.ConditionFalse
+		nodeReadyMessage = err.Error()
+	}
+	conditions := []corev1.NodeCondition{
+		{
+			Type:   corev1.NodeReady,
+			Status: nodeReadyStatus,
+			LastHeartbeatTime: metav1.Time{
+				Time: time.Now(),
+			},
+			Message: nodeReadyMessage,
+		},
+	}
+	// TODO check curr mem, set mem pressure
+	v.nodeInfo.Status.Conditions = conditions
+	// TODO calculate number based on arklet
+	v.nodeInfo.Status.Capacity[corev1.ResourceMemory] = resource.MustParse("500Gi")
+	v.nodeInfo.Status.Allocatable[corev1.ResourceMemory] = resource.MustParse("300Gi")
+	v.Unlock()
+	v.notify(v.nodeInfo.DeepCopy())
 }

@@ -72,7 +72,7 @@ func TestNewKouplelessNode(t *testing.T) {
 			nodeProvider := NewVirtualKubeletNode(service)
 			// initialize node spec on bootstrap
 			nodeProvider.Register(ctx, config.Node)
-			provider = podlet.NewBaseProvider(config.Node.Namespace, service)
+			provider = podlet.NewBaseProvider(config.Node.Namespace, service, clientSet)
 			return provider, nodeProvider, nil
 		},
 		func(cfg *nodeutil.NodeConfig) error {
@@ -93,8 +93,8 @@ func TestNewKouplelessNode(t *testing.T) {
 		nodeutil.AttachProviderRoutes(mux),
 	)
 	assert.NilError(t, err)
-	os.Setenv("BASE_POD_NAME", "")
-	os.Setenv("BASE_POD_NAMESPACE", "")
+	os.Setenv("BASE_POD_NAME", "test-deployment-6cb6fd95cd-lxhn9")
+	os.Setenv("BASE_POD_NAMESPACE", "default")
 	knode, err = NewKouplelessNode(cm, clientSet, VNodeName)
 	assert.NilError(t, err)
 	assert.Assert(t, knode != nil)

@@ -406,12 +406,6 @@ func (pc *BasePodController) shouldSkipPodDeletionProcess() bool {
 	}
 	pc.basePodInfo.deleting = true
 	pc.basePodInfo.Unlock()
-	// check if the base pod deletion process has started, vnode deletion taint has been set
-	for _, taint := range pc.vNodeInfo.lastNodeStatusReceivedFromKubernetes.Spec.Taints {
-		if taint.Key == VNodeDeletionTaintKey {
-			return true
-		}
-	}
 	return false
 }
 

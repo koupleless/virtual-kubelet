@@ -17,12 +17,14 @@ package let
 import (
 	"context"
 	"errors"
+	"github.com/koupleless/virtual-kubelet/common/helper"
 	"github.com/koupleless/virtual-kubelet/java/model"
 	"io"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/utils/ptr"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -66,6 +68,12 @@ func NewBaseProvider(namespace string, arkService ark.Service, k8sClient *kubern
 	if localIP == "" {
 		localIP = model.LoopBackIp
 	}
+
+	arkServicePort := os.Getenv("BASE_ARKLET_PORT")
+	if arkServicePort == "" {
+		arkServicePort = "1238"
+	}
+
 	provider := &BaseProvider{
 		namespace:        namespace,
 		localIP:          localIP,
@@ -76,7 +84,7 @@ func NewBaseProvider(namespace string, arkService ark.Service, k8sClient *kubern
 		bas: &baseArkletStatus{
 			lastStatus: true,
 		},
-		port: model.ArkServicePort,
+		port: helper.MustReturnFirst[int](strconv.Atoi(arkServicePort)),
 	}
 
 	provider.installOperationQueue = queue.New(

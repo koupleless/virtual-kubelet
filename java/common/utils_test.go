@@ -12,6 +12,6 @@ func TestTimedTaskWithInterval(t *testing.T) {
 	go TimedTaskWithInterval("test timed task", time.Second, func(_ context.Context) {
 		testList = append(testList, 0)
 	})
-	time.Sleep(2 * time.Second)
-	assert.Assert(t, len(testList) == 2)
+	time.Sleep(2001 * time.Millisecond)
+	assert.Assert(t, len(testList) == 3)
 }

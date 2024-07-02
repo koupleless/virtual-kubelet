@@ -8,6 +8,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 	"path"
 	"time"
 )
@@ -21,8 +23,8 @@ var _ = Describe("Base Pod Management", func() {
 
 	ctx := context.WithValue(context.Background(), "env", "base-pod-management")
 
-	singleModuleBiz1PodYamlFilePath := path.Join("../samples", "single_module_biz1_to_mock_base.yaml")
-	singleModuleBiz2PodYamlFilePath := path.Join("../samples", "single_module_biz2_to_mock_base.yaml")
+	singleModuleBiz1PodYamlFilePath := path.Join("../samples", "single_module_biz1.yaml")
+	singleModuleBiz2PodYamlFilePath := path.Join("../samples", "single_module_biz2.yaml")
 
 	singleModuleBiz1Pod, err := getPodFromYamlFile(singleModuleBiz1PodYamlFilePath)
 	It("should load biz1 yaml successfully", func() {
@@ -36,14 +38,20 @@ var _ = Describe("Base Pod Management", func() {
 		Expect(singleModuleBiz2Pod).NotTo(BeNil())
 	})
 
-	Context("base pod finalizers management", func() {
-		It("should mock base pod start successfully", func() {
-			// start a test base pod
-			startBasePodDeployment(MockBasePodName, MockBasePodVersion, MockVNodeListPort, func(pod *corev1.Pod) {
-				mockBasePod = pod
-			})
+	var mockBasePod *corev1.Pod
+	It("current base pod deployment should contains 1 base pod", func() {
+		requirement, err := labels.NewRequirement("app", selection.Equals, []string{"base-web-single-host"})
+		Expect(err).ToNot(HaveOccurred())
+		selector := labels.NewSelector().Add(*requirement)
+		basePodList, err := k8sClient.CoreV1().Pods(DefaultNamespace).List(ctx, metav1.ListOptions{
+			LabelSelector: selector.String(),
 		})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(len(basePodList.Items)).To(Equal(1))
+		mockBasePod = basePodList.Items[0].DeepCopy()
+	})
 
+	Context("base pod finalizers management", func() {
 		It("should contains finalizer after first module running", func() {
 			// publish module pod
 			_, err = k8sClient.CoreV1().Pods(DefaultNamespace).Create(ctx, singleModuleBiz1Pod, metav1.CreateOptions{})

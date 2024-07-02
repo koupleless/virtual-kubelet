@@ -17,7 +17,6 @@ package node
 import (
 	"context"
 	"github.com/koupleless/arkctl/v1/service/ark"
-	"github.com/pkg/errors"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"os"
@@ -88,14 +87,6 @@ func (v *VirtualKubeletNode) Register(_ context.Context, node *corev1.Node) erro
 }
 
 func (v *VirtualKubeletNode) Ping(ctx context.Context) error {
-	// TODO implement base instance healthy check, waiting for arklet to support base liveness check, default 10 second
-	_, err := v.arkService.QueryAllBiz(ctx, ark.QueryAllArkBizRequest{
-		HostName: model.LoopBackIp,
-		Port:     v.port,
-	})
-	if err != nil {
-		return errors.Wrap(err, "base not activated")
-	}
 	return nil
 }
 

@@ -17,13 +17,13 @@ package base_pod
 import (
 	"context"
 	"fmt"
+	"github.com/gorilla/mux"
 	"github.com/koupleless/virtual-kubelet/common/queue"
 	"github.com/pkg/errors"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
 	"github.com/virtual-kubelet/virtual-kubelet/node/nodeutil"
 	"github.com/virtual-kubelet/virtual-kubelet/trace"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -36,6 +36,7 @@ import (
 	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
+	"net/http"
 
 	"os"
 	"sync"
@@ -80,6 +81,9 @@ type BasePodController struct {
 	// done is closed when Run returns
 	// Once done is closed `err` may be set to a non-nil value
 	done chan struct{}
+
+	basePodDeletionReady chan struct{}
+	vnodeExitReady       chan struct{}
 
 	mu sync.Mutex
 	// err is set if there is an error while while running the pod controller.
@@ -175,28 +179,22 @@ func (pc *BasePodController) syncVNodeStatusFromProviderHandler(ctx context.Cont
 
 	node, err := pc.vNodeLister.Get(name)
 	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			// in vnode deletion process, delete all the pods known
-			pc.knownVPods.Range(func(key, value any) bool {
-				vpod := value.(*vPod)
-				vpod.Lock()
-				vpodCopy := vpod.lastPodStatusReceivedFromProvider.DeepCopy()
-				vpod.Unlock()
-				err := pc.vPodClient.Pods(vpodCopy.Namespace).EvictV1beta1(ctx, &policyv1beta1.Eviction{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      vpodCopy.Name,
-						Namespace: vpodCopy.Namespace,
-					},
-					DeleteOptions: &metav1.DeleteOptions{},
-				})
-				if err != nil {
-					log.G(ctx).WithError(err).Error("Error deleting vpod")
-				}
-				return true
-			})
-			return nil
+		if !k8serrors.IsNotFound(err) {
+			return errors.Wrap(err, "error looking up vnode")
 		}
-		return errors.Wrap(err, "error looking up vnode")
+		// in vnode deletion process, delete all the pods known
+		pc.knownVPods.Range(func(key, value any) bool {
+			vpod := value.(*vPod)
+			vpod.Lock()
+			vpodCopy := vpod.lastPodStatusReceivedFromProvider.DeepCopy()
+			vpod.Unlock()
+			err = pc.vPodClient.Pods(vpodCopy.Namespace).Delete(ctx, vpodCopy.Name, metav1.DeleteOptions{})
+			if err != nil {
+				log.G(ctx).WithError(err).Error("Error deleting vpod")
+			}
+			return true
+		})
+		return nil
 	}
 
 	return pc.updateVNodeStatus(ctx, node)
@@ -213,6 +211,13 @@ func (pc *BasePodController) updateBasePodStatus(ctx context.Context, podFromKub
 
 	pc.basePodInfo.Lock()
 	pc.basePodInfo.lastPodStatusReceivedFromProvider = podFromKubernetes
+	if len(podFromKubernetes.Finalizers) == 0 {
+		select {
+		case <-pc.basePodDeletionReady:
+		default:
+			close(pc.basePodDeletionReady)
+		}
+	}
 	pc.basePodInfo.Unlock()
 
 	if podFromKubernetes.DeletionTimestamp != nil {
@@ -247,14 +252,13 @@ func (pc *BasePodController) vPodOperationHandler(ctx context.Context, key strin
 	moduleFinalizerKey := FormatModuleFinalizerKey(name)
 
 	pod, err := pc.vPodLister.Pods(namespace).Get(name)
-	if err != nil {
-		if !k8serrors.IsNotFound(err) {
-			// We've failed to fetch the pod from the lister, but the error is not a 404.
-			err = errors.Wrapf(err, "failed to fetch vpod with key %q from lister", key)
-			span.SetStatus(err)
-			return err
-		}
-
+	if err != nil && !k8serrors.IsNotFound(err) {
+		// We've failed to fetch the pod from the lister, but the error is not a 404.
+		err = errors.Wrapf(err, "failed to fetch vpod with key %q from lister", key)
+		span.SetStatus(err)
+		return err
+	}
+	if err != nil || pod.DeletionTimestamp != nil {
 		pc.knownVPods.Delete(key)
 		// remove base pod finalizer tag
 		pc.basePodInfo.Lock()
@@ -277,53 +281,69 @@ func (pc *BasePodController) vPodOperationHandler(ctx context.Context, key strin
 				},
 			}
 
-			resultPod, err := pc.basePodClient.Pods(pc.basePodInfo.lastPodStatusReceivedFromProvider.Namespace).Patch(ctx, pc.basePodInfo.lastPodStatusReceivedFromProvider.Name, types.JSONPatchType, patchOps.bytes(), metav1.PatchOptions{})
+			_, err = pc.basePodClient.Pods(pc.basePodInfo.lastPodStatusReceivedFromProvider.Namespace).Patch(ctx, pc.basePodInfo.lastPodStatusReceivedFromProvider.Name, types.JSONPatchType, patchOps.bytes(), metav1.PatchOptions{})
 			if err != nil {
 				log.G(ctx).WithError(err).Error("Error deleting base pod finalizers")
+				return err
 			}
-			pc.basePodInfo.lastPodStatusReceivedFromProvider = resultPod.DeepCopy()
+		}
+		if len(pc.basePodInfo.lastPodStatusReceivedFromProvider.Finalizers) == 0 {
+			select {
+			case <-pc.basePodDeletionReady:
+				// closed
+			default:
+				// not close
+				close(pc.basePodDeletionReady)
+			}
 		}
 		pc.basePodInfo.Unlock()
 	} else {
 		_, ok := pc.knownVPods.Load(key)
-		if !ok {
-			pc.knownVPods.Store(key, &vPod{
-				Mutex:                             sync.Mutex{},
-				lastPodStatusReceivedFromProvider: pod,
-			})
-			// add a new pod, need to patch a new finalizer to base pod
-			pc.basePodInfo.Lock()
-			// check if there is no finalizer now, use add op to replace the finalizers
-			initEmpty := false
-			if len(pc.basePodInfo.lastPodStatusReceivedFromProvider.Finalizers) == 0 {
-				initEmpty = true
-			}
-			pc.basePodInfo.lastPodStatusReceivedFromProvider.Finalizers = append(pc.basePodInfo.lastPodStatusReceivedFromProvider.Finalizers, moduleFinalizerKey)
-			patchOps := PatchOps{
-				{
-					OP: PatchOpTypeAdd,
-				},
-			}
-			if initEmpty {
-				patchOps[0].Path = "/metadata/finalizers"
-				patchOps[0].Value = pc.basePodInfo.lastPodStatusReceivedFromProvider.Finalizers
-			} else {
-				patchOps[0].Path = "/metadata/finalizers/-"
-				patchOps[0].Value = moduleFinalizerKey
-			}
-			bytes := patchOps.bytes()
-			resultPod, err := pc.basePodClient.Pods(pc.basePodInfo.lastPodStatusReceivedFromProvider.Namespace).Patch(ctx, pc.basePodInfo.lastPodStatusReceivedFromProvider.Name, types.JSONPatchType, bytes, metav1.PatchOptions{})
-			if err != nil {
-				log.G(ctx).WithError(err).Error("Error adding base pod finalizers")
-			}
-			log.G(ctx).WithFields(log.Fields{
-				"finalizer": moduleFinalizerKey,
-				"ops":       string(bytes),
-			}).Info("adding base pod finalizers succeed")
-			pc.basePodInfo.lastPodStatusReceivedFromProvider = resultPod.DeepCopy()
-			// if there are finalizers in the array, use add op to add the finalizer to the end
-			pc.basePodInfo.Unlock()
+		if ok {
+			return nil
 		}
+		pc.knownVPods.Store(key, &vPod{
+			Mutex:                             sync.Mutex{},
+			lastPodStatusReceivedFromProvider: pod,
+		})
+		// add a new pod, need to patch a new finalizer to base pod
+		pc.basePodInfo.Lock()
+		// check if there is no finalizer now, use add op to replace the finalizers
+		initEmpty := false
+		if len(pc.basePodInfo.lastPodStatusReceivedFromProvider.Finalizers) == 0 {
+			initEmpty = true
+		}
+		pc.basePodInfo.lastPodStatusReceivedFromProvider.Finalizers = append(pc.basePodInfo.lastPodStatusReceivedFromProvider.Finalizers, moduleFinalizerKey)
+		patchOps := PatchOps{
+			{
+				OP: PatchOpTypeAdd,
+			},
+		}
+		if initEmpty {
+			patchOps[0].Path = "/metadata/finalizers"
+			patchOps[0].Value = pc.basePodInfo.lastPodStatusReceivedFromProvider.Finalizers
+		} else {
+			patchOps[0].Path = "/metadata/finalizers/-"
+			patchOps[0].Value = moduleFinalizerKey
+		}
+		bytes := patchOps.bytes()
+		resultPod, err := pc.basePodClient.Pods(pc.basePodInfo.lastPodStatusReceivedFromProvider.Namespace).Patch(ctx, pc.basePodInfo.lastPodStatusReceivedFromProvider.Name, types.JSONPatchType, bytes, metav1.PatchOptions{})
+		if err != nil {
+			log.G(ctx).WithError(err).Error("Error adding base pod finalizers")
+		}
+		log.G(ctx).WithFields(log.Fields{
+			"finalizer": moduleFinalizerKey,
+			"ops":       string(bytes),
+		}).Info("adding base pod finalizers succeed")
+		pc.basePodInfo.lastPodStatusReceivedFromProvider = resultPod.DeepCopy()
+		// if there are finalizers in the array, use add op to add the finalizer to the end
+		select {
+		case <-pc.basePodDeletionReady:
+			// closed
+			pc.basePodDeletionReady = make(chan struct{})
+		default:
+		}
+		pc.basePodInfo.Unlock()
 	}
 	return nil
 }
@@ -390,6 +410,11 @@ func (pc *BasePodController) processPodDeletion(ctx context.Context, podFromKube
 		err := pc.vNodeClient.Nodes().Delete(ctx, currVNodeStatus.Name, metav1.DeleteOptions{})
 		if err != nil {
 			log.G(ctx).WithError(err).Error("Error deleting vnode")
+		}
+		select {
+		case <-pc.vnodeExitReady:
+		default:
+			close(pc.vnodeExitReady)
 		}
 	}
 
@@ -660,12 +685,34 @@ func (pc *BasePodController) Run(ctx context.Context, podSyncWorkers int) (retEr
 		log.G(ctx).Error(err)
 	}
 
+	go pc.runServer()
+
 	close(pc.ready)
 
 	<-ctx.Done()
 	log.G(ctx).Info("shutting down workers")
 
 	return nil
+}
+
+func (bpc *BasePodController) runServer() {
+	router := mux.NewRouter()
+	router.HandleFunc("/shutdown", bpc.shutdown).Methods("GET")
+
+	err := http.ListenAndServe(":1239", router)
+	if err != nil {
+		bpc.err = err
+		close(bpc.done)
+	}
+}
+
+func (pc *BasePodController) shutdown(writer http.ResponseWriter, _ *http.Request) {
+	log.G(context.TODO()).Info("shutting down")
+	// waiting for finalizers all clear
+	<-pc.basePodDeletionReady
+	<-pc.vnodeExitReady
+
+	writer.WriteHeader(http.StatusOK)
 }
 
 // BasePodNameInformerFilter is a filter that you should use when creating a base pod informer for use with the base pod controller.
@@ -778,6 +825,8 @@ func NewBasePodController(cfg BasePodControllerConfig) (*BasePodController, erro
 		vNodeInfo:              &vnode{},
 		ready:                  make(chan struct{}),
 		done:                   make(chan struct{}),
+		basePodDeletionReady:   make(chan struct{}),
+		vnodeExitReady:         make(chan struct{}),
 	}
 
 	pc.basePodOperationQueue = queue.New(

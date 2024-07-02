@@ -327,8 +327,8 @@ func (b *BaseProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 	// check is deleted
 	b.runtimeInfoStore.DeletePod(podKey)
 
-	// delete pod with no grace period, mock kubelet
 	if b.k8sClient != nil {
+		// delete pod with no grace period, mock kubelet
 		return b.k8sClient.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{
 			// grace period for base pod controller deleting target finalizer
 			GracePeriodSeconds: ptr.To[int64](3),

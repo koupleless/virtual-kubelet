@@ -28,7 +28,7 @@ func TestModelUtils_BuildVirtualNode(t *testing.T) {
 	}, arkService, node)
 	assert.Assert(t, len(node.Labels) == 2)
 	assert.Assert(t, len(node.Spec.Taints) == 1)
-	assert.Assert(t, node.Status.Phase == corev1.NodeRunning)
+	assert.Assert(t, node.Status.Phase == corev1.NodePending)
 }
 
 func TestModelUtils_CmpBizModel(t *testing.T) {

@@ -29,4 +29,6 @@ FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/virtual_kubelet .
 
-ENTRYPOINT ["./virtual_kubelet"]
+EXPOSE 1239
+
+CMD ["./virtual_kubelet"]

@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"github.com/koupleless/arkctl/v1/service/ark"
+	"github.com/koupleless/virtual-kubelet/java/model"
 	"gotest.tools/assert"
 	corev1 "k8s.io/api/core/v1"
 	"os"
@@ -18,7 +19,7 @@ func TestNewVirtualKubeletNode(t *testing.T) {
 	os.Setenv("BASE_POD_IP", "127.0.0.1")
 	os.Setenv("VNODE_VERSION", "0.0.1")
 	arkService := ark.BuildService(context.Background())
-	vnode = NewVirtualKubeletNode(arkService)
+	vnode = NewVirtualKubeletNode(arkService, model.DefaultArkServicePort)
 	assert.Assert(t, vnode != nil)
 	assert.Assert(t, vnode.nodeConfig.NodeIP == "127.0.0.1")
 	assert.Assert(t, vnode.nodeConfig.VPodCapacity == 2)
@@ -32,7 +33,7 @@ func TestVirtualKubeletNode_Register(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Assert(t, len(node.Labels) == 2)
 	assert.Assert(t, len(node.Spec.Taints) == 1)
-	assert.Assert(t, node.Status.Phase == corev1.NodeRunning)
+	assert.Assert(t, node.Status.Phase == corev1.NodePending)
 	quantity, has := node.Status.Capacity[corev1.ResourcePods]
 	assert.Assert(t, has)
 	assert.Assert(t, quantity.Value() == 2)
@@ -49,5 +50,5 @@ func TestVirtualKubeletNode_NotifyNodeStatus(t *testing.T) {
 		nodeList = append(nodeList, node)
 	})
 	time.Sleep(3200 * time.Millisecond)
-	assert.Assert(t, len(nodeList) == 1)
+	assert.Assert(t, len(nodeList) == 2)
 }

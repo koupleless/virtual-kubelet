@@ -19,7 +19,7 @@ var _ = Describe("Module Publish", func() {
 	const interval = time.Second * 3
 
 	ctx := context.WithValue(context.Background(), "env", "module-publish-test")
-	singleModuleBiz1PodYamlFilePath := path.Join("../samples", "single_module_biz1_to_basic_base.yaml")
+	singleModuleBiz1PodYamlFilePath := path.Join("../samples", "single_module_biz1.yaml")
 	multiModulePodYamlFilePath := path.Join("../samples", "multi_module_biz1_biz2.yaml")
 
 	singleModuleBiz1Pod, err := getPodFromYamlFile(singleModuleBiz1PodYamlFilePath)

@@ -25,6 +25,14 @@ spec:
               cpu: "500m"
               memory: "1Gi"
         - name: vk
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 1239
+          lifecycle:
+            preStop:
+              httpGet:
+                path: /shutdown
+                port: 1239
           image: serverless-registry.cn-shanghai.cr.aliyuncs.com/opensource/release/virtual-kubelet:0.0.1
           resources:
             limits:

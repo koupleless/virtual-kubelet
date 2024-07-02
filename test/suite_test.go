@@ -18,12 +18,10 @@ limitations under the License.
 
 import (
 	"context"
-	"fmt"
-	"github.com/koupleless/virtual-kubelet/commands/root"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/spf13/cobra"
 	"github.com/virtual-kubelet/virtual-kubelet/node/nodeutil"
+	appv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -33,7 +31,6 @@ import (
 	"k8s.io/client-go/util/homedir"
 	"os"
 	"path"
-	"strings"
 	"testing"
 	"time"
 )
@@ -44,26 +41,18 @@ var (
 )
 
 const (
-	DefaultNamespace    = metav1.NamespaceDefault
-	BasicBasePodName    = "test-base-pod-basic"
-	BasicBasePodVersion = "1.1.1"
-	BasicVNodeListPort  = 10250
-	MockBasePodName     = "test-base-pod-mock"
-	MockBasePodVersion  = "1.1.2"
-	MockVNodeListPort   = 10251
+	DefaultNamespace = metav1.NamespaceDefault
 )
 
 var k8sClient kubernetes.Interface
 
-var basicBasePod *corev1.Pod
-var mockBasePod *corev1.Pod
+var basePodDeployment *appv1.Deployment
 var err error
 var DefaultKubeConfigPath = path.Join(homedir.HomeDir(), ".kube", "config")
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
-// TODO reconstruct to docker version
 func TestVirtualKubelet(t *testing.T) {
 	RegisterFailHandler(Fail)
 
@@ -74,127 +63,52 @@ var _ = BeforeSuite(func() {
 	By("preparing test environment")
 	k8sClient, err = nodeutil.ClientsetFromEnv(DefaultKubeConfigPath)
 	Expect(err).NotTo(HaveOccurred())
-	startBasePodDeployment(BasicBasePodName, BasicBasePodVersion, BasicVNodeListPort, func(pod *corev1.Pod) {
-		basicBasePod = pod
-	})
+	startBasePodDeployment()
 	time.Sleep(time.Second * 5)
 })
 
 var _ = AfterSuite(func() {
 	By("shutting down test environment")
-	shutdownBasePod(BasicBasePodName)
-	shutdownBasePod(MockBasePodName)
+	if basePodDeployment != nil {
+		shutdownBasePodDeployment(basePodDeployment.Name)
+	}
 })
 
-func startBasePodDeployment(basePodName, baseVersion string, listenPort int32, cb func(*corev1.Pod)) {
-	// deploy mock base pod
-	initBasePod(basePodName, cb)
-
-	initBasicEnvWithBasePod(basePodName, baseVersion)
-
-	ctx := context.WithValue(context.Background(), "env", "suite_test_environment")
-
-	var opts root.Opts
-	optsErr := root.SetDefaultOpts(&opts)
-	opts.Version = strings.Join([]string{k8sVersion, "vk", buildVersion}, "-")
-	opts.ListenPort = listenPort
-
-	rootCmd := root.NewCommand(ctx, opts)
-	preRun := rootCmd.PreRunE
-
-	rootCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
-		if optsErr != nil {
-			return optsErr
-		}
-		if preRun != nil {
-			return preRun(cmd, args)
-		}
-		return nil
-	}
-
-	go func() {
-		err = rootCmd.Execute()
-		if err != nil {
-			fmt.Println(err)
-		}
-		Expect(err).NotTo(HaveOccurred())
-	}()
-}
-
-func shutdownBasePod(basePodName string) {
-	err = k8sClient.CoreV1().Pods(DefaultNamespace).Delete(context.Background(), basePodName, metav1.DeleteOptions{})
-	Expect(err == nil || errors.IsNotFound(err)).To(BeTrue())
-
-	Eventually(func() bool {
-		_, err = k8sClient.CoreV1().Pods(DefaultNamespace).Get(context.Background(), basePodName, metav1.GetOptions{})
-		return errors.IsNotFound(err)
-	}, time.Minute*2, time.Second).Should(BeTrue())
-}
-
-func initBasePod(name string, cb func(*corev1.Pod)) {
-	basePodTemplate := getBasePodTemplate(name)
-	newPod, err := k8sClient.CoreV1().Pods(DefaultNamespace).Create(context.Background(), basePodTemplate, metav1.CreateOptions{})
+func startBasePodDeployment() {
+	basePodDeploymentTemplate := getBasePodTemplate()
+	newDeployment, err := k8sClient.AppsV1().Deployments(DefaultNamespace).Create(context.Background(), basePodDeploymentTemplate, metav1.CreateOptions{})
 	Expect(err).NotTo(HaveOccurred())
-	Expect(newPod).NotTo(BeNil())
-	cb(newPod)
+	Expect(newDeployment).NotTo(BeNil())
+	basePodDeployment = newDeployment
 
 	Eventually(func() bool {
 		// wait for base pod ready
-		newPod, err = k8sClient.CoreV1().Pods(DefaultNamespace).Get(context.Background(), name, metav1.GetOptions{})
+		newDeployment, err = k8sClient.AppsV1().Deployments(DefaultNamespace).Get(context.Background(), basePodDeploymentTemplate.Name, metav1.GetOptions{})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(newPod).NotTo(BeNil())
-		cb(newPod)
-		return newPod.Status.Phase == corev1.PodRunning
+		Expect(newDeployment).NotTo(BeNil())
+		basePodDeployment = newDeployment
+		return newDeployment.Status.ReadyReplicas == newDeployment.Status.Replicas
+	}, time.Minute*2, time.Second).Should(BeTrue())
+}
+
+func shutdownBasePodDeployment(name string) {
+	err = k8sClient.AppsV1().Deployments(DefaultNamespace).Delete(context.Background(), name, metav1.DeleteOptions{})
+	Expect(err == nil || errors.IsNotFound(err)).To(BeTrue())
+
+	Eventually(func() bool {
+		err = k8sClient.AppsV1().Deployments(DefaultNamespace).Delete(context.Background(), name, metav1.DeleteOptions{})
+		return errors.IsNotFound(err)
 	}, time.Minute, time.Second).Should(BeTrue())
 }
 
-func initBasicEnvWithBasePod(podName, baseVersion string) {
-	var pod *corev1.Pod
-	switch podName {
-	case BasicBasePodName:
-		pod = basicBasePod
-	case MockBasePodName:
-		pod = mockBasePod
-	}
-	Expect(pod).NotTo(BeNil())
-	err := os.Setenv("BASE_POD_NAME", pod.Name)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = os.Setenv("BASE_POD_NAMESPACE", pod.Namespace)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = os.Setenv("BASE_POD_IP", pod.Status.PodIP)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = os.Setenv("TECH_STACK", "java")
-	Expect(err).NotTo(HaveOccurred())
-
-	err = os.Setenv("VNODE_NAME", pod.Name)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = os.Setenv("VNODE_POD_CAPACITY", "5")
-	Expect(err).NotTo(HaveOccurred())
-
-	err = os.Setenv("VNODE_VERSION", baseVersion)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = os.Setenv("KUBE_NAME_SPACE", pod.Namespace)
-	Expect(err).NotTo(HaveOccurred())
-
-	// just for local test, online will use in-cluster kube config
-	err = os.Setenv("BASE_POD_KUBE_CONFIG_PATH", DefaultKubeConfigPath)
-	Expect(err).NotTo(HaveOccurred())
-}
-
-func getBasePodTemplate(name string) *corev1.Pod {
-	var pod corev1.Pod
+func getBasePodTemplate() *appv1.Deployment {
+	var deployment appv1.Deployment
 	basePodYamlFilePath := path.Join("../samples", "base_pod_deployment.yaml")
 	content, err := os.ReadFile(basePodYamlFilePath)
 	Expect(err).NotTo(HaveOccurred())
-	err = yaml.Unmarshal(content, &pod)
+	err = yaml.Unmarshal(content, &deployment)
 	Expect(err).NotTo(HaveOccurred())
-	pod.Name = name
-	return &pod
+	return &deployment
 }
 
 func getPodFromYamlFile(filePath string) (*corev1.Pod, error) {

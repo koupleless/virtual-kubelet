@@ -65,10 +65,16 @@ var _ = Describe("Module DaemonSet", func() {
 
 	Context("base pod scale", func() {
 		It("should base pod scale successfully", func() {
-			// version should be the same as basic base pod, mocking the base pod scale situation
-			startBasePodDeployment(MockBasePodName, BasicBasePodVersion, MockVNodeListPort, func(pod *corev1.Pod) {
-				mockBasePod = pod
-			})
+			currScale, err := k8sClient.AppsV1().Deployments(DefaultNamespace).GetScale(ctx, basePodDeployment.Name, metav1.GetOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(currScale).NotTo(BeNil())
+			Expect(currScale.Spec.Replicas).To(Equal(int32(1)))
+
+			// scale up to 3 replicas
+			currScale.Spec.Replicas += 2
+			scaleResult, err := k8sClient.AppsV1().Deployments(DefaultNamespace).UpdateScale(ctx, basePodDeployment.Name, currScale, metav1.UpdateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(scaleResult).NotTo(BeNil())
 		})
 
 		It("should all of the pod become running finally and the num of pods should be 2", func() {
@@ -82,7 +88,7 @@ var _ = Describe("Module DaemonSet", func() {
 				for _, pod := range podList.Items {
 					isAllReady = isAllReady && pod.Status.Phase == corev1.PodRunning
 				}
-				return isAllReady && len(podList.Items) == 2
+				return isAllReady && len(podList.Items) == 3
 			}, timeout, interval).Should(BeTrue())
 		})
 	})
@@ -133,24 +139,34 @@ var _ = Describe("Module DaemonSet", func() {
 					isAllReady = isAllReady && pod.Status.Phase == corev1.PodRunning
 				}
 				// only contains biz2 module
-				return isAllReady && len(podList.Items) == 2 && len(numOfPodContainerName) == 1 && numOfPodContainerName["biz2"] != 0
+				return isAllReady && len(podList.Items) == 3 && len(numOfPodContainerName) == 1 && numOfPodContainerName["biz2"] != 0
 			}, timeout, interval).Should(BeTrue())
 		})
 	})
 
-	// base pod update is delete then create new one, creation has tested before
-	Context("base pod update", func() {
-		It("should base pod delete successfully", func() {
-			shutdownBasePod(MockBasePodName)
+	Context("base pod deployment scale down", func() {
+		It("should base pod deployment scale to 1 successfully", func() {
+			currScale, err := k8sClient.AppsV1().Deployments(DefaultNamespace).GetScale(ctx, basePodDeployment.Name, metav1.GetOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(currScale).NotTo(BeNil())
+			Expect(currScale.Spec.Replicas).To(Equal(int32(3)))
+
+			// scale down to 3 replicas
+			currScale.Spec.Replicas = 1
+			scaleResult, err := k8sClient.AppsV1().Deployments(DefaultNamespace).UpdateScale(ctx, basePodDeployment.Name, currScale, metav1.UpdateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(scaleResult).NotTo(BeNil())
 		})
 
 		It("should not create new pod", func() {
-			podList, err := k8sClient.CoreV1().Pods(DefaultNamespace).List(ctx, metav1.ListOptions{
-				LabelSelector: selector.String(),
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(podList).NotTo(BeNil())
-			Expect(len(podList.Items)).To(Equal(1))
+			Eventually(func() bool {
+				podList, err := k8sClient.CoreV1().Pods(DefaultNamespace).List(ctx, metav1.ListOptions{
+					LabelSelector: selector.String(),
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(podList).NotTo(BeNil())
+				return len(podList.Items) == 1
+			}, timeout, interval).Should(BeTrue())
 		})
 	})
 

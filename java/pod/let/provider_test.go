@@ -3,6 +3,7 @@ package let
 import (
 	"context"
 	"github.com/koupleless/arkctl/v1/service/ark"
+	"github.com/koupleless/virtual-kubelet/java/model"
 	"github.com/virtual-kubelet/virtual-kubelet/node/api"
 	"gotest.tools/assert"
 	corev1 "k8s.io/api/core/v1"
@@ -15,7 +16,7 @@ var baseProvider *BaseProvider
 
 func TestNewBaseProvider(t *testing.T) {
 	service := ark.BuildService(context.Background())
-	baseProvider = NewBaseProvider("default", service, nil)
+	baseProvider = NewBaseProvider("default", model.DefaultArkServicePort, service, nil)
 	assert.Assert(t, baseProvider != nil)
 	assert.Equal(t, baseProvider.namespace, "default")
 }

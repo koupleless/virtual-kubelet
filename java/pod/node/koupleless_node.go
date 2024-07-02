@@ -34,11 +34,6 @@ func (n *KouplelessNode) Run(ctx context.Context, podSyncWorkers int) (retErr er
 
 	go n.bpc.Run(ctx, podSyncWorkers) //nolint:errcheck
 
-	defer func() {
-		cancel()
-		<-n.bpc.Done()
-	}()
-
 	select {
 	case <-ctx.Done():
 		n.err = ctx.Err()

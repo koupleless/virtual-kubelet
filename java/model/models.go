@@ -16,7 +16,7 @@ package model
 
 const (
 	LoopBackIp            = "127.0.0.1"
-	ArkServicePort        = 1238
+	DefaultArkServicePort = "1238"
 	VirtualKubeletVersion = "0.0.1"
 )
 

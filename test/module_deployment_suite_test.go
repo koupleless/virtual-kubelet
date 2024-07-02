@@ -15,7 +15,7 @@ import (
 
 // using deployment to achieve module non-peer deployment
 var _ = Describe("Module Deployment", func() {
-	return
+
 	const timeout = time.Second * 90
 
 	const interval = time.Second * 3

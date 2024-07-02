@@ -13,7 +13,7 @@ import (
 )
 
 var _ = Describe("Module Publish", func() {
-	return
+
 	const timeout = time.Second * 60
 
 	const interval = time.Second * 3

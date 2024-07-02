@@ -66,7 +66,7 @@ var _ = Describe("Module DaemonSet", func() {
 	Context("base pod scale", func() {
 		It("should base pod scale successfully", func() {
 			// version should be the same as basic base pod, mocking the base pod scale situation
-			startBasePod(MockBasePodName, BasicBasePodVersion, MockVNodeListPort, func(pod *corev1.Pod) {
+			startBasePodDeployment(MockBasePodName, BasicBasePodVersion, MockVNodeListPort, func(pod *corev1.Pod) {
 				mockBasePod = pod
 			})
 		})

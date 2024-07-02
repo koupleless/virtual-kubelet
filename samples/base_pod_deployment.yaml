@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: base-web-single-host-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: base-web-single-host
+  template:
+    metadata:
+      labels:
+        app: base-web-single-host
+        maxModuleCount: "10"
+    spec:
+      serviceAccountName: virtual-kubelet
+      containers:
+        - name: app
+          image: serverless-registry.cn-shanghai.cr.aliyuncs.com/opensource/base-log4j2:0.1.2
+          ports:
+            - containerPort: 8080
+            - containerPort: 1238
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+        - name: vk
+          image: serverless-registry.cn-shanghai.cr.aliyuncs.com/opensource/release/virtual-kubelet:0.0.1
+          resources:
+            limits:
+              cpu: "100m"
+              memory: "200Mi"
+          env:
+            - name: BASE_POD_NAME # 基座所在pod的name
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: BASE_POD_NAMESPACE # 基座所在pod的namespace
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: BASE_POD_IP # 基座所在pod的ip
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: TECH_STACK # 基座语言标签
+              value: "java"
+            - name: VNODE_NAME # vnode名，暂取podname
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: VNODE_POD_CAPACITY # vpod 最大数量
+              value: "100"
+            - name: VNODE_VERSION # 基座版本标签
+              value: "1.1.1"
+            - name: KUBE_NAME_SPACE # vnode 所属的namespace
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: BASE_ARKLET_PORT # 基座arklet的自定义端口，如默认可不配置
+              value: "1238"

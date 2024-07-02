@@ -2,7 +2,7 @@ module github.com/koupleless/virtual-kubelet
 
 go 1.22.0
 
-toolchain go1.22.3
+toolchain go1.22.4
 
 require (
 	contrib.go.opencensus.io/exporter/jaeger v0.2.1
@@ -27,7 +27,6 @@ require (
 	k8s.io/client-go v0.30.0
 	k8s.io/klog/v2 v2.120.1
 	k8s.io/utils v0.0.0-20230726121419-3b25d923346b
-	sigs.k8s.io/controller-runtime v0.15.0
 )
 
 require (

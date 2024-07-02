@@ -63,6 +63,7 @@ var DefaultKubeConfigPath = path.Join(homedir.HomeDir(), ".kube", "config")
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
+// TODO reconstruct to docker version
 func TestVirtualKubelet(t *testing.T) {
 	RegisterFailHandler(Fail)
 
@@ -73,7 +74,7 @@ var _ = BeforeSuite(func() {
 	By("preparing test environment")
 	k8sClient, err = nodeutil.ClientsetFromEnv(DefaultKubeConfigPath)
 	Expect(err).NotTo(HaveOccurred())
-	startBasePod(BasicBasePodName, BasicBasePodVersion, BasicVNodeListPort, func(pod *corev1.Pod) {
+	startBasePodDeployment(BasicBasePodName, BasicBasePodVersion, BasicVNodeListPort, func(pod *corev1.Pod) {
 		basicBasePod = pod
 	})
 	time.Sleep(time.Second * 5)
@@ -85,7 +86,7 @@ var _ = AfterSuite(func() {
 	shutdownBasePod(MockBasePodName)
 })
 
-func startBasePod(basePodName, baseVersion string, listenPort int32, cb func(*corev1.Pod)) {
+func startBasePodDeployment(basePodName, baseVersion string, listenPort int32, cb func(*corev1.Pod)) {
 	// deploy mock base pod
 	initBasePod(basePodName, cb)
 
@@ -187,7 +188,7 @@ func initBasicEnvWithBasePod(podName, baseVersion string) {
 
 func getBasePodTemplate(name string) *corev1.Pod {
 	var pod corev1.Pod
-	basePodYamlFilePath := path.Join("../samples", "base_pod_config.yaml")
+	basePodYamlFilePath := path.Join("../samples", "base_pod_deployment.yaml")
 	content, err := os.ReadFile(basePodYamlFilePath)
 	Expect(err).NotTo(HaveOccurred())
 	err = yaml.Unmarshal(content, &pod)

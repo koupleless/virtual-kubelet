@@ -15,7 +15,6 @@
 package common
 
 import (
-	"context"
 	"github.com/koupleless/arkctl/common/fileutil"
 	"github.com/koupleless/arkctl/v1/service/ark"
 	"github.com/koupleless/virtual-kubelet/java/model"
@@ -152,7 +151,7 @@ func (c ModelUtils) BuildVirtualNode(config *model.BuildVirtualNodeConfig, arkSe
 		},
 	}
 	node.Status = corev1.NodeStatus{
-		Phase: corev1.NodeRunning,
+		Phase: corev1.NodePending,
 		Addresses: []corev1.NodeAddress{
 			{
 				Type:    corev1.NodeInternalIP,
@@ -162,42 +161,13 @@ func (c ModelUtils) BuildVirtualNode(config *model.BuildVirtualNodeConfig, arkSe
 		Conditions: []corev1.NodeCondition{
 			{
 				Type:   corev1.NodeReady,
-				Status: corev1.ConditionTrue,
+				Status: corev1.ConditionFalse,
 			},
 		},
 		Capacity: map[corev1.ResourceName]resource.Quantity{
 			corev1.ResourcePods: resource.MustParse(strconv.Itoa(config.VPodCapacity)),
 		},
 		Allocatable: map[corev1.ResourceName]resource.Quantity{},
-	}
-	// TODO add base process liveness check, now use query for check
-	// for init status, need to check mem
-	_, err := arkService.QueryAllBiz(context.Background(), ark.QueryAllArkBizRequest{
-		HostName: model.LoopBackIp,
-		Port:     model.ArkServicePort,
-	})
-	if err != nil {
-		// base process not ready
-		node.Status = corev1.NodeStatus{
-			Phase: corev1.NodePending,
-			Addresses: []corev1.NodeAddress{
-				{
-					Type:    corev1.NodeInternalIP,
-					Address: config.NodeIP,
-				},
-			},
-			Conditions: []corev1.NodeCondition{
-				{
-					Type:   corev1.NodeReady,
-					Status: corev1.ConditionFalse,
-				},
-			},
-			NodeInfo: corev1.NodeSystemInfo{
-				KubeletVersion: model.VirtualKubeletVersion,
-			},
-		}
-	} else {
-		// TODO sync capacity
 	}
 }
 

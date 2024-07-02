@@ -63,15 +63,10 @@ type baseArkletStatus struct {
 	lastStatus bool
 }
 
-func NewBaseProvider(namespace string, arkService ark.Service, k8sClient *kubernetes.Clientset) *BaseProvider {
+func NewBaseProvider(namespace, arkServicePort string, arkService ark.Service, k8sClient *kubernetes.Clientset) *BaseProvider {
 	localIP := os.Getenv("BASE_POD_IP")
 	if localIP == "" {
 		localIP = model.LoopBackIp
-	}
-
-	arkServicePort := os.Getenv("BASE_ARKLET_PORT")
-	if arkServicePort == "" {
-		arkServicePort = "1238"
 	}
 
 	provider := &BaseProvider{

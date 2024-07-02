@@ -18,7 +18,9 @@ import (
 	"context"
 	"crypto/tls"
 	"github.com/koupleless/arkctl/v1/service/ark"
+	"github.com/koupleless/virtual-kubelet/java/model"
 	"net/http"
+	"os"
 	"runtime"
 
 	podlet "github.com/koupleless/virtual-kubelet/java/pod/let"
@@ -64,7 +66,7 @@ func runRootCommand(ctx context.Context, c Opts) error {
 		return err
 	}
 
-	// Set-up the node provider.
+	// Set up the node provider.
 	mux := http.NewServeMux()
 	apiConfig, err := getAPIConfig(c)
 	if err != nil {
@@ -76,9 +78,13 @@ func runRootCommand(ctx context.Context, c Opts) error {
 		c.NodeName,
 		func(config nodeutil.ProviderConfig) (nodeutil.Provider, node.NodeProvider, error) {
 			arkService := ark.BuildService(context.Background())
-			nodeProvider := podnode.NewVirtualKubeletNode(arkService)
+			arkServicePort := os.Getenv("BASE_ARKLET_PORT")
+			if arkServicePort == "" {
+				arkServicePort = model.DefaultArkServicePort
+			}
+			nodeProvider := podnode.NewVirtualKubeletNode(arkService, arkServicePort)
 			// initialize node spec on bootstrap
-			provider = podlet.NewBaseProvider(config.Node.Namespace, arkService, clientSet)
+			provider = podlet.NewBaseProvider(config.Node.Namespace, arkServicePort, arkService, clientSet)
 			nodeProvider.Register(ctx, config.Node)
 			return provider, nodeProvider, nil
 		},

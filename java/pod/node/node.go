@@ -19,7 +19,6 @@ import (
 	"github.com/koupleless/arkctl/v1/service/ark"
 	"github.com/pkg/errors"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"os"
 	"strconv"
@@ -48,12 +47,14 @@ type VirtualKubeletNode struct {
 	nodeConfig *model.BuildVirtualNodeConfig
 	arkService ark.Service
 
+	port int
+
 	nodeInfo *corev1.Node
 
 	notify func(*corev1.Node)
 }
 
-func NewVirtualKubeletNode(arkService ark.Service) *VirtualKubeletNode {
+func NewVirtualKubeletNode(arkService ark.Service, arkServicePort string) *VirtualKubeletNode {
 	techStack := os.Getenv("TECH_STACK")
 	vNodeCapacityStr := os.Getenv("VNODE_POD_CAPACITY")
 	if len(vNodeCapacityStr) == 0 {
@@ -70,6 +71,7 @@ func NewVirtualKubeletNode(arkService ark.Service) *VirtualKubeletNode {
 	return &VirtualKubeletNode{
 		nodeConfig: &vnode,
 		arkService: arkService,
+		port:       helper.MustReturnFirst[int](strconv.Atoi(arkServicePort)),
 		notify: func(node *corev1.Node) {
 			// default notify func
 			log.G(context.Background()).Info("node status callback not registered")
@@ -89,7 +91,7 @@ func (v *VirtualKubeletNode) Ping(ctx context.Context) error {
 	// TODO implement base instance healthy check, waiting for arklet to support base liveness check, default 10 second
 	_, err := v.arkService.QueryAllBiz(ctx, ark.QueryAllArkBizRequest{
 		HostName: model.LoopBackIp,
-		Port:     model.ArkServicePort,
+		Port:     v.port,
 	})
 	if err != nil {
 		return errors.Wrap(err, "base not activated")
@@ -113,7 +115,9 @@ func (v *VirtualKubeletNode) checkCapacityAndNotify(ctx context.Context) {
 	// node status
 	nodeReadyStatus := corev1.ConditionTrue
 	nodeReadyMessage := ""
+	v.nodeInfo.Status.Phase = corev1.NodeRunning
 	if err != nil {
+		v.nodeInfo.Status.Phase = corev1.NodePending
 		nodeReadyStatus = corev1.ConditionFalse
 		nodeReadyMessage = err.Error()
 	}
@@ -129,9 +133,7 @@ func (v *VirtualKubeletNode) checkCapacityAndNotify(ctx context.Context) {
 	}
 	// TODO check curr mem, set mem pressure
 	v.nodeInfo.Status.Conditions = conditions
-	// TODO calculate number based on arklet
-	v.nodeInfo.Status.Capacity[corev1.ResourceMemory] = resource.MustParse("500Gi")
-	v.nodeInfo.Status.Allocatable[corev1.ResourceMemory] = resource.MustParse("300Gi")
+	// TODO calculate mem based on arklet
 	v.Unlock()
 	v.notify(v.nodeInfo.DeepCopy())
 }

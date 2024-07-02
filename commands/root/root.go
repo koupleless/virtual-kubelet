@@ -85,7 +85,10 @@ func runRootCommand(ctx context.Context, c Opts) error {
 			nodeProvider := podnode.NewVirtualKubeletNode(arkService, arkServicePort)
 			// initialize node spec on bootstrap
 			provider = podlet.NewBaseProvider(config.Node.Namespace, arkServicePort, arkService, clientSet)
-			nodeProvider.Register(ctx, config.Node)
+			err = nodeProvider.Register(ctx, config.Node)
+			if err != nil {
+				return nil, nil, err
+			}
 			return provider, nodeProvider, nil
 		},
 		func(cfg *nodeutil.NodeConfig) error {

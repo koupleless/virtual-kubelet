@@ -17,6 +17,7 @@ package node
 import (
 	"context"
 	"github.com/koupleless/arkctl/v1/service/ark"
+	"github.com/pkg/errors"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"os"
@@ -91,8 +92,6 @@ func (v *VirtualKubeletNode) Ping(ctx context.Context) error {
 }
 
 func (v *VirtualKubeletNode) NotifyNodeStatus(_ context.Context, cb func(*corev1.Node)) {
-	// todo: sync base status to k8s, call the callback func to submit the node status
-	// can only update node status, Annotations and labels, implement it if need to update these information
 	v.notify = cb
 	// start a timed task, sync node status periodically
 	go common.TimedTaskWithInterval("sync node status", time.Second*3, v.checkCapacityAndNotify)
@@ -100,8 +99,14 @@ func (v *VirtualKubeletNode) NotifyNodeStatus(_ context.Context, cb func(*corev1
 
 // check curr base process capacity
 func (v *VirtualKubeletNode) checkCapacityAndNotify(ctx context.Context) {
-	// TODO do capacity check here, update local node status
 	var err error
+	healthStatus, err := v.arkService.Health(ctx, ark.HealthRequest{
+		HostName: model.LoopBackIp,
+		Port:     v.port,
+	})
+	if healthStatus == nil {
+		err = errors.New("health status is nil")
+	}
 	v.Lock()
 	// node status
 	nodeReadyStatus := corev1.ConditionTrue
@@ -122,9 +127,13 @@ func (v *VirtualKubeletNode) checkCapacityAndNotify(ctx context.Context) {
 			Message: nodeReadyMessage,
 		},
 	}
-	// TODO check curr mem, set mem pressure
 	v.nodeInfo.Status.Conditions = conditions
-	// TODO calculate mem based on arklet
+	if healthStatus.Data.HealthData.Jvm.JavaMaxMetaspace != -1 {
+		v.nodeInfo.Status.Capacity[corev1.ResourceMemory] = common.ConvertByteNumToResourceQuantity(healthStatus.Data.HealthData.Jvm.JavaMaxMetaspace)
+	}
+	if healthStatus.Data.HealthData.Jvm.JavaCommittedMetaspace != -1 && healthStatus.Data.HealthData.Jvm.JavaMaxMetaspace != -1 {
+		v.nodeInfo.Status.Allocatable[corev1.ResourceMemory] = common.ConvertByteNumToResourceQuantity(healthStatus.Data.HealthData.Jvm.JavaMaxMetaspace - healthStatus.Data.HealthData.Jvm.JavaCommittedMetaspace)
+	}
 	v.Unlock()
 	v.notify(v.nodeInfo.DeepCopy())
 }

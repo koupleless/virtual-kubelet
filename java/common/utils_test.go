@@ -15,3 +15,12 @@ func TestTimedTaskWithInterval(t *testing.T) {
 	time.Sleep(2001 * time.Millisecond)
 	assert.Assert(t, len(testList) == 3)
 }
+
+func TestConvertByteNumToResourceQuantity(t *testing.T) {
+	quantity := ConvertByteNumToResourceQuantity(-1)
+	assert.Assert(t, quantity.IsZero())
+	quantity = ConvertByteNumToResourceQuantity(1)
+	assert.Assert(t, quantity.IsZero())
+	quantity = ConvertByteNumToResourceQuantity(1025)
+	assert.Assert(t, quantity.String() == "1Ki")
+}

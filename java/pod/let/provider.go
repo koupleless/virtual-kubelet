@@ -488,12 +488,12 @@ func (b *BaseProvider) GetPodStatus(ctx context.Context, namespace, name string)
 	return podStatus, nil
 }
 
+// funcs below support call from users, should not support in module management
 func (b *BaseProvider) GetPods(_ context.Context) ([]*corev1.Pod, error) {
 	return b.runtimeInfoStore.GetPods(), nil
 }
 
 func (b *BaseProvider) GetContainerLogs(ctx context.Context, namespace, podName, containerName string, opts api.ContainerLogOpts) (io.ReadCloser, error) {
-	// todo: implement this by using the port to get the logs
 	return nil, nil
 }
 
@@ -506,30 +506,10 @@ func (b *BaseProvider) AttachToContainer(ctx context.Context, namespace, podName
 }
 
 func (b *BaseProvider) GetStatsSummary(ctx context.Context) (*statsv1alpha1.Summary, error) {
-	// TODO implement later, with node status and pod status summary
-	pods, _ := b.GetPods(ctx)
-	podsSummary := make([]statsv1alpha1.PodStats, len(pods))
-	for index, pod := range pods {
-		podsSummary[index] = b.modelUtils.TranslatePodToSummaryPodStats(pod)
-	}
-	return &statsv1alpha1.Summary{
-		Node: statsv1alpha1.NodeStats{
-			NodeName:         "",
-			SystemContainers: nil,
-			StartTime:        metav1.Time{},
-			CPU:              nil,
-			Memory:           nil,
-			Network:          nil,
-			Fs:               nil,
-			Runtime:          nil,
-			Rlimit:           nil,
-		},
-		Pods: podsSummary,
-	}, nil
+	return nil, nil
 }
 
 func (b *BaseProvider) GetMetricsResource(ctx context.Context) ([]*io_prometheus_client.MetricFamily, error) {
-	// todo: implement me
 	return make([]*io_prometheus_client.MetricFamily, 0), nil
 }
 

@@ -16,10 +16,8 @@ package root
 
 import (
 	"context"
-	"crypto/tls"
 	"github.com/koupleless/arkctl/v1/service/ark"
 	"github.com/koupleless/virtual-kubelet/java/model"
-	"net/http"
 	"os"
 	"runtime"
 
@@ -29,9 +27,7 @@ import (
 	"github.com/virtual-kubelet/virtual-kubelet/errdefs"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
 	"github.com/virtual-kubelet/virtual-kubelet/node"
-	"github.com/virtual-kubelet/virtual-kubelet/node/api"
 	"github.com/virtual-kubelet/virtual-kubelet/node/nodeutil"
-	"k8s.io/apiserver/pkg/server/dynamiccertificates"
 )
 
 // NewCommand creates a new top-level command.
@@ -67,11 +63,6 @@ func runRootCommand(ctx context.Context, c Opts) error {
 	}
 
 	// Set up the node provider.
-	mux := http.NewServeMux()
-	apiConfig, err := getAPIConfig(c)
-	if err != nil {
-		return err
-	}
 
 	var provider *podlet.BaseProvider
 	cm, err := nodeutil.NewNode(
@@ -93,25 +84,15 @@ func runRootCommand(ctx context.Context, c Opts) error {
 		},
 		func(cfg *nodeutil.NodeConfig) error {
 			cfg.KubeconfigPath = c.KubeConfigPath
-			cfg.Handler = mux
 			cfg.InformerResyncPeriod = c.InformerResyncPeriod
 			cfg.NodeSpec.Status.NodeInfo.Architecture = runtime.GOARCH
 			cfg.NodeSpec.Status.NodeInfo.OperatingSystem = c.OperatingSystem
-			cfg.HTTPListenAddr = apiConfig.Addr
-			cfg.StreamCreationTimeout = apiConfig.StreamCreationTimeout
-			cfg.StreamIdleTimeout = apiConfig.StreamIdleTimeout
 			cfg.DebugHTTP = true
 
 			cfg.NumWorkers = c.PodSyncWorkers
 			return nil
 		},
 		nodeutil.WithClient(clientSet),
-		//setAuth(c.NodeName, apiConfig),
-		//nodeutil.WithTLSConfig(
-		//	nodeutil.WithKeyPairFromPath(apiConfig.CertPath, apiConfig.KeyPath),
-		//maybeCA(apiConfig.CACertPath),
-		//),
-		nodeutil.AttachProviderRoutes(mux),
 	)
 	if err != nil {
 		return err
@@ -154,33 +135,4 @@ func runRootCommand(ctx context.Context, c Opts) error {
 		return cm.Err()
 	}
 	return nil
-}
-
-func setAuth(node string, apiCfg *apiServerConfig) nodeutil.NodeOpt {
-	if apiCfg.CACertPath == "" {
-		return func(cfg *nodeutil.NodeConfig) error {
-			cfg.Handler = api.InstrumentHandler(nodeutil.WithAuth(nodeutil.NoAuth(), cfg.Handler))
-			return nil
-		}
-	}
-
-	return func(cfg *nodeutil.NodeConfig) error {
-		auth, err := nodeutil.WebhookAuth(cfg.Client, node, func(cfg *nodeutil.WebhookAuthConfig) error {
-			var err error
-			cfg.AuthnConfig.ClientCertificateCAContentProvider, err = dynamiccertificates.NewDynamicCAContentFromFile("ca-cert-bundle", apiCfg.CACertPath)
-			return err
-		})
-		if err != nil {
-			return err
-		}
-		cfg.Handler = api.InstrumentHandler(nodeutil.WithAuth(auth, cfg.Handler))
-		return nil
-	}
-}
-
-func maybeCA(p string) func(*tls.Config) error {
-	if p == "" {
-		return func(*tls.Config) error { return nil }
-	}
-	return nodeutil.WithCAFromPath(p)
 }

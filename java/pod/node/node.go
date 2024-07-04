@@ -106,7 +106,6 @@ func (v *VirtualKubeletNode) checkCapacityAndNotify(ctx context.Context) {
 	})
 	if healthStatus == nil {
 		err = errors.New("health status is nil")
-		return
 	}
 	v.Lock()
 	// node status
@@ -129,11 +128,13 @@ func (v *VirtualKubeletNode) checkCapacityAndNotify(ctx context.Context) {
 		},
 	}
 	v.nodeInfo.Status.Conditions = conditions
-	if healthStatus.Data.HealthData.Jvm.JavaMaxMetaspace != -1 {
-		v.nodeInfo.Status.Capacity[corev1.ResourceMemory] = common.ConvertByteNumToResourceQuantity(healthStatus.Data.HealthData.Jvm.JavaMaxMetaspace)
-	}
-	if healthStatus.Data.HealthData.Jvm.JavaCommittedMetaspace != -1 && healthStatus.Data.HealthData.Jvm.JavaMaxMetaspace != -1 {
-		v.nodeInfo.Status.Allocatable[corev1.ResourceMemory] = common.ConvertByteNumToResourceQuantity(healthStatus.Data.HealthData.Jvm.JavaMaxMetaspace - healthStatus.Data.HealthData.Jvm.JavaCommittedMetaspace)
+	if healthStatus != nil {
+		if healthStatus.Data.HealthData.Jvm.JavaMaxMetaspace != -1 {
+			v.nodeInfo.Status.Capacity[corev1.ResourceMemory] = common.ConvertByteNumToResourceQuantity(healthStatus.Data.HealthData.Jvm.JavaMaxMetaspace)
+		}
+		if healthStatus.Data.HealthData.Jvm.JavaCommittedMetaspace != -1 && healthStatus.Data.HealthData.Jvm.JavaMaxMetaspace != -1 {
+			v.nodeInfo.Status.Allocatable[corev1.ResourceMemory] = common.ConvertByteNumToResourceQuantity(healthStatus.Data.HealthData.Jvm.JavaMaxMetaspace - healthStatus.Data.HealthData.Jvm.JavaCommittedMetaspace)
+		}
 	}
 	v.Unlock()
 	v.notify(v.nodeInfo.DeepCopy())

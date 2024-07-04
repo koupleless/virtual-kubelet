@@ -106,6 +106,7 @@ func (v *VirtualKubeletNode) checkCapacityAndNotify(ctx context.Context) {
 	})
 	if healthStatus == nil {
 		err = errors.New("health status is nil")
+		return
 	}
 	v.Lock()
 	// node status

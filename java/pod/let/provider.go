@@ -16,15 +16,14 @@ package let
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"github.com/koupleless/virtual-kubelet/common/helper"
+	"github.com/koupleless/virtual-kubelet/common/mqtt"
 	"github.com/koupleless/virtual-kubelet/java/model"
 	"io"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/utils/ptr"
-	"os"
-	"strconv"
 	"sync"
 	"time"
 
@@ -43,8 +42,8 @@ import (
 var _ nodeutil.Provider = &BaseProvider{}
 
 type BaseProvider struct {
-	namespace string
-
+	Namespace               string
+	nodeID                  string
 	localIP                 string
 	arkService              ark.Service
 	k8sClient               *kubernetes.Clientset
@@ -53,40 +52,32 @@ type BaseProvider struct {
 	installOperationQueue   *queue.Queue
 	uninstallOperationQueue *queue.Queue
 
-	bas *baseArkletStatus
-
-	port int
+	mqttClient    *mqtt.Client
+	bizInfosCache bizInfosCache
+	port          int
 }
 
-type baseArkletStatus struct {
+type bizInfosCache struct {
 	sync.Mutex
-	lastStatus bool
+
+	LatestBizInfos []ark.ArkBizInfo
 }
 
-func NewBaseProvider(namespace, arkServicePort string, arkService ark.Service, k8sClient *kubernetes.Clientset) *BaseProvider {
-	localIP := os.Getenv("BASE_POD_IP")
-	if localIP == "" {
-		localIP = model.LoopBackIp
-	}
-
+func NewBaseProvider(namespace, localIP, nodeID string, mqttClient *mqtt.Client, k8sClient *kubernetes.Clientset) *BaseProvider {
 	provider := &BaseProvider{
-		namespace:        namespace,
+		Namespace:        namespace,
 		localIP:          localIP,
-		arkService:       arkService,
+		nodeID:           nodeID,
 		k8sClient:        k8sClient,
 		modelUtils:       common.ModelUtils{},
 		runtimeInfoStore: NewRuntimeInfoStore(),
-		bas: &baseArkletStatus{
-			lastStatus: true,
-		},
-		port: helper.MustReturnFirst[int](strconv.Atoi(arkServicePort)),
+		mqttClient:       mqttClient,
 	}
 
 	provider.installOperationQueue = queue.New(
 		workqueue.DefaultControllerRateLimiter(),
 		"bizInstallOperationQueue",
 		provider.handleInstallOperation,
-		// todo: more complicated retry logic
 		func(ctx context.Context, key string, timesTried int, originallyAdded time.Time, err error) (*time.Duration, error) {
 			duration := time.Millisecond * 100
 			return &duration, nil
@@ -97,7 +88,6 @@ func NewBaseProvider(namespace, arkServicePort string, arkService ark.Service, k
 		workqueue.DefaultControllerRateLimiter(),
 		"bizUninstallOperationQueue",
 		provider.handleUnInstallOperation,
-		// todo: more complicated retry logic
 		func(ctx context.Context, key string, timesTried int, originallyAdded time.Time, err error) (*time.Duration, error) {
 			duration := time.Millisecond * 100
 			return &duration, nil
@@ -110,7 +100,7 @@ func NewBaseProvider(namespace, arkServicePort string, arkService ark.Service, k
 func (b *BaseProvider) Run(ctx context.Context) {
 	go b.installOperationQueue.Run(ctx, 1)
 	go b.uninstallOperationQueue.Run(ctx, 1)
-	go common.TimedTaskWithInterval("check and uninstall dangling biz", time.Second*5, b.checkAndUninstallDanglingBiz)
+	go common.TimedTaskWithInterval(ctx, time.Second*5, b.checkAndUninstallDanglingBiz)
 }
 
 // checkAndUninstallDanglingBiz mainly process a pod being deleted before biz activated, in resolved status, biz can't uninstall
@@ -130,7 +120,7 @@ func (b *BaseProvider) checkAndUninstallDanglingBiz(ctx context.Context) {
 		}
 	}
 	// query all modules loading now, if not in binding, queue to uninstall
-	bizInfos, err := b.queryAllBiz(context.WithValue(context.Background(), "task", ""))
+	bizInfos, err := b.queryAllBiz(ctx)
 	if err != nil {
 		logger.WithError(err).Error("query biz info error")
 		return
@@ -148,23 +138,20 @@ func (b *BaseProvider) checkAndUninstallDanglingBiz(ctx context.Context) {
 	}
 }
 
-func (b *BaseProvider) queryAllBiz(ctx context.Context) ([]ark.ArkBizInfo, error) {
-	resp, err := b.arkService.QueryAllBiz(ctx, ark.QueryAllArkBizRequest{
-		HostName: model.LoopBackIp,
-		Port:     b.port,
-	})
-	if err != nil {
-		log.G(ctx).WithError(err).Error("QueryAllBizFailed")
-		return nil, err
-	}
+func (b *BaseProvider) SyncBizInfo(bizInfos []ark.ArkBizInfo) {
+	b.bizInfosCache.Lock()
+	defer b.bizInfosCache.Unlock()
+	b.bizInfosCache.LatestBizInfos = bizInfos
+}
 
-	if resp.Code != "SUCCESS" {
-		err = errors.New(resp.Message)
-		log.G(ctx).WithError(err).Error("QueryAllBizFailed")
-		return nil, err
+func (b *BaseProvider) queryAllBiz(_ context.Context) ([]ark.ArkBizInfo, error) {
+	b.bizInfosCache.Lock()
+	defer b.bizInfosCache.Unlock()
+	if b.bizInfosCache.LatestBizInfos != nil {
+		return b.bizInfosCache.LatestBizInfos, nil
+	} else {
+		return nil, errors.New("bizInfos cache is empty")
 	}
-
-	return resp.Data, nil
 }
 
 func (b *BaseProvider) queryBiz(ctx context.Context, bizIdentity string) (*ark.ArkBizInfo, error) {
@@ -183,33 +170,15 @@ func (b *BaseProvider) queryBiz(ctx context.Context, bizIdentity string) (*ark.A
 	return nil, nil
 }
 
-func (b *BaseProvider) installBiz(ctx context.Context, bizModel *ark.BizModel) error {
-	if err := b.arkService.InstallBiz(ctx, ark.InstallBizRequest{
-		BizModel: *bizModel,
-		TargetContainer: ark.ArkContainerRuntimeInfo{
-			RunType:    ark.ArkContainerRunTypeLocal,
-			Coordinate: model.LoopBackIp,
-			Port:       &b.port,
-		},
-	}); err != nil {
-		log.G(ctx).WithError(err).Info("InstallBizFailed")
-		return err
-	}
+func (b *BaseProvider) installBizMqtt(_ context.Context, bizModel *ark.BizModel) error {
+	installBizRequestBytes, _ := json.Marshal(bizModel)
+	b.mqttClient.Pub(common.FormatArkletCommandTopic(b.nodeID, model.CommandInstallBiz), 1, installBizRequestBytes)
 	return nil
 }
 
-func (b *BaseProvider) unInstallBiz(ctx context.Context, bizModel *ark.BizModel) error {
-	if err := b.arkService.UnInstallBiz(ctx, ark.UnInstallBizRequest{
-		BizModel: *bizModel,
-		TargetContainer: ark.ArkContainerRuntimeInfo{
-			RunType:    ark.ArkContainerRunTypeLocal,
-			Coordinate: model.LoopBackIp,
-			Port:       &b.port,
-		},
-	}); err != nil {
-		log.G(ctx).WithError(err).Info("UnInstallBizFailed")
-		return err
-	}
+func (b *BaseProvider) unInstallBizMqtt(_ context.Context, bizModel *ark.BizModel) error {
+	unInstallBizRequestBytes, _ := json.Marshal(bizModel)
+	b.mqttClient.Pub(common.FormatArkletCommandTopic(b.nodeID, model.CommandUnInstallBiz), 1, unInstallBizRequestBytes)
 	return nil
 }
 
@@ -247,7 +216,7 @@ func (b *BaseProvider) handleInstallOperation(ctx context.Context, bizIdentity s
 		return errors.New("BizInstalledButNotActivated")
 	}
 
-	if err := b.installBiz(ctx, bizModel); err != nil {
+	if err = b.installBizMqtt(ctx, bizModel); err != nil {
 		logger.WithError(err).Error("InstallBizFailed")
 		return err
 	}
@@ -268,7 +237,7 @@ func (b *BaseProvider) handleUnInstallOperation(ctx context.Context, bizIdentity
 
 	if bizInfo != nil {
 		// local installed, call uninstall
-		if err := b.unInstallBiz(ctx, &ark.BizModel{
+		if err = b.unInstallBizMqtt(ctx, &ark.BizModel{
 			BizName:    bizInfo.BizName,
 			BizVersion: bizInfo.BizVersion,
 		}); err != nil {
@@ -331,7 +300,7 @@ func (b *BaseProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 		// delete pod with no grace period, mock kubelet
 		return b.k8sClient.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{
 			// grace period for base pod controller deleting target finalizer
-			GracePeriodSeconds: ptr.To[int64](3),
+			GracePeriodSeconds: ptr.To[int64](0),
 		})
 	}
 	return nil
@@ -347,9 +316,6 @@ func (b *BaseProvider) GetPod(_ context.Context, namespace, name string) (*corev
 
 // GetPodStatus this will be called repeatedly by virtual kubelet framework to get the defaultPod status
 // we should query the actual runtime info and translate them in to V1PodStatus accordingly
-// todo: 目前 defaultPod 的 status 状态是直接从 arklet 中查询和转换的，但是没有时间戳信息，所以无法提交对应的事件和开始时间。
-//
-//	当未来 arklet 提供了更多的信息时，我们可以相应的设置时间。
 func (b *BaseProvider) GetPodStatus(ctx context.Context, namespace, name string) (*corev1.PodStatus, error) {
 	podKey := namespace + "/" + name
 	pod := b.runtimeInfoStore.GetPodByKey(podKey)
@@ -384,24 +350,9 @@ func (b *BaseProvider) GetPodStatus(ctx context.Context, namespace, name string)
 	bizModels := b.modelUtils.GetBizModelsFromCoreV1Pod(pod)
 
 	bizInfos, err := b.queryAllBiz(ctx)
-	b.bas.Lock()
 	if err != nil {
-		b.bas.lastStatus = false
-	} else {
-		// check last status is down
-		if b.bas.lastStatus == false {
-			// do module playback
-			logger.Info("StartModulePlayback")
-			for _, podBizModels := range b.runtimeInfoStore.podKeyToBizModels {
-				for _, bizModel := range podBizModels {
-					b.installOperationQueue.Enqueue(ctx, b.modelUtils.GetBizIdentityFromBizModel(bizModel))
-					logger.WithField("bizName", bizModel.BizName).WithField("bizVersion", bizModel.BizVersion).Info("ItemEnqueued")
-				}
-			}
-		}
-		b.bas.lastStatus = true
+		logger.WithError(err).Error("QueryBizFailed")
 	}
-	b.bas.Unlock()
 
 	// bizIdentity
 	bizRuntimeInfos := make(map[string]*ark.ArkBizInfo)
@@ -411,8 +362,6 @@ func (b *BaseProvider) GetPodStatus(ctx context.Context, namespace, name string)
 	// bizName -> container status
 	containerStatuses := make(map[string]*corev1.ContainerStatus)
 	/**
-	todo: if arklet return installed timestamp, we can submit corresponding event and start time accordingly
-	      for now, we can just keep them empty
 	if further info is provided, we can set the time accordingly
 	failedTime would be the earliest time of the failed container
 	successTime would be the latest time of the success container
@@ -420,7 +369,7 @@ func (b *BaseProvider) GetPodStatus(ctx context.Context, namespace, name string)
 	*/
 	for _, bizModel := range bizModels {
 		info := bizRuntimeInfos[b.modelUtils.GetBizIdentityFromBizModel(bizModel)]
-		containerStatus := b.modelUtils.TranslateArkBizInfoToV1ContainerStatus(bizModel, info, b.bas.lastStatus)
+		containerStatus := b.modelUtils.TranslateArkBizInfoToV1ContainerStatus(bizModel, info)
 		containerStatuses[bizModel.BizName] = containerStatus
 
 		if !containerStatus.Ready {

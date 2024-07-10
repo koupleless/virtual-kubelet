@@ -14,10 +14,16 @@
 
 package model
 
+import (
+	"github.com/koupleless/virtual-kubelet/common/mqtt"
+	"k8s.io/client-go/kubernetes"
+)
+
 const (
-	LoopBackIp            = "127.0.0.1"
-	DefaultArkServicePort = "1238"
-	VirtualKubeletVersion = "0.0.1"
+	CommandHealth       = "health"
+	CommandQueryAllBiz  = "queryAllBiz"
+	CommandInstallBiz   = "installBiz"
+	CommandUnInstallBiz = "uninstallBiz"
 )
 
 type contextKey string
@@ -33,9 +39,37 @@ type BuildVirtualNodeConfig struct {
 	// TechStack is the underlying tech stack of runtime
 	TechStack string `json:"techStack"`
 
+	// BizName is the master biz name of runtime
+	BizName string `json:"bizName"`
+
 	// Version is the version of ths underlying runtime
 	Version string `json:"version"`
+}
 
-	// VPodCapacity limits the number of vPods that can be created on this node
-	VPodCapacity int `json:"vPodCapacity"`
+type BuildBaseRegisterControllerConfig struct {
+	// MqttConfig is the config of mqtt client
+	MqttConfig mqtt.ClientConfig
+}
+
+type BuildKouplelessNodeConfig struct {
+	// ClientSet is the k8s client set
+	ClientSet *kubernetes.Clientset
+
+	// MqttClient is the mqtt client, for sub and pub
+	MqttClient *mqtt.Client
+
+	// NodeID is the device id of base
+	NodeID string
+
+	// NodeIP is the device ip of base
+	NodeIP string
+
+	// TechStack is the base tech stack, default java
+	TechStack string
+
+	// BizName is the base master biz name
+	BizName string
+
+	// BizVersion is the base master biz version
+	BizVersion string
 }

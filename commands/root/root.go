@@ -16,18 +16,14 @@ package root
 
 import (
 	"context"
-	"github.com/koupleless/arkctl/v1/service/ark"
+	"errors"
+	"fmt"
+	"github.com/google/uuid"
+	"github.com/koupleless/virtual-kubelet/common/mqtt"
+	"github.com/koupleless/virtual-kubelet/java/controller"
 	"github.com/koupleless/virtual-kubelet/java/model"
-	"os"
-	"runtime"
-
-	podlet "github.com/koupleless/virtual-kubelet/java/pod/let"
-	podnode "github.com/koupleless/virtual-kubelet/java/pod/node"
 	"github.com/spf13/cobra"
-	"github.com/virtual-kubelet/virtual-kubelet/errdefs"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
-	"github.com/virtual-kubelet/virtual-kubelet/node"
-	"github.com/virtual-kubelet/virtual-kubelet/node/nodeutil"
 )
 
 // NewCommand creates a new top-level command.
@@ -52,87 +48,44 @@ func runRootCommand(ctx context.Context, c Opts) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	if c.PodSyncWorkers == 0 {
-		return errdefs.InvalidInput("pod sync workers must be greater than 0")
-	}
-
-	// Ensure API client.
-	clientSet, err := nodeutil.ClientsetFromEnv(c.KubeConfigPath)
-	if err != nil {
-		return err
-	}
-
-	// Set up the node provider.
-
-	var provider *podlet.BaseProvider
-	cm, err := nodeutil.NewNode(
-		c.NodeName,
-		func(config nodeutil.ProviderConfig) (nodeutil.Provider, node.NodeProvider, error) {
-			arkService := ark.BuildService(context.Background())
-			arkServicePort := os.Getenv("BASE_ARKLET_PORT")
-			if arkServicePort == "" {
-				arkServicePort = model.DefaultArkServicePort
-			}
-			nodeProvider := podnode.NewVirtualKubeletNode(arkService, arkServicePort)
-			// initialize node spec on bootstrap
-			provider = podlet.NewBaseProvider(config.Node.Namespace, arkServicePort, arkService, clientSet)
-			err = nodeProvider.Register(ctx, config.Node)
-			if err != nil {
-				return nil, nil, err
-			}
-			return provider, nodeProvider, nil
-		},
-		func(cfg *nodeutil.NodeConfig) error {
-			cfg.KubeconfigPath = c.KubeConfigPath
-			cfg.InformerResyncPeriod = c.InformerResyncPeriod
-			cfg.NodeSpec.Status.NodeInfo.Architecture = runtime.GOARCH
-			cfg.NodeSpec.Status.NodeInfo.OperatingSystem = c.OperatingSystem
-			cfg.DebugHTTP = true
-
-			cfg.NumWorkers = c.PodSyncWorkers
-			return nil
-		},
-		nodeutil.WithClient(clientSet),
-	)
-	if err != nil {
-		return err
-	}
-	kn, err := podnode.NewKouplelessNode(cm, clientSet, c.NodeName)
-	if err != nil {
-		return err
-	}
-
 	if err := setupTracing(ctx, c); err != nil {
 		return err
 	}
 
+	clientID := uuid.New().String()
+
 	ctx = log.WithLogger(ctx, log.G(ctx).WithFields(log.Fields{
-		"provider":         c.Provider,
-		"operatingSystem":  c.OperatingSystem,
-		"node":             c.NodeName,
-		"watchedNamespace": c.KubeNamespace,
+		"operatingSystem": c.OperatingSystem,
+		"clientID":        clientID,
 	}))
 
-	go provider.Run(ctx)
-	go kn.Run(ctx, c.PodSyncWorkers) //nolint:errcheck
+	config := model.BuildBaseRegisterControllerConfig{MqttConfig: mqtt.ClientConfig{
+		Broker:        c.MqttBroker,
+		Port:          c.MqttPort,
+		ClientID:      fmt.Sprintf("module-controller@@@%s", clientID),
+		Username:      c.MqttUsername,
+		Password:      c.MqttPassword,
+		CAPath:        c.MqttCAPath,
+		ClientCrtPath: c.MqttClientCrtPath,
+		ClientKeyPath: c.MqttClientKeyPath,
+		CleanSession:  true,
+	}}
 
-	defer func() {
-		log.G(ctx).Debug("Waiting for controllers to be done")
-		cancel()
-		<-kn.Done()
-	}()
-
-	log.G(ctx).Info("Waiting for controller to be ready")
-	if err := kn.WaitReady(ctx, c.StartupTimeout); err != nil {
+	registerController, err := controller.NewBaseRegisterController(config)
+	if err != nil {
 		return err
 	}
 
-	log.G(ctx).Info("Ready")
+	if registerController == nil {
+		return errors.New("register controller is nil")
+	}
+
+	registerController.Run(ctx)
 
 	select {
 	case <-ctx.Done():
-	case <-cm.Done():
-		return cm.Err()
+	case <-registerController.Done():
 	}
+
 	return nil
 }

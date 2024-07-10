@@ -17,19 +17,14 @@ package node
 import (
 	"context"
 	"github.com/koupleless/arkctl/v1/service/ark"
-	"github.com/pkg/errors"
-	"github.com/virtual-kubelet/virtual-kubelet/log"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"os"
-	"strconv"
-	"sync"
-	"time"
-
-	"github.com/koupleless/virtual-kubelet/common/helper"
 	"github.com/koupleless/virtual-kubelet/java/common"
 	"github.com/koupleless/virtual-kubelet/java/model"
+	"github.com/virtual-kubelet/virtual-kubelet/log"
 	"github.com/virtual-kubelet/virtual-kubelet/node"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sync"
+	"time"
 )
 
 type NodeProvider interface {
@@ -45,34 +40,47 @@ var modelUtils = common.ModelUtils{}
 type VirtualKubeletNode struct {
 	sync.Mutex
 	nodeConfig *model.BuildVirtualNodeConfig
-	arkService ark.Service
-
-	port int
 
 	nodeInfo *corev1.Node
 
 	notify func(*corev1.Node)
 }
 
-func NewVirtualKubeletNode(arkService ark.Service, arkServicePort string) *VirtualKubeletNode {
-	techStack := os.Getenv("TECH_STACK")
-	vNodeCapacityStr := os.Getenv("VNODE_POD_CAPACITY")
-	if len(vNodeCapacityStr) == 0 {
-		vNodeCapacityStr = "1"
+func (v *VirtualKubeletNode) Notify(data ark.HealthData) {
+	v.Lock()
+	if v.nodeInfo == nil {
+		v.Unlock()
+		return
 	}
-
-	vnode := model.BuildVirtualNodeConfig{
-		NodeIP:       os.Getenv("BASE_POD_IP"),
-		TechStack:    techStack,
-		Version:      os.Getenv("VNODE_VERSION"),
-		VPodCapacity: int(helper.MustReturnFirst[int64](strconv.ParseInt(vNodeCapacityStr, 10, 64))),
+	// node status
+	nodeReadyStatus := corev1.ConditionTrue
+	nodeReadyMessage := ""
+	v.nodeInfo.Status.Phase = corev1.NodeRunning
+	conditions := []corev1.NodeCondition{
+		{
+			Type:   corev1.NodeReady,
+			Status: nodeReadyStatus,
+			LastHeartbeatTime: metav1.Time{
+				Time: time.Now(),
+			},
+			Message: nodeReadyMessage,
+		},
 	}
+	v.nodeInfo.Status.Conditions = conditions
+	if data.Jvm.JavaMaxMetaspace != -1 {
+		v.nodeInfo.Status.Capacity[corev1.ResourceMemory] = common.ConvertByteNumToResourceQuantity(data.Jvm.JavaMaxMetaspace)
+	}
+	if data.Jvm.JavaCommittedMetaspace != -1 && data.Jvm.JavaMaxMetaspace != -1 {
+		v.nodeInfo.Status.Allocatable[corev1.ResourceMemory] = common.ConvertByteNumToResourceQuantity(data.Jvm.JavaMaxMetaspace - data.Jvm.JavaCommittedMetaspace)
+	}
+	v.Unlock()
+	v.notify(v.nodeInfo.DeepCopy())
+}
 
+func NewVirtualKubeletNode(config model.BuildVirtualNodeConfig) *VirtualKubeletNode {
 	return &VirtualKubeletNode{
-		nodeConfig: &vnode,
-		arkService: arkService,
-		port:       helper.MustReturnFirst[int](strconv.Atoi(arkServicePort)),
-		notify: func(node *corev1.Node) {
+		nodeConfig: &config,
+		notify: func(_ *corev1.Node) {
 			// default notify func
 			log.G(context.Background()).Info("node status callback not registered")
 		},
@@ -80,7 +88,7 @@ func NewVirtualKubeletNode(arkService ark.Service, arkServicePort string) *Virtu
 }
 
 func (v *VirtualKubeletNode) Register(_ context.Context, node *corev1.Node) error {
-	modelUtils.BuildVirtualNode(v.nodeConfig, v.arkService, node)
+	modelUtils.BuildVirtualNode(v.nodeConfig, node)
 	v.Lock()
 	v.nodeInfo = node.DeepCopy()
 	v.Unlock()
@@ -93,49 +101,4 @@ func (v *VirtualKubeletNode) Ping(ctx context.Context) error {
 
 func (v *VirtualKubeletNode) NotifyNodeStatus(_ context.Context, cb func(*corev1.Node)) {
 	v.notify = cb
-	// start a timed task, sync node status periodically
-	go common.TimedTaskWithInterval("sync node status", time.Second*3, v.checkCapacityAndNotify)
-}
-
-// check curr base process capacity
-func (v *VirtualKubeletNode) checkCapacityAndNotify(ctx context.Context) {
-	var err error
-	healthStatus, err := v.arkService.Health(ctx, ark.HealthRequest{
-		HostName: model.LoopBackIp,
-		Port:     v.port,
-	})
-	if healthStatus == nil {
-		err = errors.New("health status is nil")
-	}
-	v.Lock()
-	// node status
-	nodeReadyStatus := corev1.ConditionTrue
-	nodeReadyMessage := ""
-	v.nodeInfo.Status.Phase = corev1.NodeRunning
-	if err != nil {
-		v.nodeInfo.Status.Phase = corev1.NodePending
-		nodeReadyStatus = corev1.ConditionFalse
-		nodeReadyMessage = err.Error()
-	}
-	conditions := []corev1.NodeCondition{
-		{
-			Type:   corev1.NodeReady,
-			Status: nodeReadyStatus,
-			LastHeartbeatTime: metav1.Time{
-				Time: time.Now(),
-			},
-			Message: nodeReadyMessage,
-		},
-	}
-	v.nodeInfo.Status.Conditions = conditions
-	if healthStatus != nil {
-		if healthStatus.Data.HealthData.Jvm.JavaMaxMetaspace != -1 {
-			v.nodeInfo.Status.Capacity[corev1.ResourceMemory] = common.ConvertByteNumToResourceQuantity(healthStatus.Data.HealthData.Jvm.JavaMaxMetaspace)
-		}
-		if healthStatus.Data.HealthData.Jvm.JavaCommittedMetaspace != -1 && healthStatus.Data.HealthData.Jvm.JavaMaxMetaspace != -1 {
-			v.nodeInfo.Status.Allocatable[corev1.ResourceMemory] = common.ConvertByteNumToResourceQuantity(healthStatus.Data.HealthData.Jvm.JavaMaxMetaspace - healthStatus.Data.HealthData.Jvm.JavaCommittedMetaspace)
-		}
-	}
-	v.Unlock()
-	v.notify(v.nodeInfo.DeepCopy())
 }

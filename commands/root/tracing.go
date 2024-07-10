@@ -48,8 +48,6 @@ func setupTracing(ctx context.Context, c Opts) error {
 		c.TraceConfig.Tags = make(map[string]string, 3)
 	}
 	c.TraceConfig.Tags["operatingSystem"] = c.OperatingSystem
-	c.TraceConfig.Tags["provider"] = c.Provider
-	c.TraceConfig.Tags["nodeName"] = c.NodeName
 	for _, e := range c.TraceExporters {
 		if e == "zpages" {
 			setupZpages(ctx)

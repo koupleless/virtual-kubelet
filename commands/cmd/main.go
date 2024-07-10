@@ -33,7 +33,7 @@ import (
 )
 
 var (
-	buildVersion = "N/A"
+	buildVersion = "0.0.1"
 	k8sVersion   = "v1.15.2" // This should follow the version of k8s.io/kubernetes we are importing
 )
 

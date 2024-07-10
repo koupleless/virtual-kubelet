@@ -23,7 +23,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"strconv"
 	"time"
 )
 
@@ -74,7 +73,7 @@ func (c ModelUtils) GetBizModelsFromCoreV1Pod(pod *corev1.Pod) []*ark.BizModel {
 	return ret
 }
 
-func (c ModelUtils) TranslateArkBizInfoToV1ContainerStatus(bizModel *ark.BizModel, bizInfo *ark.ArkBizInfo, baseProcessRunning bool) *corev1.ContainerStatus {
+func (c ModelUtils) TranslateArkBizInfoToV1ContainerStatus(bizModel *ark.BizModel, bizInfo *ark.ArkBizInfo) *corev1.ContainerStatus {
 	started :=
 		bizInfo != nil && bizInfo.BizState == "ACTIVATED"
 
@@ -89,17 +88,9 @@ func (c ModelUtils) TranslateArkBizInfoToV1ContainerStatus(bizModel *ark.BizMode
 	}
 
 	if bizInfo == nil {
-		// not installing
-		if !baseProcessRunning {
-			ret.State.Waiting = &corev1.ContainerStateWaiting{
-				Reason:  "BaseDown",
-				Message: "Base process down, waiting for restart",
-			}
-		} else {
-			ret.State.Waiting = &corev1.ContainerStateWaiting{
-				Reason:  "BizPending",
-				Message: "Biz is waiting for installing",
-			}
+		ret.State.Waiting = &corev1.ContainerStateWaiting{
+			Reason:  "BizPending",
+			Message: "Biz is waiting for installing",
 		}
 		return ret
 	}
@@ -174,12 +165,13 @@ func (c ModelUtils) TranslateArkBizInfoToV1ContainerStatus(bizModel *ark.BizMode
 	return ret
 }
 
-func (c ModelUtils) BuildVirtualNode(config *model.BuildVirtualNodeConfig, arkService ark.Service, node *corev1.Node) {
+func (c ModelUtils) BuildVirtualNode(config *model.BuildVirtualNodeConfig, node *corev1.Node) {
 	if node.ObjectMeta.Labels == nil {
 		node.ObjectMeta.Labels = make(map[string]string)
 	}
 	node.Labels["base.koupleless.io/stack"] = config.TechStack
 	node.Labels["base.koupleless.io/version"] = config.Version
+	node.Labels["base.koupleless.io/name"] = config.BizName
 	node.Spec.Taints = []corev1.Taint{
 		{
 			Key:    "schedule.koupleless.io/virtual-node",
@@ -202,8 +194,10 @@ func (c ModelUtils) BuildVirtualNode(config *model.BuildVirtualNodeConfig, arkSe
 			},
 		},
 		Capacity: map[corev1.ResourceName]resource.Quantity{
-			corev1.ResourcePods: resource.MustParse(strconv.Itoa(config.VPodCapacity)),
+			corev1.ResourcePods: resource.MustParse("2000"),
 		},
-		Allocatable: map[corev1.ResourceName]resource.Quantity{},
+		Allocatable: map[corev1.ResourceName]resource.Quantity{
+			corev1.ResourcePods: resource.MustParse("2000"),
+		},
 	}
 }

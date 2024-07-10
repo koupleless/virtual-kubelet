@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
@@ -38,6 +39,20 @@ var _ = Describe("Module DaemonSet", func() {
 		selector = labels.NewSelector().Add(*requirement)
 	})
 
+	var mockBase *BaseMock
+	var mockScaleBase *BaseMock
+	nodeId := "test-base"
+	scaleNodeId := "test-base-scale"
+
+	It("mock base should start successfully", func() {
+		mockBase = NewBaseMock(nodeId, "base", "1.1.1", baseMqttClient)
+		go mockBase.Run()
+		Eventually(func() bool {
+			_, err := k8sClient.CoreV1().Nodes().Get(ctx, nodeId, metav1.GetOptions{})
+			return !errors.IsNotFound(err)
+		}, timeout, interval).Should(BeTrue())
+	})
+
 	Context("create daemonSet", func() {
 		It("should create successfully", func() {
 			createResult, err := k8sClient.AppsV1().DaemonSets(DefaultNamespace).Create(ctx, moduleDaemonSet, metav1.CreateOptions{})
@@ -65,16 +80,12 @@ var _ = Describe("Module DaemonSet", func() {
 
 	Context("base pod scale", func() {
 		It("should base pod scale successfully", func() {
-			currScale, err := k8sClient.AppsV1().Deployments(DefaultNamespace).GetScale(ctx, basePodDeployment.Name, metav1.GetOptions{})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(currScale).NotTo(BeNil())
-			Expect(currScale.Spec.Replicas).To(Equal(int32(1)))
-
-			// scale up to 3 replicas
-			currScale.Spec.Replicas += 2
-			scaleResult, err := k8sClient.AppsV1().Deployments(DefaultNamespace).UpdateScale(ctx, basePodDeployment.Name, currScale, metav1.UpdateOptions{})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(scaleResult).NotTo(BeNil())
+			mockScaleBase = NewBaseMock(scaleNodeId, "base", "1.1.1", baseMqttClient)
+			go mockScaleBase.Run()
+			Eventually(func() bool {
+				_, err := k8sClient.CoreV1().Nodes().Get(ctx, scaleNodeId, metav1.GetOptions{})
+				return !errors.IsNotFound(err)
+			}, timeout, interval).Should(BeTrue())
 		})
 
 		It("should all of the pod become running finally and the num of pods should be 2", func() {
@@ -88,7 +99,7 @@ var _ = Describe("Module DaemonSet", func() {
 				for _, pod := range podList.Items {
 					isAllReady = isAllReady && pod.Status.Phase == corev1.PodRunning
 				}
-				return isAllReady && len(podList.Items) == 3
+				return isAllReady && len(podList.Items) == 2
 			}, timeout, interval).Should(BeTrue())
 		})
 	})
@@ -139,23 +150,20 @@ var _ = Describe("Module DaemonSet", func() {
 					isAllReady = isAllReady && pod.Status.Phase == corev1.PodRunning
 				}
 				// only contains biz2 module
-				return isAllReady && len(podList.Items) == 3 && len(numOfPodContainerName) == 1 && numOfPodContainerName["biz2"] != 0
+				return isAllReady && len(podList.Items) == 2 && len(numOfPodContainerName) == 1 && numOfPodContainerName["biz2"] != 0
 			}, timeout, interval).Should(BeTrue())
 		})
 	})
 
-	Context("base pod deployment scale down", func() {
-		It("should base pod deployment scale to 1 successfully", func() {
-			currScale, err := k8sClient.AppsV1().Deployments(DefaultNamespace).GetScale(ctx, basePodDeployment.Name, metav1.GetOptions{})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(currScale).NotTo(BeNil())
-			Expect(currScale.Spec.Replicas).To(Equal(int32(3)))
-
-			// scale down to 3 replicas
-			currScale.Spec.Replicas = 1
-			scaleResult, err := k8sClient.AppsV1().Deployments(DefaultNamespace).UpdateScale(ctx, basePodDeployment.Name, currScale, metav1.UpdateOptions{})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(scaleResult).NotTo(BeNil())
+	Context("base pod scale down", func() {
+		It("should scale base pod exit successfully", func() {
+			if mockScaleBase != nil {
+				mockScaleBase.Exit()
+			}
+			Eventually(func() bool {
+				_, err := k8sClient.CoreV1().Nodes().Get(ctx, scaleNodeId, metav1.GetOptions{})
+				return errors.IsNotFound(err)
+			}, timeout, interval).Should(BeTrue())
 		})
 
 		It("should not create new pod", func() {
@@ -198,5 +206,15 @@ var _ = Describe("Module DaemonSet", func() {
 				return len(podList.Items) == 0
 			}, timeout, interval).Should(BeTrue())
 		})
+	})
+
+	It("mock base should exit", func() {
+		if mockBase != nil {
+			mockBase.Exit()
+		}
+		Eventually(func() bool {
+			_, err := k8sClient.CoreV1().Nodes().Get(ctx, nodeId, metav1.GetOptions{})
+			return errors.IsNotFound(err)
+		}, timeout, interval).Should(BeTrue())
 	})
 })

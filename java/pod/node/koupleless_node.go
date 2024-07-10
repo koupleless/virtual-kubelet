@@ -2,69 +2,107 @@ package node
 
 import (
 	"context"
-	base_pod "github.com/koupleless/virtual-kubelet/java/pod/base_pod_controller"
+	"github.com/koupleless/arkctl/v1/service/ark"
+	"github.com/koupleless/virtual-kubelet/common/mqtt"
+	"github.com/koupleless/virtual-kubelet/java/common"
+	"github.com/koupleless/virtual-kubelet/java/model"
+	podlet "github.com/koupleless/virtual-kubelet/java/pod/let"
 	"github.com/pkg/errors"
-	"github.com/virtual-kubelet/virtual-kubelet/log"
+	"github.com/virtual-kubelet/virtual-kubelet/node"
 	"github.com/virtual-kubelet/virtual-kubelet/node/nodeutil"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"os"
+	"k8s.io/utils/ptr"
+	"runtime"
 	"time"
 )
 
 type KouplelessNode struct {
-	// vkNode virtual kubelet node, including base node controller and pod controller
-	vkNode *nodeutil.Node
+	clientSet  *kubernetes.Clientset
+	mqttClient *mqtt.Client
+	nodeID     string
 
-	// bpc base pod controller
-	bpc *base_pod.BasePodController
+	vnode       *VirtualKubeletNode
+	podProvider *podlet.BaseProvider
+	node        *nodeutil.Node
 
-	done chan struct{}
+	done  chan struct{}
+	ready chan struct{}
+
+	BaseHealthInfoChan chan ark.HealthData
+	BaseBizInfoChan    chan []ark.ArkBizInfo
+	BaseBizExitChan    chan struct{}
 
 	err error
 }
 
-func (n *KouplelessNode) Run(ctx context.Context, podSyncWorkers int) (retErr error) {
+func (n *KouplelessNode) Run(ctx context.Context) {
 	// process vkNode run and bpc run, catching error
 	ctx, cancel := context.WithCancel(ctx)
 	defer func() {
 		cancel()
-
-		n.err = retErr
+		close(n.done)
 	}()
 
-	go n.bpc.Run(ctx, podSyncWorkers) //nolint:errcheck
+	go n.podProvider.Run(ctx)
+	go func() {
+		err := n.node.Run(ctx)
+		n.err = err
+		cancel()
+	}()
+
+	go n.listenAndSync(ctx)
+
+	go common.TimedTaskWithInterval(ctx, time.Second*9, func(ctx context.Context) {
+		n.mqttClient.Pub(common.FormatArkletCommandTopic(n.nodeID, model.CommandHealth), 0, "{}")
+	})
+
+	go common.TimedTaskWithInterval(ctx, time.Second*5, func(ctx context.Context) {
+		n.mqttClient.Pub(common.FormatArkletCommandTopic(n.nodeID, model.CommandQueryAllBiz), 0, "{}")
+	})
 
 	select {
 	case <-ctx.Done():
-		n.err = ctx.Err()
-		return n.err
-	case <-n.bpc.Ready():
-	case <-n.bpc.Done():
-		return n.bpc.Err()
-	}
-
-	log.G(ctx).Debug("base pod controller ready")
-
-	go n.runVNode(ctx)
-
-	select {
-	case <-ctx.Done():
-		cancel()
-		n.err = ctx.Err()
-		return n.err
-	case <-n.Done():
-		cancel()
-		return n.err
-	case <-n.bpc.Done():
-		cancel()
-		return n.bpc.Err()
+		// exit
+		n.err = errors.Wrap(ctx.Err(), "context canceled")
+	case <-n.BaseBizExitChan:
+		// base exit, process node delete and pod evict
+		err := n.clientSet.CoreV1().Nodes().Delete(ctx, n.vnode.nodeInfo.Name, metav1.DeleteOptions{})
+		if err != nil {
+			n.err = errors.Wrap(err, "error deleting base biz node")
+			return
+		}
+		pods, err := n.podProvider.GetPods(ctx)
+		if err != nil {
+			n.err = errors.Wrap(err, "error getting pods from provider")
+			return
+		}
+		for _, pod := range pods {
+			// base exit, process node delete and pod evict
+			err = n.clientSet.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{
+				GracePeriodSeconds: ptr.To[int64](0),
+			})
+			if err != nil {
+				n.err = errors.Wrap(err, "error deleting pod")
+				return
+			}
+		}
 	}
 }
 
-func (n *KouplelessNode) runVNode(ctx context.Context) {
-	err := n.vkNode.Run(ctx)
-	n.err = err
-	close(n.done)
+func (n *KouplelessNode) listenAndSync(ctx context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case healthData := <-n.BaseHealthInfoChan:
+			go n.vnode.Notify(healthData)
+		case bizInfos := <-n.BaseBizInfoChan:
+			go n.podProvider.SyncBizInfo(bizInfos)
+		}
+	}
 }
 
 // WaitReady waits for the specified timeout for the controller to be ready.
@@ -72,13 +110,7 @@ func (n *KouplelessNode) runVNode(ctx context.Context) {
 // The timeout is for convenience so the caller doesn't have to juggle an extra context.
 func (n *KouplelessNode) WaitReady(ctx context.Context, timeout time.Duration) error {
 	// complete pod health check
-	if n.bpc != nil {
-		err := n.bpc.WaitReady(ctx, timeout/2)
-		if err != nil {
-			return err
-		}
-	}
-	return n.vkNode.WaitReady(ctx, timeout/2)
+	return n.node.WaitReady(ctx, timeout)
 }
 
 // Done returns a channel that will be closed when the controller has exited.
@@ -86,31 +118,71 @@ func (n *KouplelessNode) Done() <-chan struct{} {
 	return n.done
 }
 
-// NewKouplelessNode creates a new vnode using the provided client and name.
-// This is intended for high-level/low boiler-plate usage.
-// Use the constructors in the `node` package for lower level configuration.
-//
-// Some basic values are set for node status, you'll almost certainly want to modify it.
-//
-// If client is nil, this will construct a client using ClientsetFromEnv
-// It is up to the caller to configure auth on the HTTP handler.
+// Err returns err which causes koupleless node exit
+func (n *KouplelessNode) Err() error {
+	return n.err
+}
 
-func NewKouplelessNode(vnode *nodeutil.Node, vNodeClientSet kubernetes.Interface, vNodeName string) (*KouplelessNode, error) {
-	// register vnode and base pod controller
-	var bpc *base_pod.BasePodController
-	basePodKubeConfigPath := os.Getenv("BASE_POD_KUBE_CONFIG_PATH")
-	bpc, err := base_pod.NewBasePodController(base_pod.BasePodControllerConfig{
-		VNodeName:             vNodeName,
-		VirtualClientSet:      vNodeClientSet,
-		BasePodKubeConfigPath: basePodKubeConfigPath,
-	})
+func NewKouplelessNode(config *model.BuildKouplelessNodeConfig) (*KouplelessNode, error) {
+	if config.ClientSet == nil {
+		return nil, errors.New("client set cannot be nil")
+	}
+
+	if config.MqttClient == nil {
+		return nil, errors.New("mqtt client cannot be nil")
+	}
+
+	if config.NodeID == "" {
+		return nil, errors.New("node name cannot be empty")
+	}
+
+	// Set up the pod podProvider.
+	var provider *podlet.BaseProvider
+	var nodeProvider *VirtualKubeletNode
+	cm, err := nodeutil.NewNode(
+		config.NodeID,
+		func(cfg nodeutil.ProviderConfig) (nodeutil.Provider, node.NodeProvider, error) {
+			nodeProvider = NewVirtualKubeletNode(model.BuildVirtualNodeConfig{
+				NodeIP:    config.NodeIP,
+				TechStack: config.TechStack,
+				Version:   config.BizVersion,
+				BizName:   config.BizName,
+			})
+			// initialize node spec on bootstrap
+			provider = podlet.NewBaseProvider(cfg.Node.Namespace, config.NodeIP, config.NodeID, config.MqttClient, config.ClientSet)
+
+			err := nodeProvider.Register(context.Background(), cfg.Node)
+			if err != nil {
+				return nil, nil, err
+			}
+			return provider, nodeProvider, nil
+		},
+		func(cfg *nodeutil.NodeConfig) error {
+			cfg.InformerResyncPeriod = time.Minute
+			cfg.NodeSpec.Status.NodeInfo.Architecture = runtime.GOARCH
+			cfg.NodeSpec.Status.NodeInfo.OperatingSystem = "linux"
+			cfg.DebugHTTP = true
+
+			cfg.NumWorkers = 4
+			return nil
+		},
+		nodeutil.WithClient(config.ClientSet),
+	)
 	if err != nil {
-		return nil, errors.Wrap(err, "error creating base pod controller")
+		return nil, err
 	}
 
 	return &KouplelessNode{
-		vkNode: vnode,
-		bpc:    bpc,
-		done:   make(chan struct{}),
+		clientSet:          config.ClientSet,
+		mqttClient:         config.MqttClient,
+		podProvider:        provider,
+		nodeID:             config.NodeID,
+		vnode:              nodeProvider,
+		node:               cm,
+		done:               make(chan struct{}),
+		ready:              make(chan struct{}),
+		BaseBizExitChan:    make(chan struct{}),
+		BaseBizInfoChan:    make(chan []ark.ArkBizInfo, 5),
+		BaseHealthInfoChan: make(chan ark.HealthData, 5),
 	}, nil
 }

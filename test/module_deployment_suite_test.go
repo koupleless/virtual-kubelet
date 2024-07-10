@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
@@ -21,22 +22,38 @@ var _ = Describe("Module Deployment", func() {
 	const interval = time.Second * 3
 
 	ctx := context.WithValue(context.Background(), "env", "module-deployment")
-	moduleDeploymentNonPeerYamlFilePath := path.Join("../samples", "module_deployment.yaml")
+	moduleDeploymentYamlFilePath := path.Join("../samples", "module_deployment.yaml")
 
 	var selector labels.Selector
 	var err error
-	moduleDeploymentNonPeer, err := getDeploymentFromYamlFile(moduleDeploymentNonPeerYamlFilePath)
+	moduleDeployment, err := getDeploymentFromYamlFile(moduleDeploymentYamlFilePath)
+
+	It("should init module deployment succussfully", func() {
+		Expect(err).NotTo(HaveOccurred())
+		Expect(moduleDeployment).NotTo(BeNil())
+	})
+
+	It("should init selector successfully", func() {
+		requirement, err := labels.NewRequirement("app", selection.Equals, []string{moduleDeployment.Name})
+		Expect(err).ToNot(HaveOccurred())
+		selector = labels.NewSelector().Add(*requirement)
+	})
+
+	var mockBase *BaseMock
+	nodeId := "test-base"
+
+	It("mock base should start successfully", func() {
+		mockBase = NewBaseMock(nodeId, "base", "1.1.1", baseMqttClient)
+		go mockBase.Run()
+		Eventually(func() bool {
+			_, err := k8sClient.CoreV1().Nodes().Get(ctx, nodeId, metav1.GetOptions{})
+			return !errors.IsNotFound(err)
+		}, timeout, interval).Should(BeTrue())
+	})
 
 	Context("create deployment", func() {
 		It("should create successfully", func() {
-			Expect(err).NotTo(HaveOccurred())
-			Expect(moduleDeploymentNonPeer).NotTo(BeNil())
-
-			requirement, err := labels.NewRequirement("app", selection.Equals, []string{moduleDeploymentNonPeer.Name})
-			Expect(err).ToNot(HaveOccurred())
-			selector = labels.NewSelector().Add(*requirement)
-
-			_, err = k8sClient.AppsV1().Deployments(DefaultNamespace).Create(ctx, moduleDeploymentNonPeer, metav1.CreateOptions{})
+			_, err = k8sClient.AppsV1().Deployments(DefaultNamespace).Create(ctx, moduleDeployment, metav1.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -51,7 +68,7 @@ var _ = Describe("Module Deployment", func() {
 				for _, pod := range podList.Items {
 					isAllReady = isAllReady && pod.Status.Phase == corev1.PodRunning
 				}
-				return isAllReady && len(podList.Items) == int(*moduleDeploymentNonPeer.Spec.Replicas)
+				return isAllReady && len(podList.Items) == int(*moduleDeployment.Spec.Replicas)
 			}, timeout, interval).Should(BeTrue())
 		})
 	})
@@ -59,13 +76,13 @@ var _ = Describe("Module Deployment", func() {
 	var currScale *autoscalingv1.Scale
 	Context("scale up deployment", func() {
 		It("should scale up successfully", func() {
-			currScale, err = k8sClient.AppsV1().Deployments(DefaultNamespace).GetScale(ctx, moduleDeploymentNonPeer.Name, metav1.GetOptions{})
+			currScale, err = k8sClient.AppsV1().Deployments(DefaultNamespace).GetScale(ctx, moduleDeployment.Name, metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(currScale).NotTo(BeNil())
 
 			// scale up 2 replicas
 			currScale.Spec.Replicas += 2
-			scaleResult, err := k8sClient.AppsV1().Deployments(DefaultNamespace).UpdateScale(ctx, moduleDeploymentNonPeer.Name, currScale, metav1.UpdateOptions{})
+			scaleResult, err := k8sClient.AppsV1().Deployments(DefaultNamespace).UpdateScale(ctx, moduleDeployment.Name, currScale, metav1.UpdateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(scaleResult).NotTo(BeNil())
 			currScale = scaleResult
@@ -90,7 +107,7 @@ var _ = Describe("Module Deployment", func() {
 	Context("update deployment module", func() {
 		It("should update successfully", func() {
 			// get current deployment info
-			moduleDeploymentNonPeer, err := k8sClient.AppsV1().Deployments(DefaultNamespace).Get(context.Background(), moduleDeploymentNonPeer.Name, metav1.GetOptions{})
+			moduleDeploymentNonPeer, err := k8sClient.AppsV1().Deployments(DefaultNamespace).Get(context.Background(), moduleDeployment.Name, metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(moduleDeploymentNonPeer).NotTo(BeNil())
 			// publish new template
@@ -104,7 +121,7 @@ var _ = Describe("Module Deployment", func() {
 		})
 
 		It("should have correct revisions", func() {
-			replicaSetRequirement, err := labels.NewRequirement("app", selection.Equals, []string{moduleDeploymentNonPeer.Name})
+			replicaSetRequirement, err := labels.NewRequirement("app", selection.Equals, []string{moduleDeployment.Name})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(replicaSetRequirement).NotTo(BeNil())
 			replicaSelector := labels.NewSelector().Add(*replicaSetRequirement)
@@ -155,13 +172,13 @@ var _ = Describe("Module Deployment", func() {
 
 	Context("scale down deployment", func() {
 		It("should scale down successfully", func() {
-			currScale, err = k8sClient.AppsV1().Deployments(DefaultNamespace).GetScale(ctx, moduleDeploymentNonPeer.Name, metav1.GetOptions{})
+			currScale, err = k8sClient.AppsV1().Deployments(DefaultNamespace).GetScale(ctx, moduleDeployment.Name, metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(currScale).NotTo(BeNil())
 
 			// scale up 2 replicas
 			currScale.Spec.Replicas -= 2
-			scaleResult, err := k8sClient.AppsV1().Deployments(DefaultNamespace).UpdateScale(ctx, moduleDeploymentNonPeer.Name, currScale, metav1.UpdateOptions{})
+			scaleResult, err := k8sClient.AppsV1().Deployments(DefaultNamespace).UpdateScale(ctx, moduleDeployment.Name, currScale, metav1.UpdateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(scaleResult).NotTo(BeNil())
 		})
@@ -181,7 +198,7 @@ var _ = Describe("Module Deployment", func() {
 
 	Context("delete deployment", func() {
 		It("should all of the pods be terminating status", func() {
-			Expect(k8sClient.AppsV1().Deployments(DefaultNamespace).Delete(ctx, moduleDeploymentNonPeer.Name, metav1.DeleteOptions{})).NotTo(HaveOccurred())
+			Expect(k8sClient.AppsV1().Deployments(DefaultNamespace).Delete(ctx, moduleDeployment.Name, metav1.DeleteOptions{})).NotTo(HaveOccurred())
 
 			Eventually(func() bool {
 				podList, err := k8sClient.CoreV1().Pods(DefaultNamespace).List(ctx, metav1.ListOptions{
@@ -207,5 +224,15 @@ var _ = Describe("Module Deployment", func() {
 				return len(podList.Items) == 0
 			}, timeout, interval).Should(BeTrue())
 		})
+	})
+
+	It("mock base should exit", func() {
+		if mockBase != nil {
+			mockBase.Exit()
+		}
+		Eventually(func() bool {
+			_, err := k8sClient.CoreV1().Nodes().Get(ctx, nodeId, metav1.GetOptions{})
+			return errors.IsNotFound(err)
+		}, timeout, interval).Should(BeTrue())
 	})
 })

@@ -12,7 +12,7 @@ var runtimeInfoStore *RuntimeInfoStore
 
 var defaultPod = &corev1.Pod{
 	ObjectMeta: metav1.ObjectMeta{
-		Namespace: "test-namespace",
+		Namespace: "test-Namespace",
 		Name:      "test-defaultPod",
 	},
 	Spec: corev1.PodSpec{
@@ -42,7 +42,7 @@ var defaultPod = &corev1.Pod{
 
 var defaultPod2 = &corev1.Pod{
 	ObjectMeta: metav1.ObjectMeta{
-		Namespace: "test-namespace-2",
+		Namespace: "test-Namespace-2",
 		Name:      "test-defaultPod-2",
 	},
 	Spec: corev1.PodSpec{

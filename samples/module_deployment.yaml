@@ -44,6 +44,10 @@ spec: # 资源规范字段
                     operator: In
                     values:
                       - 1.1.1  # 模块可能只能被调度到一些特殊版本的 node 上，如有这种限制，则必须有这个字段。
+                  - key: base.koupleless.io/name
+                    operator: In
+                    values:
+                      - base  # 模块可能只能被调度到一些特殊版本的 node 上，如有这种限制，则必须有这个字段。
       tolerations:
         - key: "schedule.koupleless.io/virtual-node"
           operator: "Equal"

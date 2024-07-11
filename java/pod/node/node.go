@@ -48,8 +48,8 @@ type VirtualKubeletNode struct {
 
 func (v *VirtualKubeletNode) Notify(data ark.HealthData) {
 	v.Lock()
+	defer v.Unlock()
 	if v.nodeInfo == nil {
-		v.Unlock()
 		return
 	}
 	// node status
@@ -73,7 +73,6 @@ func (v *VirtualKubeletNode) Notify(data ark.HealthData) {
 	if data.Jvm.JavaCommittedMetaspace != -1 && data.Jvm.JavaMaxMetaspace != -1 {
 		v.nodeInfo.Status.Allocatable[corev1.ResourceMemory] = common.ConvertByteNumToResourceQuantity(data.Jvm.JavaMaxMetaspace - data.Jvm.JavaCommittedMetaspace)
 	}
-	v.Unlock()
 	v.notify(v.nodeInfo.DeepCopy())
 }
 

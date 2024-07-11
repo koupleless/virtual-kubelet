@@ -60,7 +60,7 @@ func runRootCommand(ctx context.Context, c Opts) error {
 	}))
 
 	config := model.BuildBaseRegisterControllerConfig{
-		MqttConfig: mqtt.ClientConfig{
+		MqttConfig: &mqtt.ClientConfig{
 			Broker:        c.MqttBroker,
 			Port:          c.MqttPort,
 			ClientID:      fmt.Sprintf("module-controller@@@%s", clientID),
@@ -74,7 +74,7 @@ func runRootCommand(ctx context.Context, c Opts) error {
 		KubeConfigPath: c.KubeConfigPath,
 	}
 
-	registerController, err := controller.NewBaseRegisterController(config)
+	registerController, err := controller.NewBaseRegisterController(&config)
 	if err != nil {
 		return err
 	}
@@ -90,5 +90,5 @@ func runRootCommand(ctx context.Context, c Opts) error {
 	case <-registerController.Done():
 	}
 
-	return nil
+	return registerController.Err()
 }

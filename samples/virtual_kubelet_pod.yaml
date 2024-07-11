@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: virtual-kubelet
+  labels:
+    app: virtual-kubelet
+spec:
+  serviceAccountName: virtual-kubelet
+  containers:
+    - name: vk
+      image: serverless-registry.cn-shanghai.cr.aliyuncs.com/opensource/release/virtual-kubelet:0.0.1
+      imagePullPolicy: Always
+      resources:
+        limits:
+          cpu: "1000m"
+          memory: "200Mi"
+      env:
+        - name: MQTT_BROKER # 基座所在pod的name
+          value: broker.emqx.io
+        - name: MQTT_PORT # 基座所在pod的namespace
+          value: "1883"
+        - name: MQTT_USERNAME # 基座所在pod的ip
+          value: emqx
+        - name: MQTT_PASSWORD # 基座语言标签
+          value: public

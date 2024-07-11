@@ -17,6 +17,8 @@ import (
 )
 
 type BaseRegisterController struct {
+	config *model.BuildBaseRegisterControllerConfig
+
 	mqttClient *mqtt.Client
 	k8sClient  *kubernetes.Clientset
 
@@ -28,15 +30,7 @@ type BaseRegisterController struct {
 	localStore *RuntimeInfoStore
 }
 
-func NewBaseRegisterController(config model.BuildBaseRegisterControllerConfig) (*BaseRegisterController, error) {
-	mqttClient, err := mqtt.NewMqttClient(&config.MqttConfig)
-	if err != nil {
-		return nil, err
-	}
-	if mqttClient == nil {
-		return nil, errors.New("mqtt client is nil")
-	}
-
+func NewBaseRegisterController(config *model.BuildBaseRegisterControllerConfig) (*BaseRegisterController, error) {
 	k8sClient, err := nodeutil.ClientsetFromEnv(config.KubeConfigPath)
 	if err != nil {
 		return nil, err
@@ -46,7 +40,7 @@ func NewBaseRegisterController(config model.BuildBaseRegisterControllerConfig) (
 	}
 
 	return &BaseRegisterController{
-		mqttClient: mqttClient,
+		config:     config,
 		k8sClient:  k8sClient,
 		done:       make(chan struct{}),
 		ready:      make(chan struct{}),
@@ -55,13 +49,18 @@ func NewBaseRegisterController(config model.BuildBaseRegisterControllerConfig) (
 }
 
 func (brc *BaseRegisterController) Run(ctx context.Context) {
-	var err error
-	clientSet, err = nodeutil.ClientsetFromEnv("/Users/dongnan/.kube/config")
+	mqttClient, err := mqtt.NewMqttClient(brc.config.MqttConfig)
 	if err != nil {
 		brc.err = err
 		close(brc.done)
 		return
 	}
+	if mqttClient == nil {
+		brc.err = errors.New("mqtt client is nil")
+		close(brc.done)
+		return
+	}
+	brc.mqttClient = mqttClient
 
 	brc.mqttClient.Sub(BaseHeartBeatTopic, 1, brc.heartBeatMsgCallback)
 	brc.mqttClient.Sub(BaseHealthTopic, 1, brc.healthMsgCallback)
@@ -86,6 +85,10 @@ func (brc *BaseRegisterController) Done() chan struct{} {
 	return brc.done
 }
 
+func (brc *BaseRegisterController) Err() error {
+	return brc.err
+}
+
 func (brc *BaseRegisterController) startVirtualKubelet(deviceID string, initData HeartBeatData) {
 	// first apply for local lock
 	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), "deviceID", deviceID))
@@ -96,13 +99,13 @@ func (brc *BaseRegisterController) startVirtualKubelet(deviceID string, initData
 
 	// TODO apply for lock in future, to support sharding, after getting lock, create node
 	kn, err := node.NewKouplelessNode(&model.BuildKouplelessNodeConfig{
-		ClientSet:  clientSet,
-		MqttClient: brc.mqttClient,
-		NodeID:     deviceID,
-		NodeIP:     initData.NetworkInfo.LocalIP,
-		TechStack:  "java",
-		BizName:    initData.MasterBizInfo.BizName,
-		BizVersion: initData.MasterBizInfo.BizVersion,
+		KubeConfigPath: brc.config.KubeConfigPath,
+		MqttClient:     brc.mqttClient,
+		NodeID:         deviceID,
+		NodeIP:         initData.NetworkInfo.LocalIP,
+		TechStack:      "java",
+		BizName:        initData.MasterBizInfo.BizName,
+		BizVersion:     initData.MasterBizInfo.BizVersion,
 	})
 	if err != nil {
 		logrus.Errorf("Error creating Koleless node: %v", err)
@@ -121,7 +124,7 @@ func (brc *BaseRegisterController) startVirtualKubelet(deviceID string, initData
 	}()
 
 	go kn.Run(ctx)
-	if err = kn.WaitReady(ctx, time.Second*5); err != nil {
+	if err = kn.WaitReady(ctx, time.Minute); err != nil {
 		logrus.Errorf("Error waiting for Koleless node to become ready: %v", err)
 		return
 	}

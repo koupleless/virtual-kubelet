@@ -2,7 +2,6 @@ package controller
 
 import (
 	"github.com/koupleless/arkctl/v1/service/ark"
-	"k8s.io/client-go/kubernetes"
 )
 
 const (
@@ -10,8 +9,6 @@ const (
 	BaseHealthTopic    = "koupleless/+/base/health"
 	BaseBizTopic       = "koupleless/+/base/biz"
 )
-
-var clientSet *kubernetes.Clientset
 
 // HeartBeatData is the data of base heart beat.
 type HeartBeatData struct {

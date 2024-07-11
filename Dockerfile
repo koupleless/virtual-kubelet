@@ -31,4 +31,4 @@ COPY --from=builder /workspace/virtual_kubelet .
 
 EXPOSE 1239
 
-CMD ["./virtual_kubelet"]
+ENTRYPOINT ["./virtual_kubelet"]

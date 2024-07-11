@@ -16,7 +16,6 @@ package model
 
 import (
 	"github.com/koupleless/virtual-kubelet/common/mqtt"
-	"k8s.io/client-go/kubernetes"
 )
 
 const (
@@ -48,15 +47,15 @@ type BuildVirtualNodeConfig struct {
 
 type BuildBaseRegisterControllerConfig struct {
 	// MqttConfig is the config of mqtt client
-	MqttConfig mqtt.ClientConfig
+	MqttConfig *mqtt.ClientConfig
 
 	// KubeConfigPath is the path of k8s client
 	KubeConfigPath string
 }
 
 type BuildKouplelessNodeConfig struct {
-	// ClientSet is the k8s client set
-	ClientSet *kubernetes.Clientset
+	// KubeConfigPath is the path of kube config file
+	KubeConfigPath string
 
 	// MqttClient is the mqtt client, for sub and pub
 	MqttClient *mqtt.Client

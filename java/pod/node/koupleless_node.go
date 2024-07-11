@@ -8,6 +8,7 @@ import (
 	"github.com/koupleless/virtual-kubelet/java/model"
 	podlet "github.com/koupleless/virtual-kubelet/java/pod/let"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"github.com/virtual-kubelet/virtual-kubelet/node"
 	"github.com/virtual-kubelet/virtual-kubelet/node/nodeutil"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,16 +39,17 @@ type KouplelessNode struct {
 
 func (n *KouplelessNode) Run(ctx context.Context) {
 	// process vkNode run and bpc run, catching error
+	var err error
 	ctx, cancel := context.WithCancel(ctx)
 	defer func() {
 		cancel()
+		n.err = err
 		close(n.done)
 	}()
 
 	go n.podProvider.Run(ctx)
 	go func() {
-		err := n.node.Run(ctx)
-		n.err = err
+		err = n.node.Run(ctx)
 		cancel()
 	}()
 
@@ -64,17 +66,17 @@ func (n *KouplelessNode) Run(ctx context.Context) {
 	select {
 	case <-ctx.Done():
 		// exit
-		n.err = errors.Wrap(ctx.Err(), "context canceled")
+		err = errors.Wrap(ctx.Err(), "context canceled")
 	case <-n.BaseBizExitChan:
 		// base exit, process node delete and pod evict
-		err := n.clientSet.CoreV1().Nodes().Delete(ctx, n.vnode.nodeInfo.Name, metav1.DeleteOptions{})
+		err = n.clientSet.CoreV1().Nodes().Delete(ctx, n.vnode.nodeInfo.Name, metav1.DeleteOptions{})
 		if err != nil {
-			n.err = errors.Wrap(err, "error deleting base biz node")
+			err = errors.Wrap(err, "error deleting base biz node")
 			return
 		}
 		pods, err := n.podProvider.GetPods(ctx)
 		if err != nil {
-			n.err = errors.Wrap(err, "error getting pods from provider")
+			err = errors.Wrap(err, "error getting pods from provider")
 			return
 		}
 		for _, pod := range pods {
@@ -83,7 +85,7 @@ func (n *KouplelessNode) Run(ctx context.Context) {
 				GracePeriodSeconds: ptr.To[int64](0),
 			})
 			if err != nil {
-				n.err = errors.Wrap(err, "error deleting pod")
+				err = errors.Wrap(err, "error deleting pod")
 				return
 			}
 		}
@@ -124,8 +126,10 @@ func (n *KouplelessNode) Err() error {
 }
 
 func NewKouplelessNode(config *model.BuildKouplelessNodeConfig) (*KouplelessNode, error) {
-	if config.ClientSet == nil {
-		return nil, errors.New("client set cannot be nil")
+	clientSet, err := nodeutil.ClientsetFromEnv(config.KubeConfigPath)
+	if err != nil {
+		logrus.Errorf("Error creating client set: %v", err)
+		return nil, errors.Wrap(err, "error creating client set")
 	}
 
 	if config.MqttClient == nil {
@@ -149,7 +153,7 @@ func NewKouplelessNode(config *model.BuildKouplelessNodeConfig) (*KouplelessNode
 				BizName:   config.BizName,
 			})
 			// initialize node spec on bootstrap
-			provider = podlet.NewBaseProvider(cfg.Node.Namespace, config.NodeIP, config.NodeID, config.MqttClient, config.ClientSet)
+			provider = podlet.NewBaseProvider(cfg.Node.Namespace, config.NodeIP, config.NodeID, config.MqttClient, clientSet)
 
 			err := nodeProvider.Register(context.Background(), cfg.Node)
 			if err != nil {
@@ -166,14 +170,14 @@ func NewKouplelessNode(config *model.BuildKouplelessNodeConfig) (*KouplelessNode
 			cfg.NumWorkers = 4
 			return nil
 		},
-		nodeutil.WithClient(config.ClientSet),
+		nodeutil.WithClient(clientSet),
 	)
 	if err != nil {
 		return nil, err
 	}
 
 	return &KouplelessNode{
-		clientSet:          config.ClientSet,
+		clientSet:          clientSet,
 		mqttClient:         config.MqttClient,
 		podProvider:        provider,
 		nodeID:             config.NodeID,

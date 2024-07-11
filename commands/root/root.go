@@ -59,17 +59,20 @@ func runRootCommand(ctx context.Context, c Opts) error {
 		"clientID":        clientID,
 	}))
 
-	config := model.BuildBaseRegisterControllerConfig{MqttConfig: mqtt.ClientConfig{
-		Broker:        c.MqttBroker,
-		Port:          c.MqttPort,
-		ClientID:      fmt.Sprintf("module-controller@@@%s", clientID),
-		Username:      c.MqttUsername,
-		Password:      c.MqttPassword,
-		CAPath:        c.MqttCAPath,
-		ClientCrtPath: c.MqttClientCrtPath,
-		ClientKeyPath: c.MqttClientKeyPath,
-		CleanSession:  true,
-	}}
+	config := model.BuildBaseRegisterControllerConfig{
+		MqttConfig: mqtt.ClientConfig{
+			Broker:        c.MqttBroker,
+			Port:          c.MqttPort,
+			ClientID:      fmt.Sprintf("module-controller@@@%s", clientID),
+			Username:      c.MqttUsername,
+			Password:      c.MqttPassword,
+			CAPath:        c.MqttCAPath,
+			ClientCrtPath: c.MqttClientCrtPath,
+			ClientKeyPath: c.MqttClientKeyPath,
+			CleanSession:  true,
+		},
+		KubeConfigPath: c.KubeConfigPath,
+	}
 
 	registerController, err := controller.NewBaseRegisterController(config)
 	if err != nil {

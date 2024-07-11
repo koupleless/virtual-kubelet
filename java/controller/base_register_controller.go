@@ -12,11 +12,13 @@ import (
 	"github.com/koupleless/virtual-kubelet/java/pod/node"
 	"github.com/sirupsen/logrus"
 	"github.com/virtual-kubelet/virtual-kubelet/node/nodeutil"
+	"k8s.io/client-go/kubernetes"
 	"time"
 )
 
 type BaseRegisterController struct {
 	mqttClient *mqtt.Client
+	k8sClient  *kubernetes.Clientset
 
 	done  chan struct{}
 	ready chan struct{}
@@ -34,8 +36,18 @@ func NewBaseRegisterController(config model.BuildBaseRegisterControllerConfig) (
 	if mqttClient == nil {
 		return nil, errors.New("mqtt client is nil")
 	}
+
+	k8sClient, err := nodeutil.ClientsetFromEnv(config.KubeConfigPath)
+	if err != nil {
+		return nil, err
+	}
+	if k8sClient == nil {
+		return nil, errors.New("k8s client set is nil")
+	}
+
 	return &BaseRegisterController{
 		mqttClient: mqttClient,
+		k8sClient:  k8sClient,
 		done:       make(chan struct{}),
 		ready:      make(chan struct{}),
 		localStore: NewRuntimeInfoStore(),

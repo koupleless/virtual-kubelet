@@ -49,6 +49,9 @@ type BuildVirtualNodeConfig struct {
 type BuildBaseRegisterControllerConfig struct {
 	// MqttConfig is the config of mqtt client
 	MqttConfig mqtt.ClientConfig
+
+	// KubeConfigPath is the path of k8s client
+	KubeConfigPath string
 }
 
 type BuildKouplelessNodeConfig struct {

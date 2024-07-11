@@ -15,9 +15,7 @@
 package root
 
 import (
-	"github.com/mitchellh/go-homedir"
 	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 )
@@ -81,13 +79,7 @@ func SetDefaultOpts(c *Opts) error {
 	}
 
 	if c.KubeConfigPath == "" {
-		c.KubeConfigPath = os.Getenv("KUBECONFIG")
-		if c.KubeConfigPath == "" {
-			home, _ := homedir.Dir()
-			if home != "" {
-				c.KubeConfigPath = filepath.Join(home, ".kube", "config")
-			}
-		}
+		c.KubeConfigPath = os.Getenv("KUBE_CONFIG_PATH")
 	}
 
 	if c.MqttBroker == "" {

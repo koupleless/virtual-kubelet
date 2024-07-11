@@ -11,8 +11,6 @@ import (
 	"github.com/koupleless/virtual-kubelet/java/model"
 	"github.com/koupleless/virtual-kubelet/java/pod/node"
 	"github.com/sirupsen/logrus"
-	"github.com/virtual-kubelet/virtual-kubelet/node/nodeutil"
-	"k8s.io/client-go/kubernetes"
 	"time"
 )
 
@@ -20,10 +18,8 @@ type BaseRegisterController struct {
 	config *model.BuildBaseRegisterControllerConfig
 
 	mqttClient *mqtt.Client
-	k8sClient  *kubernetes.Clientset
-
-	done  chan struct{}
-	ready chan struct{}
+	done       chan struct{}
+	ready      chan struct{}
 
 	err error
 
@@ -31,17 +27,8 @@ type BaseRegisterController struct {
 }
 
 func NewBaseRegisterController(config *model.BuildBaseRegisterControllerConfig) (*BaseRegisterController, error) {
-	k8sClient, err := nodeutil.ClientsetFromEnv(config.KubeConfigPath)
-	if err != nil {
-		return nil, err
-	}
-	if k8sClient == nil {
-		return nil, errors.New("k8s client set is nil")
-	}
-
 	return &BaseRegisterController{
 		config:     config,
-		k8sClient:  k8sClient,
 		done:       make(chan struct{}),
 		ready:      make(chan struct{}),
 		localStore: NewRuntimeInfoStore(),
@@ -69,7 +56,7 @@ func (brc *BaseRegisterController) Run(ctx context.Context) {
 	go common.TimedTaskWithInterval(ctx, time.Second*2, brc.checkAndDeleteOfflineBase)
 }
 
-func (brc *BaseRegisterController) checkAndDeleteOfflineBase(ctx context.Context) {
+func (brc *BaseRegisterController) checkAndDeleteOfflineBase(_ context.Context) {
 	offlineDevices := brc.localStore.GetOfflineDevices(1000 * 10)
 	for _, deviceID := range offlineDevices {
 		kouplelessNode := brc.localStore.GetKouplelessNode(deviceID)
@@ -166,6 +153,7 @@ func (brc *BaseRegisterController) heartBeatMsgCallback(_ paho.Client, msg paho.
 }
 
 func (brc *BaseRegisterController) healthMsgCallback(_ paho.Client, msg paho.Message) {
+	defer msg.Ack()
 	deviceID := getDeviceIDFromTopic(msg.Topic())
 	if deviceID == "" {
 		return
@@ -192,6 +180,7 @@ func (brc *BaseRegisterController) healthMsgCallback(_ paho.Client, msg paho.Mes
 }
 
 func (brc *BaseRegisterController) bizMsgCallback(_ paho.Client, msg paho.Message) {
+	defer msg.Ack()
 	deviceID := getDeviceIDFromTopic(msg.Topic())
 	if deviceID == "" {
 		return

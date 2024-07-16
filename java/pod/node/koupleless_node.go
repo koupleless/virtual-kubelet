@@ -38,6 +38,12 @@ type KouplelessNode struct {
 func (n *KouplelessNode) Run(ctx context.Context) {
 	var err error
 
+	n.done = make(chan struct{})
+	n.ready = make(chan struct{})
+	n.BaseBizExitChan = make(chan struct{})
+	n.BaseHealthInfoChan = make(chan ark.HealthData, 5)
+	n.BaseBizInfoChan = make(chan []ark.ArkBizInfo, 5)
+
 	// process vkNode run and bpc run, catching error
 	ctx, cancel := context.WithCancel(ctx)
 	defer func() {
@@ -169,11 +175,6 @@ func NewKouplelessNode(config *model.BuildKouplelessNodeConfig) (*KouplelessNode
 	}
 
 	return &KouplelessNode{
-		config:             *config,
-		done:               make(chan struct{}),
-		ready:              make(chan struct{}),
-		BaseBizExitChan:    make(chan struct{}),
-		BaseBizInfoChan:    make(chan []ark.ArkBizInfo, 5),
-		BaseHealthInfoChan: make(chan ark.HealthData, 5),
+		config: *config,
 	}, nil
 }

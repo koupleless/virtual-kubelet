@@ -11,6 +11,7 @@ import (
 	"github.com/koupleless/virtual-kubelet/java/model"
 	"github.com/koupleless/virtual-kubelet/java/pod/node"
 	"github.com/sirupsen/logrus"
+	"github.com/virtual-kubelet/virtual-kubelet/log"
 	"time"
 )
 
@@ -36,6 +37,14 @@ func NewBaseRegisterController(config *model.BuildBaseRegisterControllerConfig) 
 }
 
 func (brc *BaseRegisterController) Run(ctx context.Context) {
+	brc.config.MqttConfig.OnConnectHandler = func(client paho.Client) {
+		log.G(ctx).Info("Connected")
+		reader := client.OptionsReader()
+		log.G(ctx).Info("Connect options: ", reader.ClientID(), reader.Username(), reader.Password())
+		client.Subscribe(BaseHeartBeatTopic, 1, brc.heartBeatMsgCallback)
+		client.Subscribe(BaseHealthTopic, 1, brc.healthMsgCallback)
+		client.Subscribe(BaseBizTopic, 1, brc.bizMsgCallback)
+	}
 	mqttClient, err := mqtt.NewMqttClient(brc.config.MqttConfig)
 	if err != nil {
 		brc.err = err
@@ -49,22 +58,18 @@ func (brc *BaseRegisterController) Run(ctx context.Context) {
 	}
 	brc.mqttClient = mqttClient
 
-	brc.mqttClient.Sub(BaseHeartBeatTopic, 1, brc.heartBeatMsgCallback)
-	brc.mqttClient.Sub(BaseHealthTopic, 1, brc.healthMsgCallback)
-	brc.mqttClient.Sub(BaseBizTopic, 1, brc.bizMsgCallback)
-
 	go common.TimedTaskWithInterval(ctx, time.Second*2, brc.checkAndDeleteOfflineBase)
 }
 
 func (brc *BaseRegisterController) checkAndDeleteOfflineBase(_ context.Context) {
-	offlineDevices := brc.localStore.GetOfflineDevices(1000 * 10)
-	for _, deviceID := range offlineDevices {
-		kouplelessNode := brc.localStore.GetKouplelessNode(deviceID)
+	offlineBase := brc.localStore.GetOfflineBases(1000 * 10)
+	for _, baseID := range offlineBase {
+		kouplelessNode := brc.localStore.GetKouplelessNode(baseID)
 		if kouplelessNode == nil {
 			continue
 		}
 		close(kouplelessNode.BaseBizExitChan)
-		brc.localStore.DeleteKouplelessNode(deviceID)
+		brc.localStore.DeleteKouplelessNode(baseID)
 	}
 }
 
@@ -76,9 +81,9 @@ func (brc *BaseRegisterController) Err() error {
 	return brc.err
 }
 
-func (brc *BaseRegisterController) startVirtualKubelet(deviceID string, initData HeartBeatData) {
+func (brc *BaseRegisterController) startVirtualKubelet(baseID string, initData HeartBeatData) {
 	// first apply for local lock
-	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), "deviceID", deviceID))
+	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), "baseID", baseID))
 	defer cancel()
 	if initData.NetworkInfo.LocalIP == "" {
 		initData.NetworkInfo.LocalIP = "127.0.0.1"
@@ -88,7 +93,7 @@ func (brc *BaseRegisterController) startVirtualKubelet(deviceID string, initData
 	kn, err := node.NewKouplelessNode(&model.BuildKouplelessNodeConfig{
 		KubeConfigPath: brc.config.KubeConfigPath,
 		MqttClient:     brc.mqttClient,
-		NodeID:         deviceID,
+		NodeID:         baseID,
 		NodeIP:         initData.NetworkInfo.LocalIP,
 		TechStack:      "java",
 		BizName:        initData.MasterBizInfo.BizName,
@@ -99,7 +104,7 @@ func (brc *BaseRegisterController) startVirtualKubelet(deviceID string, initData
 		return
 	}
 
-	err = brc.localStore.PutKouplelessNodeNX(deviceID, kn)
+	err = brc.localStore.PutKouplelessNodeNX(baseID, kn)
 	if err != nil {
 		// already exist, return
 		return
@@ -107,7 +112,7 @@ func (brc *BaseRegisterController) startVirtualKubelet(deviceID string, initData
 
 	defer func() {
 		// delete from local storage
-		brc.localStore.DeleteKouplelessNode(deviceID)
+		brc.localStore.DeleteKouplelessNode(baseID)
 	}()
 
 	go kn.Run(ctx)
@@ -115,47 +120,48 @@ func (brc *BaseRegisterController) startVirtualKubelet(deviceID string, initData
 		logrus.Errorf("Error waiting for Koleless node to become ready: %v", err)
 		return
 	}
-	logrus.Infof("koupleless node running: %s", deviceID)
+	logrus.Infof("koupleless node running: %s", baseID)
 
 	// record first msg arrived time
-	brc.localStore.DeviceMsgArrived(deviceID)
+	brc.localStore.BaseMsgArrived(baseID)
 
 	select {
 	case <-kn.Done():
-		logrus.Infof("koupleless node exit: %s", deviceID)
+		logrus.Infof("koupleless node exit: %s", baseID)
+	case <-ctx.Done():
 	}
 }
 
 func (brc *BaseRegisterController) heartBeatMsgCallback(_ paho.Client, msg paho.Message) {
 	defer msg.Ack()
-	deviceID := getDeviceIDFromTopic(msg.Topic())
-	if deviceID == "" {
+	baseID := getBaseIDFromTopic(msg.Topic())
+	if baseID == "" {
+		return
+	}
+	var heartBeatMsg ArkMqttMsg[HeartBeatData]
+	err := json.Unmarshal(msg.Payload(), &heartBeatMsg)
+	if err != nil {
+		logrus.Errorf("Error unmarshalling heart beat data: %v", err)
+		return
+	}
+	if expired(heartBeatMsg.PublishTimestamp, 1000*10) {
 		return
 	}
 	// check local storage
-	vNode := brc.localStore.GetKouplelessNode(deviceID)
+	vNode := brc.localStore.GetKouplelessNode(baseID)
 	if vNode == nil {
 		// not started
-		var heartBeatMsg ArkMqttMsg[HeartBeatData]
-		err := json.Unmarshal(msg.Payload(), &heartBeatMsg)
-		if err != nil {
-			logrus.Errorf("Error unmarshalling heart beat data: %v", err)
-			return
-		}
-		if expired(heartBeatMsg.PublishTimestamp, 1000*10) {
-			return
-		}
-		go brc.startVirtualKubelet(deviceID, heartBeatMsg.Data)
+		go brc.startVirtualKubelet(baseID, heartBeatMsg.Data)
 	} else {
-		// only started device set latest msg time
-		brc.localStore.DeviceMsgArrived(deviceID)
+		// only started base set latest msg time
+		brc.localStore.BaseMsgArrived(baseID)
 	}
 }
 
 func (brc *BaseRegisterController) healthMsgCallback(_ paho.Client, msg paho.Message) {
 	defer msg.Ack()
-	deviceID := getDeviceIDFromTopic(msg.Topic())
-	if deviceID == "" {
+	baseID := getBaseIDFromTopic(msg.Topic())
+	if baseID == "" {
 		return
 	}
 	var data ArkMqttMsg[ark.HealthResponse]
@@ -170,19 +176,22 @@ func (brc *BaseRegisterController) healthMsgCallback(_ paho.Client, msg paho.Mes
 	if data.Data.Code != "SUCCESS" {
 		return
 	}
-	kouplelessNode := brc.localStore.GetKouplelessNode(deviceID)
+	kouplelessNode := brc.localStore.GetKouplelessNode(baseID)
 	if kouplelessNode == nil {
 		return
 	}
-	brc.localStore.DeviceMsgArrived(deviceID)
+	brc.localStore.BaseMsgArrived(baseID)
 
-	kouplelessNode.BaseHealthInfoChan <- data.Data.Data.HealthData
+	select {
+	case kouplelessNode.BaseHealthInfoChan <- data.Data.Data.HealthData:
+	default:
+	}
 }
 
 func (brc *BaseRegisterController) bizMsgCallback(_ paho.Client, msg paho.Message) {
 	defer msg.Ack()
-	deviceID := getDeviceIDFromTopic(msg.Topic())
-	if deviceID == "" {
+	baseID := getBaseIDFromTopic(msg.Topic())
+	if baseID == "" {
 		return
 	}
 	var data ArkMqttMsg[ark.QueryAllArkBizResponse]
@@ -197,10 +206,13 @@ func (brc *BaseRegisterController) bizMsgCallback(_ paho.Client, msg paho.Messag
 	if data.Data.Code != "SUCCESS" {
 		return
 	}
-	kouplelessNode := brc.localStore.GetKouplelessNode(deviceID)
+	kouplelessNode := brc.localStore.GetKouplelessNode(baseID)
 	if kouplelessNode == nil {
 		return
 	}
-	brc.localStore.DeviceMsgArrived(deviceID)
-	kouplelessNode.BaseBizInfoChan <- data.Data.Data
+	brc.localStore.BaseMsgArrived(baseID)
+	select {
+	case kouplelessNode.BaseBizInfoChan <- data.Data.Data:
+	default:
+	}
 }

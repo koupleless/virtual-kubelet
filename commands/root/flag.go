@@ -71,6 +71,7 @@ func installFlags(flags *pflag.FlagSet, c *Opts) {
 	flags.IntVar(&c.MqttPort, "mqtt-port", c.MqttPort, "set mqtt port")
 	flags.StringVar(&c.MqttUsername, "mqtt-username", c.MqttUsername, "set mqtt username")
 	flags.StringVar(&c.MqttPassword, "mqtt-password", c.MqttPassword, "set mqtt password")
+	flags.StringVar(&c.MqttClientPrefix, "mqtt-client-prefix", c.MqttClientPrefix, "set mqtt client prefix")
 	flags.StringVar(&c.MqttCAPath, "mqtt-ca", c.MqttCAPath, "set mqtt ca path")
 	flags.StringVar(&c.MqttClientCrtPath, "mqtt-client-crt", c.MqttClientCrtPath, "set mqtt client crt path")
 	flags.StringVar(&c.MqttClientKeyPath, "mqtt-client-key", c.MqttClientKeyPath, "set mqtt client key path")

@@ -24,77 +24,77 @@ import (
 // RuntimeInfoStore provide the in memory runtime information.
 type RuntimeInfoStore struct {
 	sync.RWMutex
-	deviceIDToKouplelessNode map[string]*node.KouplelessNode
-	deviceLatestMsgTime      map[string]int64
+	baseIDToKouplelessNode map[string]*node.KouplelessNode
+	baseLatestMsgTime      map[string]int64
 }
 
 func NewRuntimeInfoStore() *RuntimeInfoStore {
 	return &RuntimeInfoStore{
-		RWMutex:                  sync.RWMutex{},
-		deviceIDToKouplelessNode: make(map[string]*node.KouplelessNode),
-		deviceLatestMsgTime:      make(map[string]int64),
+		RWMutex:                sync.RWMutex{},
+		baseIDToKouplelessNode: make(map[string]*node.KouplelessNode),
+		baseLatestMsgTime:      make(map[string]int64),
 	}
 }
 
-func (r *RuntimeInfoStore) PutKouplelessNode(deviceID string, k *node.KouplelessNode) {
+func (r *RuntimeInfoStore) PutKouplelessNode(baseID string, k *node.KouplelessNode) {
 	r.Lock()
 	defer r.Unlock()
 
-	r.deviceIDToKouplelessNode[deviceID] = k
+	r.baseIDToKouplelessNode[baseID] = k
 }
 
-func (r *RuntimeInfoStore) PutKouplelessNodeNX(deviceID string, k *node.KouplelessNode) error {
+func (r *RuntimeInfoStore) PutKouplelessNodeNX(baseID string, k *node.KouplelessNode) error {
 	r.Lock()
 	defer r.Unlock()
 
-	_, has := r.deviceIDToKouplelessNode[deviceID]
+	_, has := r.baseIDToKouplelessNode[baseID]
 	if has {
-		return fmt.Errorf("deviceID %s already exists", deviceID)
+		return fmt.Errorf("baseID %s already exists", baseID)
 	}
-	r.deviceIDToKouplelessNode[deviceID] = k
+	r.baseIDToKouplelessNode[baseID] = k
 	return nil
 }
 
-func (r *RuntimeInfoStore) DeleteKouplelessNode(deviceID string) {
+func (r *RuntimeInfoStore) DeleteKouplelessNode(baseID string) {
 	r.Lock()
 	defer r.Unlock()
 
-	delete(r.deviceIDToKouplelessNode, deviceID)
-	delete(r.deviceLatestMsgTime, deviceID)
+	delete(r.baseIDToKouplelessNode, baseID)
+	delete(r.baseLatestMsgTime, baseID)
 }
 
-func (r *RuntimeInfoStore) GetKouplelessNode(deviceID string) *node.KouplelessNode {
+func (r *RuntimeInfoStore) GetKouplelessNode(baseID string) *node.KouplelessNode {
 	r.RLock()
 	defer r.RUnlock()
-	return r.deviceIDToKouplelessNode[deviceID]
+	return r.baseIDToKouplelessNode[baseID]
 }
 
 func (r *RuntimeInfoStore) GetKouplelessNodes() []*node.KouplelessNode {
 	r.RLock()
 	defer r.RUnlock()
 	ret := make([]*node.KouplelessNode, 0)
-	for _, node := range r.deviceIDToKouplelessNode {
-		ret = append(ret, node)
+	for _, kn := range r.baseIDToKouplelessNode {
+		ret = append(ret, kn)
 	}
 	return ret
 }
 
-func (r *RuntimeInfoStore) DeviceMsgArrived(deviceID string) {
+func (r *RuntimeInfoStore) BaseMsgArrived(baseID string) {
 	r.Lock()
 	defer r.Unlock()
-	r.deviceLatestMsgTime[deviceID] = time.Now().UnixMilli()
+	r.baseLatestMsgTime[baseID] = time.Now().UnixMilli()
 }
 
-func (r *RuntimeInfoStore) GetOfflineDevices(maxUnreachableMilliSec int64) []string {
+func (r *RuntimeInfoStore) GetOfflineBases(maxUnreachableMilliSec int64) []string {
 	r.Lock()
 	defer r.Unlock()
-	offlineDeviceIDs := make([]string, 0)
+	offlineBaseIDs := make([]string, 0)
 	minMsgTime := time.Now().UnixMilli() - maxUnreachableMilliSec
-	for deviceID, latestMsgTime := range r.deviceLatestMsgTime {
+	for baseID, latestMsgTime := range r.baseLatestMsgTime {
 		if latestMsgTime >= minMsgTime {
 			continue
 		}
-		offlineDeviceIDs = append(offlineDeviceIDs, deviceID)
+		offlineBaseIDs = append(offlineBaseIDs, baseID)
 	}
-	return offlineDeviceIDs
+	return offlineBaseIDs
 }

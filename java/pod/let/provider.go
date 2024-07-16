@@ -45,7 +45,6 @@ type BaseProvider struct {
 	Namespace               string
 	nodeID                  string
 	localIP                 string
-	arkService              ark.Service
 	k8sClient               *kubernetes.Clientset
 	modelUtils              common.ModelUtils
 	runtimeInfoStore        *RuntimeInfoStore
@@ -147,11 +146,7 @@ func (b *BaseProvider) SyncBizInfo(bizInfos []ark.ArkBizInfo) {
 func (b *BaseProvider) queryAllBiz(_ context.Context) ([]ark.ArkBizInfo, error) {
 	b.bizInfosCache.Lock()
 	defer b.bizInfosCache.Unlock()
-	if b.bizInfosCache.LatestBizInfos != nil {
-		return b.bizInfosCache.LatestBizInfos, nil
-	} else {
-		return nil, errors.New("bizInfos cache is empty")
-	}
+	return b.bizInfosCache.LatestBizInfos, nil
 }
 
 func (b *BaseProvider) queryBiz(ctx context.Context, bizIdentity string) (*ark.ArkBizInfo, error) {

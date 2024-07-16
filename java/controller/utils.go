@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func getDeviceIDFromTopic(topic string) string {
+func getBaseIDFromTopic(topic string) string {
 	fileds := strings.Split(topic, "/")
 	if len(fileds) < 2 {
 		return ""

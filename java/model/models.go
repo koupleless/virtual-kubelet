@@ -60,10 +60,10 @@ type BuildKouplelessNodeConfig struct {
 	// MqttClient is the mqtt client, for sub and pub
 	MqttClient *mqtt.Client
 
-	// NodeID is the device id of base
+	// NodeID is the base id of base
 	NodeID string
 
-	// NodeIP is the device ip of base
+	// NodeIP is the base ip of base
 	NodeIP string
 
 	// TechStack is the base tech stack, default java

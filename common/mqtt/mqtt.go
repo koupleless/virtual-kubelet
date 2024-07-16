@@ -48,6 +48,8 @@ var defaultMessageHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqt
 
 var defaultOnConnectHandler mqtt.OnConnectHandler = func(client mqtt.Client) {
 	log.G(context.Background()).Info("Connected")
+	reader := client.OptionsReader()
+	log.G(context.Background()).Info("Connect options: ", reader.ClientID())
 }
 
 var defaultConnectionLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err error) {
@@ -85,6 +87,8 @@ func NewMqttClient(cfg *ClientConfig) (*Client, error) {
 	opts := mqtt.NewClientOptions()
 	broker := ""
 	opts.SetClientID(cfg.ClientID)
+	opts.SetUsername(cfg.Username)
+	opts.SetPassword(cfg.Password)
 	if cfg.CAPath != "" {
 		// tls configured
 		tlsConfig, err := newTlsConfig(cfg)
@@ -95,8 +99,6 @@ func NewMqttClient(cfg *ClientConfig) (*Client, error) {
 		broker = fmt.Sprintf("ssl://%s:%d", cfg.Broker, cfg.Port)
 	} else {
 		broker = fmt.Sprintf("tcp://%s:%d", cfg.Broker, cfg.Port)
-		opts.SetUsername(cfg.Username)
-		opts.SetPassword(cfg.Password)
 	}
 
 	opts.AddBroker(broker)

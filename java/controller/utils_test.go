@@ -6,18 +6,18 @@ import (
 	"time"
 )
 
-func TestGetDeviceID_InvalidLen(t *testing.T) {
-	id := getDeviceIDFromTopic("test")
+func TestGetBaseID_InvalidLen(t *testing.T) {
+	id := getBaseIDFromTopic("test")
 	assert.Assert(t, id == "")
 }
 
-func TestGetDeviceID_InvalidPrefix(t *testing.T) {
-	id := getDeviceIDFromTopic("test/test")
+func TestGetBaseID_InvalidPrefix(t *testing.T) {
+	id := getBaseIDFromTopic("test/test")
 	assert.Assert(t, id == "")
 }
 
-func TestGetDeviceID_Valid(t *testing.T) {
-	id := getDeviceIDFromTopic("koupleless/test")
+func TestGetBaseID_Valid(t *testing.T) {
+	id := getBaseIDFromTopic("koupleless/test")
 	assert.Assert(t, id == "test")
 }
 

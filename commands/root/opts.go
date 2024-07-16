@@ -52,6 +52,7 @@ type Opts struct {
 	MqttPort          int
 	MqttUsername      string
 	MqttPassword      string
+	MqttClientPrefix  string
 	MqttCAPath        string
 	MqttClientCrtPath string
 	MqttClientKeyPath string
@@ -100,6 +101,10 @@ func SetDefaultOpts(c *Opts) error {
 
 	if c.MqttPassword == "" {
 		c.MqttPassword = os.Getenv("MQTT_PASSWORD")
+	}
+
+	if c.MqttClientPrefix == "" {
+		c.MqttClientPrefix = os.Getenv("MQTT_CLIENT_PREFIX")
 	}
 
 	if c.MqttCAPath == "" {

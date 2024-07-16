@@ -15,14 +15,14 @@ func TestNewRuntimeInfoStore(t *testing.T) {
 func TestRuntimeInfoStore_PutKouplelessNode(t *testing.T) {
 	store := NewRuntimeInfoStore()
 	store.PutKouplelessNode("test", &node.KouplelessNode{})
-	assert.Assert(t, len(store.deviceIDToKouplelessNode) == 1)
+	assert.Assert(t, len(store.baseIDToKouplelessNode) == 1)
 }
 
 func TestRuntimeInfoStore_DeleteKouplelessNode(t *testing.T) {
 	store := NewRuntimeInfoStore()
 	store.PutKouplelessNode("test", &node.KouplelessNode{})
 	store.DeleteKouplelessNode("test")
-	assert.Assert(t, len(store.deviceIDToKouplelessNode) == 0)
+	assert.Assert(t, len(store.baseIDToKouplelessNode) == 0)
 }
 
 func TestRuntimeInfoStore_GetKouplelessNode(t *testing.T) {
@@ -35,10 +35,10 @@ func TestRuntimeInfoStore_GetKouplelessNode(t *testing.T) {
 	assert.Assert(t, kouplelessNode == nil)
 }
 
-func TestRuntimeInfoStore_DeviceMsgArrived(t *testing.T) {
+func TestRuntimeInfoStore_BaseMsgArrived(t *testing.T) {
 	store := NewRuntimeInfoStore()
-	store.DeviceMsgArrived("test")
-	assert.Assert(t, len(store.deviceLatestMsgTime) == 1)
+	store.BaseMsgArrived("test")
+	assert.Assert(t, len(store.baseLatestMsgTime) == 1)
 }
 
 func TestRuntimeInfoStore_GetKouplelessNodes(t *testing.T) {
@@ -49,12 +49,12 @@ func TestRuntimeInfoStore_GetKouplelessNodes(t *testing.T) {
 	assert.Assert(t, len(nodes) == 2)
 }
 
-func TestRuntimeInfoStore_GetOfflineDevices(t *testing.T) {
+func TestRuntimeInfoStore_GetOfflineBases(t *testing.T) {
 	store := NewRuntimeInfoStore()
-	store.DeviceMsgArrived("test")
+	store.BaseMsgArrived("test")
 	time.Sleep(time.Millisecond * 100)
-	devices := store.GetOfflineDevices(50)
-	assert.Assert(t, len(devices) == 1)
+	Bases := store.GetOfflineBases(50)
+	assert.Assert(t, len(Bases) == 1)
 }
 
 func TestRuntimeInfoStore_PutKouplelessNodeNX(t *testing.T) {

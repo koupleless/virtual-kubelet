@@ -63,7 +63,7 @@ func runRootCommand(ctx context.Context, c Opts) error {
 		MqttConfig: &mqtt.ClientConfig{
 			Broker:        c.MqttBroker,
 			Port:          c.MqttPort,
-			ClientID:      fmt.Sprintf("module-controller@@@%s", clientID),
+			ClientID:      fmt.Sprintf("%s@@@%s", c.MqttClientPrefix, clientID),
 			Username:      c.MqttUsername,
 			Password:      c.MqttPassword,
 			CAPath:        c.MqttCAPath,

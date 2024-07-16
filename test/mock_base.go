@@ -16,7 +16,7 @@ import (
 type BaseMock struct {
 	sync.Mutex
 
-	deviceID   string
+	baseID     string
 	mqttClient *mqtt.Client
 	bizInfos   []ark.ArkBizInfo
 	healthData ark.HealthData
@@ -24,10 +24,10 @@ type BaseMock struct {
 	exit chan struct{}
 }
 
-func NewBaseMock(deviceID, baseName, baseVersion string, mqttClient *mqtt.Client) *BaseMock {
+func NewBaseMock(baseID, baseName, baseVersion string, mqttClient *mqtt.Client) *BaseMock {
 	return &BaseMock{
 		Mutex:      sync.Mutex{},
-		deviceID:   deviceID,
+		baseID:     baseID,
 		mqttClient: mqttClient,
 		bizInfos:   []ark.ArkBizInfo{},
 		healthData: ark.HealthData{
@@ -57,7 +57,7 @@ func (bm *BaseMock) Exit() {
 }
 
 func (bm *BaseMock) Run() {
-	commandTopic := fmt.Sprintf("koupleless/%s/+", bm.deviceID)
+	commandTopic := fmt.Sprintf("koupleless/%s/+", bm.baseID)
 	bm.mqttClient.Sub(commandTopic, 1, bm.commandCallback)
 	defer bm.mqttClient.UnSub(commandTopic)
 	go func() {
@@ -68,7 +68,7 @@ func (bm *BaseMock) Run() {
 				return
 			case <-ticker.C:
 				masterInfoBytes, _ := json.Marshal(bm.healthData.MasterBizInfo)
-				bm.mqttClient.Pub(fmt.Sprintf("koupleless/%s/base/heart", bm.deviceID), 0, masterInfoBytes)
+				bm.mqttClient.Pub(fmt.Sprintf("koupleless/%s/base/heart", bm.baseID), 0, masterInfoBytes)
 			}
 		}
 	}()
@@ -90,7 +90,7 @@ func (bm *BaseMock) commandCallback(client paho.Client, msg paho.Message) {
 				Message: "",
 			},
 		})
-		bm.mqttClient.Pub(fmt.Sprintf("koupleless/%s/base/health", bm.deviceID), 0, healthBytes)
+		bm.mqttClient.Pub(fmt.Sprintf("koupleless/%s/base/health", bm.baseID), 0, healthBytes)
 	case model.CommandQueryAllBiz:
 		bizBytes, _ := json.Marshal(ark.QueryAllArkBizResponse{
 			GenericArkResponseBase: ark.GenericArkResponseBase[[]ark.ArkBizInfo]{
@@ -99,7 +99,7 @@ func (bm *BaseMock) commandCallback(client paho.Client, msg paho.Message) {
 				Message: "",
 			},
 		})
-		bm.mqttClient.Pub(fmt.Sprintf("koupleless/%s/base/biz", bm.deviceID), 0, bizBytes)
+		bm.mqttClient.Pub(fmt.Sprintf("koupleless/%s/base/biz", bm.baseID), 0, bizBytes)
 	case model.CommandInstallBiz:
 		var data ark.BizModel
 		json.Unmarshal(msg.Payload(), &data)
@@ -135,7 +135,7 @@ func (bm *BaseMock) commandCallback(client paho.Client, msg paho.Message) {
 				Data: bm.bizInfos,
 			},
 		})
-		bm.mqttClient.Pub(fmt.Sprintf("koupleless/%s/base/biz", bm.deviceID), 0, bizBytes)
+		bm.mqttClient.Pub(fmt.Sprintf("koupleless/%s/base/biz", bm.baseID), 0, bizBytes)
 	case model.CommandUnInstallBiz:
 		var data ark.BizModel
 		json.Unmarshal(msg.Payload(), &data)
@@ -158,6 +158,6 @@ func (bm *BaseMock) commandCallback(client paho.Client, msg paho.Message) {
 				Data: bm.bizInfos,
 			},
 		})
-		bm.mqttClient.Pub(fmt.Sprintf("koupleless/%s/base/biz", bm.deviceID), 0, bizBytes)
+		bm.mqttClient.Pub(fmt.Sprintf("koupleless/%s/base/biz", bm.baseID), 0, bizBytes)
 	}
 }

@@ -14,9 +14,10 @@ spec:
     spec:
       containers:
         - name: app
-          image: serverless-registry.cn-shanghai.cr.aliyuncs.com/opensource/test/base_mqtt:0.0.2
+          image: serverless-registry.cn-shanghai.cr.aliyuncs.com/opensource/test/base_mqtt:0.0.3
           ports:
             - containerPort: 8080
+            - containerPort: 1238
           resources:
             limits:
               cpu: "200m"

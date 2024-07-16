@@ -16,12 +16,6 @@ package main
 
 import (
 	"context"
-
-	"os"
-	"os/signal"
-	"strings"
-	"syscall"
-
 	"github.com/koupleless/virtual-kubelet/commands/root"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -30,6 +24,10 @@ import (
 	logruslogger "github.com/virtual-kubelet/virtual-kubelet/log/logrus"
 	"github.com/virtual-kubelet/virtual-kubelet/trace"
 	"github.com/virtual-kubelet/virtual-kubelet/trace/opencensus"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
 )
 
 var (

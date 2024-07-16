@@ -116,10 +116,6 @@ func (brc *BaseRegisterController) startVirtualKubelet(baseID string, initData H
 	}()
 
 	go kn.Run(ctx)
-	if err = kn.WaitReady(ctx, time.Minute); err != nil {
-		logrus.Errorf("Error waiting for Koleless node to become ready: %v", err)
-		return
-	}
 	logrus.Infof("koupleless node running: %s", baseID)
 
 	// record first msg arrived time
@@ -138,24 +134,19 @@ func (brc *BaseRegisterController) heartBeatMsgCallback(_ paho.Client, msg paho.
 	if baseID == "" {
 		return
 	}
-	var heartBeatMsg ArkMqttMsg[HeartBeatData]
-	err := json.Unmarshal(msg.Payload(), &heartBeatMsg)
+	var data ArkMqttMsg[HeartBeatData]
+	err := json.Unmarshal(msg.Payload(), &data)
 	if err != nil {
 		logrus.Errorf("Error unmarshalling heart beat data: %v", err)
 		return
 	}
-	if expired(heartBeatMsg.PublishTimestamp, 1000*10) {
-		return
-	}
-	// check local storage
-	vNode := brc.localStore.GetKouplelessNode(baseID)
-	if vNode == nil {
+	go func() {
+		if expired(data.PublishTimestamp, 1000*10) {
+			return
+		}
 		// not started
-		go brc.startVirtualKubelet(baseID, heartBeatMsg.Data)
-	} else {
-		// only started base set latest msg time
-		brc.localStore.BaseMsgArrived(baseID)
-	}
+		brc.startVirtualKubelet(baseID, data.Data)
+	}()
 }
 
 func (brc *BaseRegisterController) healthMsgCallback(_ paho.Client, msg paho.Message) {
@@ -170,22 +161,25 @@ func (brc *BaseRegisterController) healthMsgCallback(_ paho.Client, msg paho.Mes
 		logrus.Errorf("Error unmarshalling health response: %v", err)
 		return
 	}
-	if expired(data.PublishTimestamp, 1000*10) {
-		return
-	}
-	if data.Data.Code != "SUCCESS" {
-		return
-	}
-	kouplelessNode := brc.localStore.GetKouplelessNode(baseID)
-	if kouplelessNode == nil {
-		return
-	}
-	brc.localStore.BaseMsgArrived(baseID)
 
-	select {
-	case kouplelessNode.BaseHealthInfoChan <- data.Data.Data.HealthData:
-	default:
-	}
+	go func() {
+		if expired(data.PublishTimestamp, 1000*10) {
+			return
+		}
+		if data.Data.Code != "SUCCESS" {
+			return
+		}
+		kouplelessNode := brc.localStore.GetKouplelessNode(baseID)
+		if kouplelessNode == nil {
+			return
+		}
+		brc.localStore.BaseMsgArrived(baseID)
+
+		select {
+		case kouplelessNode.BaseHealthInfoChan <- data.Data.Data.HealthData:
+		default:
+		}
+	}()
 }
 
 func (brc *BaseRegisterController) bizMsgCallback(_ paho.Client, msg paho.Message) {
@@ -200,19 +194,22 @@ func (brc *BaseRegisterController) bizMsgCallback(_ paho.Client, msg paho.Messag
 		logrus.Errorf("Error unmarshalling biz response: %v", err)
 		return
 	}
-	if expired(data.PublishTimestamp, 1000*10) {
-		return
-	}
-	if data.Data.Code != "SUCCESS" {
-		return
-	}
-	kouplelessNode := brc.localStore.GetKouplelessNode(baseID)
-	if kouplelessNode == nil {
-		return
-	}
-	brc.localStore.BaseMsgArrived(baseID)
-	select {
-	case kouplelessNode.BaseBizInfoChan <- data.Data.Data:
-	default:
-	}
+
+	go func() {
+		if expired(data.PublishTimestamp, 1000*10) {
+			return
+		}
+		if data.Data.Code != "SUCCESS" {
+			return
+		}
+		kouplelessNode := brc.localStore.GetKouplelessNode(baseID)
+		if kouplelessNode == nil {
+			return
+		}
+		brc.localStore.BaseMsgArrived(baseID)
+		select {
+		case kouplelessNode.BaseBizInfoChan <- data.Data.Data:
+		default:
+		}
+	}()
 }

@@ -1,12 +1,11 @@
 package mqtt
 
 import (
-	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/virtual-kubelet/virtual-kubelet/log"
+	"github.com/sirupsen/logrus"
 	"os"
 	"time"
 )
@@ -43,17 +42,17 @@ type ClientConfig struct {
 }
 
 var defaultMessageHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
-	log.G(context.Background()).Infof("Received message: %s from topic: %s\n", msg.Payload(), msg.Topic())
+	logrus.Infof("Received message: %s from topic: %s\n", msg.Payload(), msg.Topic())
 }
 
 var defaultOnConnectHandler mqtt.OnConnectHandler = func(client mqtt.Client) {
-	log.G(context.Background()).Info("Connected")
+	logrus.Info("Connected")
 	reader := client.OptionsReader()
-	log.G(context.Background()).Info("Connect options: ", reader.ClientID())
+	logrus.Info("Connect options: ", reader.ClientID())
 }
 
 var defaultConnectionLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err error) {
-	log.G(context.Background()).Warnf("Connect lost: %v\n", err)
+	logrus.Warnf("Connect lost: %v\n", err)
 }
 
 // newTlsConfig create a tls config using client config
@@ -116,7 +115,7 @@ func NewMqttClient(cfg *ClientConfig) (*Client, error) {
 	}
 
 	if cfg.KeepAlive == 0 {
-		cfg.KeepAlive = time.Minute
+		cfg.KeepAlive = time.Minute * 3
 	}
 
 	opts.SetDefaultPublishHandler(cfg.DefaultMessageHandler)
@@ -156,5 +155,6 @@ func (c *Client) Sub(topic string, qos byte, callBack mqtt.MessageHandler) bool 
 
 // UnSub unsubscribe a topic
 func (c *Client) UnSub(topic string) bool {
+	logrus.Info("unSub topic: ", topic)
 	return c.client.Unsubscribe(topic).Wait()
 }

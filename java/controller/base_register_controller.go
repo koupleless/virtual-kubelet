@@ -40,10 +40,10 @@ func (brc *BaseRegisterController) Run(ctx context.Context) {
 	brc.config.MqttConfig.OnConnectHandler = func(client paho.Client) {
 		log.G(ctx).Info("Connected")
 		reader := client.OptionsReader()
-		log.G(ctx).Info("Connect options: ", reader.ClientID(), reader.Username(), reader.Password())
-		client.Subscribe(BaseHeartBeatTopic, 1, brc.heartBeatMsgCallback)
-		client.Subscribe(BaseHealthTopic, 1, brc.healthMsgCallback)
-		client.Subscribe(BaseBizTopic, 1, brc.bizMsgCallback)
+		log.G(ctx).Info("Connect options: ", reader.ClientID())
+		client.Subscribe(BaseHeartBeatTopic, mqtt.Qos1, brc.heartBeatMsgCallback)
+		client.Subscribe(BaseHealthTopic, mqtt.Qos1, brc.healthMsgCallback)
+		client.Subscribe(BaseBizTopic, mqtt.Qos1, brc.bizMsgCallback)
 	}
 	mqttClient, err := mqtt.NewMqttClient(brc.config.MqttConfig)
 	if err != nil {
@@ -90,6 +90,16 @@ func (brc *BaseRegisterController) startVirtualKubelet(baseID string, initData H
 	}
 
 	// TODO apply for lock in future, to support sharding, after getting lock, create node
+	err := brc.localStore.PutBaseIDNX(baseID)
+	if err != nil {
+		// already exist, return
+		return
+	}
+	defer func() {
+		// delete from local storage
+		brc.localStore.DeleteKouplelessNode(baseID)
+	}()
+
 	kn, err := node.NewKouplelessNode(&model.BuildKouplelessNodeConfig{
 		KubeConfigPath: brc.config.KubeConfigPath,
 		MqttClient:     brc.mqttClient,
@@ -104,18 +114,14 @@ func (brc *BaseRegisterController) startVirtualKubelet(baseID string, initData H
 		return
 	}
 
-	err = brc.localStore.PutKouplelessNodeNX(baseID, kn)
-	if err != nil {
-		// already exist, return
+	brc.localStore.PutKouplelessNode(baseID, kn)
+
+	go kn.Run(ctx)
+
+	if err = kn.WaitReady(ctx, time.Minute); err != nil {
 		return
 	}
 
-	defer func() {
-		// delete from local storage
-		brc.localStore.DeleteKouplelessNode(baseID)
-	}()
-
-	go kn.Run(ctx)
 	logrus.Infof("koupleless node running: %s", baseID)
 
 	// record first msg arrived time
@@ -125,11 +131,14 @@ func (brc *BaseRegisterController) startVirtualKubelet(baseID string, initData H
 	case <-kn.Done():
 		logrus.Infof("koupleless node exit: %s", baseID)
 	case <-ctx.Done():
+		logrus.Infof("context done: %s, context err: %s", baseID, ctx.Err())
 	}
 }
 
 func (brc *BaseRegisterController) heartBeatMsgCallback(_ paho.Client, msg paho.Message) {
-	defer msg.Ack()
+	if msg.Qos() > 0 {
+		defer msg.Ack()
+	}
 	baseID := getBaseIDFromTopic(msg.Topic())
 	if baseID == "" {
 		return
@@ -150,7 +159,9 @@ func (brc *BaseRegisterController) heartBeatMsgCallback(_ paho.Client, msg paho.
 }
 
 func (brc *BaseRegisterController) healthMsgCallback(_ paho.Client, msg paho.Message) {
-	defer msg.Ack()
+	if msg.Qos() > 0 {
+		defer msg.Ack()
+	}
 	baseID := getBaseIDFromTopic(msg.Topic())
 	if baseID == "" {
 		return
@@ -183,7 +194,9 @@ func (brc *BaseRegisterController) healthMsgCallback(_ paho.Client, msg paho.Mes
 }
 
 func (brc *BaseRegisterController) bizMsgCallback(_ paho.Client, msg paho.Message) {
-	defer msg.Ack()
+	if msg.Qos() > 0 {
+		defer msg.Ack()
+	}
 	baseID := getBaseIDFromTopic(msg.Topic())
 	if baseID == "" {
 		return

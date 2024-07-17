@@ -167,13 +167,13 @@ func (b *BaseProvider) queryBiz(ctx context.Context, bizIdentity string) (*ark.A
 
 func (b *BaseProvider) installBizMqtt(_ context.Context, bizModel *ark.BizModel) error {
 	installBizRequestBytes, _ := json.Marshal(bizModel)
-	b.mqttClient.Pub(common.FormatArkletCommandTopic(b.nodeID, model.CommandInstallBiz), 1, installBizRequestBytes)
+	b.mqttClient.Pub(common.FormatArkletCommandTopic(b.nodeID, model.CommandInstallBiz), mqtt.Qos1, installBizRequestBytes)
 	return nil
 }
 
 func (b *BaseProvider) unInstallBizMqtt(_ context.Context, bizModel *ark.BizModel) error {
 	unInstallBizRequestBytes, _ := json.Marshal(bizModel)
-	b.mqttClient.Pub(common.FormatArkletCommandTopic(b.nodeID, model.CommandUnInstallBiz), 1, unInstallBizRequestBytes)
+	b.mqttClient.Pub(common.FormatArkletCommandTopic(b.nodeID, model.CommandUnInstallBiz), mqtt.Qos1, unInstallBizRequestBytes)
 	return nil
 }
 
@@ -437,26 +437,26 @@ func (b *BaseProvider) GetPods(_ context.Context) ([]*corev1.Pod, error) {
 	return b.runtimeInfoStore.GetPods(), nil
 }
 
-func (b *BaseProvider) GetContainerLogs(ctx context.Context, namespace, podName, containerName string, opts api.ContainerLogOpts) (io.ReadCloser, error) {
+func (b *BaseProvider) GetContainerLogs(_ context.Context, _, _, _ string, _ api.ContainerLogOpts) (io.ReadCloser, error) {
 	return nil, nil
 }
 
-func (b *BaseProvider) RunInContainer(ctx context.Context, namespace, podName, containerName string, cmd []string, attach api.AttachIO) error {
+func (b *BaseProvider) RunInContainer(_ context.Context, _, _, _ string, _ []string, _ api.AttachIO) error {
 	panic("koupleless java virtual base does not support run")
 }
 
-func (b *BaseProvider) AttachToContainer(ctx context.Context, namespace, podName, containerName string, attach api.AttachIO) error {
+func (b *BaseProvider) AttachToContainer(_ context.Context, _, _, _ string, _ api.AttachIO) error {
 	panic("koupleless java virtual base does not support attach")
 }
 
-func (b *BaseProvider) GetStatsSummary(ctx context.Context) (*statsv1alpha1.Summary, error) {
+func (b *BaseProvider) GetStatsSummary(_ context.Context) (*statsv1alpha1.Summary, error) {
 	return nil, nil
 }
 
-func (b *BaseProvider) GetMetricsResource(ctx context.Context) ([]*io_prometheus_client.MetricFamily, error) {
+func (b *BaseProvider) GetMetricsResource(_ context.Context) ([]*io_prometheus_client.MetricFamily, error) {
 	return make([]*io_prometheus_client.MetricFamily, 0), nil
 }
 
-func (b *BaseProvider) PortForward(ctx context.Context, namespace, pod string, port int32, stream io.ReadWriteCloser) error {
+func (b *BaseProvider) PortForward(_ context.Context, _, _ string, _ int32, _ io.ReadWriteCloser) error {
 	panic("koupleless java virtual base does not support port forward")
 }

@@ -25,12 +25,6 @@ const (
 	CommandUnInstallBiz = "uninstallBiz"
 )
 
-type contextKey string
-
-const (
-	TimedTaskNameKey contextKey = "TimedTaskName"
-)
-
 type BuildVirtualNodeConfig struct {
 	// NodeIP is the ip of the node
 	NodeIP string `json:"nodeIP"`

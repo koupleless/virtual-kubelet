@@ -72,7 +72,7 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).NotTo(HaveOccurred())
 	// start mc
-	registerController, err := controller.NewBaseRegisterController(model.BuildBaseRegisterControllerConfig{MqttConfig: mqtt.ClientConfig{
+	registerController, err := controller.NewBaseRegisterController(&model.BuildBaseRegisterControllerConfig{MqttConfig: &mqtt.ClientConfig{
 		Broker:    "broker.emqx.io",
 		Port:      1883,
 		ClientID:  "mc-server-mqtt-client",

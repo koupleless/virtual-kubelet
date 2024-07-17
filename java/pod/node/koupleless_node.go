@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"github.com/koupleless/arkctl/v1/service/ark"
+	"github.com/koupleless/virtual-kubelet/common/mqtt"
 	"github.com/koupleless/virtual-kubelet/java/common"
 	"github.com/koupleless/virtual-kubelet/java/model"
 	podlet "github.com/koupleless/virtual-kubelet/java/pod/let"
@@ -25,9 +26,7 @@ type KouplelessNode struct {
 	podProvider *podlet.BaseProvider
 	node        *nodeutil.Node
 
-	done  chan struct{}
-	ready chan struct{}
-
+	done               chan struct{}
 	BaseHealthInfoChan chan ark.HealthData
 	BaseBizInfoChan    chan []ark.ArkBizInfo
 	BaseBizExitChan    chan struct{}
@@ -38,12 +37,6 @@ type KouplelessNode struct {
 func (n *KouplelessNode) Run(ctx context.Context) {
 	var err error
 
-	n.done = make(chan struct{})
-	n.ready = make(chan struct{})
-	n.BaseBizExitChan = make(chan struct{})
-	n.BaseHealthInfoChan = make(chan ark.HealthData, 5)
-	n.BaseBizInfoChan = make(chan []ark.ArkBizInfo, 5)
-
 	// process vkNode run and bpc run, catching error
 	ctx, cancel := context.WithCancel(ctx)
 	defer func() {
@@ -51,44 +44,6 @@ func (n *KouplelessNode) Run(ctx context.Context) {
 		n.err = err
 		close(n.done)
 	}()
-
-	n.clientSet, err = nodeutil.ClientsetFromEnv(n.config.KubeConfigPath)
-	if err != nil {
-		return
-	}
-
-	n.node, err = nodeutil.NewNode(
-		n.config.NodeID,
-		func(cfg nodeutil.ProviderConfig) (nodeutil.Provider, node.NodeProvider, error) {
-			n.vnode = NewVirtualKubeletNode(model.BuildVirtualNodeConfig{
-				NodeIP:    n.config.NodeIP,
-				TechStack: n.config.TechStack,
-				Version:   n.config.BizVersion,
-				BizName:   n.config.BizName,
-			})
-			// initialize node spec on bootstrap
-			n.podProvider = podlet.NewBaseProvider(cfg.Node.Namespace, n.config.NodeIP, n.config.NodeID, n.config.MqttClient, n.clientSet)
-
-			err = n.vnode.Register(context.Background(), cfg.Node)
-			if err != nil {
-				return nil, nil, err
-			}
-			return n.podProvider, n.vnode, nil
-		},
-		func(cfg *nodeutil.NodeConfig) error {
-			cfg.InformerResyncPeriod = time.Minute
-			cfg.NodeSpec.Status.NodeInfo.Architecture = runtime.GOARCH
-			cfg.NodeSpec.Status.NodeInfo.OperatingSystem = "linux"
-			cfg.DebugHTTP = true
-
-			cfg.NumWorkers = 4
-			return nil
-		},
-		nodeutil.WithClient(n.clientSet),
-	)
-	if err != nil {
-		return
-	}
 
 	go n.podProvider.Run(ctx)
 	go func() {
@@ -99,18 +54,12 @@ func (n *KouplelessNode) Run(ctx context.Context) {
 	go n.listenAndSync(ctx)
 
 	go common.TimedTaskWithInterval(ctx, time.Second*9, func(ctx context.Context) {
-		n.config.MqttClient.Pub(common.FormatArkletCommandTopic(n.config.NodeID, model.CommandHealth), 1, "{}")
+		n.config.MqttClient.Pub(common.FormatArkletCommandTopic(n.config.NodeID, model.CommandHealth), mqtt.Qos0, "{}")
 	})
 
 	go common.TimedTaskWithInterval(ctx, time.Second*5, func(ctx context.Context) {
-		n.config.MqttClient.Pub(common.FormatArkletCommandTopic(n.config.NodeID, model.CommandQueryAllBiz), 1, "{}")
+		n.config.MqttClient.Pub(common.FormatArkletCommandTopic(n.config.NodeID, model.CommandQueryAllBiz), mqtt.Qos0, "{}")
 	})
-
-	// wait ready
-	if err = n.node.WaitReady(ctx, time.Minute); err != nil {
-		return
-	}
-
 	select {
 	case <-ctx.Done():
 		// exit
@@ -138,6 +87,10 @@ func (n *KouplelessNode) Run(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func (n *KouplelessNode) WaitReady(ctx context.Context, timeout time.Duration) error {
+	return n.node.WaitReady(ctx, timeout)
 }
 
 func (n *KouplelessNode) listenAndSync(ctx context.Context) {
@@ -174,7 +127,55 @@ func NewKouplelessNode(config *model.BuildKouplelessNodeConfig) (*KouplelessNode
 		return nil, errors.New("node name cannot be empty")
 	}
 
+	clientSet, err := nodeutil.ClientsetFromEnv(config.KubeConfigPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var vnode *VirtualKubeletNode
+	var podProvider *podlet.BaseProvider
+	cm, err := nodeutil.NewNode(
+		VIRTUAL_NODE_NAME_PREFIX+config.NodeID,
+		func(cfg nodeutil.ProviderConfig) (nodeutil.Provider, node.NodeProvider, error) {
+			vnode = NewVirtualKubeletNode(model.BuildVirtualNodeConfig{
+				NodeIP:    config.NodeIP,
+				TechStack: config.TechStack,
+				Version:   config.BizVersion,
+				BizName:   config.BizName,
+			})
+			// initialize node spec on bootstrap
+			podProvider = podlet.NewBaseProvider(cfg.Node.Namespace, config.NodeIP, config.NodeID, config.MqttClient, clientSet)
+
+			err = vnode.Register(context.Background(), cfg.Node)
+			if err != nil {
+				return nil, nil, err
+			}
+			return podProvider, vnode, nil
+		},
+		func(cfg *nodeutil.NodeConfig) error {
+			cfg.InformerResyncPeriod = time.Minute
+			cfg.NodeSpec.Status.NodeInfo.Architecture = runtime.GOARCH
+			cfg.NodeSpec.Status.NodeInfo.OperatingSystem = "linux"
+			cfg.DebugHTTP = true
+
+			cfg.NumWorkers = 1
+			return nil
+		},
+		nodeutil.WithClient(clientSet),
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	return &KouplelessNode{
-		config: *config,
+		config:             *config,
+		clientSet:          clientSet,
+		vnode:              vnode,
+		podProvider:        podProvider,
+		node:               cm,
+		done:               make(chan struct{}),
+		BaseBizInfoChan:    make(chan []ark.ArkBizInfo),
+		BaseHealthInfoChan: make(chan ark.HealthData),
+		BaseBizExitChan:    make(chan struct{}),
 	}, nil
 }

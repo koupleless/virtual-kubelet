@@ -15,8 +15,8 @@
 package controller
 
 import (
-	"fmt"
 	"github.com/koupleless/virtual-kubelet/java/pod/node"
+	"github.com/pkg/errors"
 	"sync"
 	"time"
 )
@@ -25,6 +25,7 @@ import (
 type RuntimeInfoStore struct {
 	sync.RWMutex
 	baseIDToKouplelessNode map[string]*node.KouplelessNode
+	baseIDLock             map[string]bool
 	baseLatestMsgTime      map[string]int64
 }
 
@@ -33,6 +34,7 @@ func NewRuntimeInfoStore() *RuntimeInfoStore {
 		RWMutex:                sync.RWMutex{},
 		baseIDToKouplelessNode: make(map[string]*node.KouplelessNode),
 		baseLatestMsgTime:      make(map[string]int64),
+		baseIDLock:             make(map[string]bool),
 	}
 }
 
@@ -43,15 +45,14 @@ func (r *RuntimeInfoStore) PutKouplelessNode(baseID string, k *node.KouplelessNo
 	r.baseIDToKouplelessNode[baseID] = k
 }
 
-func (r *RuntimeInfoStore) PutKouplelessNodeNX(baseID string, k *node.KouplelessNode) error {
+func (r *RuntimeInfoStore) PutBaseIDNX(baseID string) error {
 	r.Lock()
 	defer r.Unlock()
 
-	_, has := r.baseIDToKouplelessNode[baseID]
-	if has {
-		return fmt.Errorf("baseID %s already exists", baseID)
+	if r.baseIDLock[baseID] {
+		return errors.Errorf("baseID %s already exists", baseID)
 	}
-	r.baseIDToKouplelessNode[baseID] = k
+	r.baseIDLock[baseID] = true
 	return nil
 }
 
@@ -61,6 +62,7 @@ func (r *RuntimeInfoStore) DeleteKouplelessNode(baseID string) {
 
 	delete(r.baseIDToKouplelessNode, baseID)
 	delete(r.baseLatestMsgTime, baseID)
+	delete(r.baseIDLock, baseID)
 }
 
 func (r *RuntimeInfoStore) GetKouplelessNode(baseID string) *node.KouplelessNode {

@@ -3,6 +3,7 @@ kind: Pod
 metadata:
   name: test-biz-combine-koupleless
   labels:
+    module-controller.koupleless.io/component: module # 必要，声明pod的类型，用于module controller管理
     module.koupleless.io/module0: 0.1.0
     module.koupleless.io/module1: 0.1.0
 spec:

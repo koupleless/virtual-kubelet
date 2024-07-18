@@ -59,7 +59,8 @@ func TestRuntimeInfoStore_GetOfflineBases(t *testing.T) {
 
 func TestRuntimeInfoStore_PutKouplelessNodeNX(t *testing.T) {
 	store := NewRuntimeInfoStore()
-	store.PutKouplelessNode("test", &node.KouplelessNode{})
-	err := store.PutKouplelessNodeNX("test", &node.KouplelessNode{})
+	err := store.PutBaseIDNX("test")
+	assert.Assert(t, err == nil)
+	err = store.PutBaseIDNX("test")
 	assert.Assert(t, err != nil)
 }

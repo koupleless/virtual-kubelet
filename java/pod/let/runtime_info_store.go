@@ -119,6 +119,7 @@ func (r *RuntimeInfoStore) GetRelatedBizModels(podKey string) []*ark.BizModel {
 func (r *RuntimeInfoStore) GetPods() []*corev1.Pod {
 	r.RLock()
 	defer r.RUnlock()
+
 	ret := make([]*corev1.Pod, 0, len(r.podKeyToPod))
 	for _, pod := range r.podKeyToPod {
 		ret = append(ret, pod)

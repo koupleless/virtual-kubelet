@@ -21,9 +21,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/koupleless/virtual-kubelet/common/log"
+	"github.com/koupleless/virtual-kubelet/common/trace"
 	pkgerrors "github.com/pkg/errors"
-	"github.com/virtual-kubelet/virtual-kubelet/log"
-	"github.com/virtual-kubelet/virtual-kubelet/trace"
 	"golang.org/x/sync/semaphore"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/workqueue"
@@ -511,7 +511,7 @@ func (q *Queue) String() string {
 }
 
 // DefaultRetryFunc is the default function used for retries by the queue subsystem.
-func DefaultRetryFunc(ctx context.Context, key string, timesTried int, originallyAdded time.Time, err error) (*time.Duration, error) {
+func DefaultRetryFunc(_ context.Context, _ string, timesTried int, _ time.Time, err error) (*time.Duration, error) {
 	if timesTried < MaxRetries {
 		return nil, nil
 	}

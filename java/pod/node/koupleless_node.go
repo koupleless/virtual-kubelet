@@ -7,9 +7,10 @@ import (
 	"github.com/koupleless/virtual-kubelet/java/common"
 	"github.com/koupleless/virtual-kubelet/java/model"
 	podlet "github.com/koupleless/virtual-kubelet/java/pod/let"
+	"github.com/koupleless/virtual-kubelet/node"
+	"github.com/koupleless/virtual-kubelet/node/nodeutil"
 	"github.com/pkg/errors"
-	"github.com/virtual-kubelet/virtual-kubelet/node"
-	"github.com/virtual-kubelet/virtual-kubelet/node/nodeutil"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/utils/ptr"
@@ -118,7 +119,31 @@ func (n *KouplelessNode) Err() error {
 	return n.err
 }
 
-func NewKouplelessNode(config *model.BuildKouplelessNodeConfig) (*KouplelessNode, error) {
+func (n *KouplelessNode) PodStore(key string, pod *corev1.Pod) {
+	n.node.PodController().StorePod(key, pod)
+}
+
+func (n *KouplelessNode) LoadPodFromController(key string) (any, bool) {
+	return n.node.PodController().LoadPod(key)
+}
+
+func (n *KouplelessNode) CheckAndUpdatePod(ctx context.Context, key string, obj interface{}, pod *corev1.Pod) {
+	n.node.PodController().CheckAndUpdatePod(ctx, key, obj, pod)
+}
+
+func (n *KouplelessNode) SyncPodsFromKubernetesEnqueue(ctx context.Context, key string) {
+	n.node.PodController().SyncPodsFromKubernetesEnqueue(ctx, key)
+}
+
+func (n *KouplelessNode) DeletePodsFromKubernetesForget(ctx context.Context, key string) {
+	n.node.PodController().DeletePodsFromKubernetesForget(ctx, key)
+}
+
+func (n *KouplelessNode) DeletePod(key string) {
+	n.node.PodController().DeletePod(key)
+}
+
+func NewKouplelessNode(config *model.BuildKouplelessNodeConfig) (kn *KouplelessNode, err error) {
 	if config.MqttClient == nil {
 		return nil, errors.New("mqtt client cannot be nil")
 	}
@@ -126,12 +151,6 @@ func NewKouplelessNode(config *model.BuildKouplelessNodeConfig) (*KouplelessNode
 	if config.NodeID == "" {
 		return nil, errors.New("node name cannot be empty")
 	}
-
-	clientSet, err := nodeutil.ClientsetFromEnv(config.KubeConfigPath)
-	if err != nil {
-		return nil, err
-	}
-
 	var vnode *VirtualKubeletNode
 	var podProvider *podlet.BaseProvider
 	cm, err := nodeutil.NewNode(
@@ -144,7 +163,7 @@ func NewKouplelessNode(config *model.BuildKouplelessNodeConfig) (*KouplelessNode
 				BizName:   config.BizName,
 			})
 			// initialize node spec on bootstrap
-			podProvider = podlet.NewBaseProvider(cfg.Node.Namespace, config.NodeIP, config.NodeID, config.MqttClient, clientSet)
+			podProvider = podlet.NewBaseProvider(cfg.Node.Namespace, config.NodeIP, config.NodeID, config.MqttClient, config.KubeClient)
 
 			err = vnode.Register(context.Background(), cfg.Node)
 			if err != nil {
@@ -153,15 +172,14 @@ func NewKouplelessNode(config *model.BuildKouplelessNodeConfig) (*KouplelessNode
 			return podProvider, vnode, nil
 		},
 		func(cfg *nodeutil.NodeConfig) error {
-			cfg.InformerResyncPeriod = time.Minute
 			cfg.NodeSpec.Status.NodeInfo.Architecture = runtime.GOARCH
 			cfg.NodeSpec.Status.NodeInfo.OperatingSystem = "linux"
-			cfg.DebugHTTP = true
 
 			cfg.NumWorkers = 1
 			return nil
 		},
-		nodeutil.WithClient(clientSet),
+		nodeutil.WithClient(config.KubeClient),
+		nodeutil.WithPodLister(config.PodLister),
 	)
 	if err != nil {
 		return nil, err
@@ -169,7 +187,7 @@ func NewKouplelessNode(config *model.BuildKouplelessNodeConfig) (*KouplelessNode
 
 	return &KouplelessNode{
 		config:             *config,
-		clientSet:          clientSet,
+		clientSet:          config.KubeClient,
 		vnode:              vnode,
 		podProvider:        podProvider,
 		node:               cm,

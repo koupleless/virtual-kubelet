@@ -20,26 +20,25 @@ import (
 	"errors"
 	"github.com/koupleless/virtual-kubelet/common/mqtt"
 	"github.com/koupleless/virtual-kubelet/java/model"
-	"io"
+	"github.com/koupleless/virtual-kubelet/node"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/utils/ptr"
+	"sort"
 	"sync"
 	"time"
 
 	"github.com/koupleless/arkctl/v1/service/ark"
+	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/common/queue"
 	"github.com/koupleless/virtual-kubelet/java/common"
-	"github.com/prometheus/client_model/go"
-	"github.com/virtual-kubelet/virtual-kubelet/log"
-	"github.com/virtual-kubelet/virtual-kubelet/node/api"
-	"github.com/virtual-kubelet/virtual-kubelet/node/api/statsv1alpha1"
-	"github.com/virtual-kubelet/virtual-kubelet/node/nodeutil"
+	"github.com/koupleless/virtual-kubelet/node/nodeutil"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/util/workqueue"
 )
 
 var _ nodeutil.Provider = &BaseProvider{}
+var _ node.PodNotifier = &BaseProvider{}
 
 type BaseProvider struct {
 	Namespace               string
@@ -54,6 +53,12 @@ type BaseProvider struct {
 	mqttClient    *mqtt.Client
 	bizInfosCache bizInfosCache
 	port          int
+
+	notify func(pod *corev1.Pod)
+}
+
+func (b *BaseProvider) NotifyPods(_ context.Context, cb func(*corev1.Pod)) {
+	b.notify = cb
 }
 
 type bizInfosCache struct {
@@ -100,6 +105,7 @@ func (b *BaseProvider) Run(ctx context.Context) {
 	go b.installOperationQueue.Run(ctx, 1)
 	go b.uninstallOperationQueue.Run(ctx, 1)
 	go common.TimedTaskWithInterval(ctx, time.Second*5, b.checkAndUninstallDanglingBiz)
+	go common.TimedTaskWithInterval(ctx, time.Minute, b.syncAllPodStatus)
 }
 
 // checkAndUninstallDanglingBiz mainly process a pod being deleted before biz activated, in resolved status, biz can't uninstall
@@ -137,10 +143,46 @@ func (b *BaseProvider) checkAndUninstallDanglingBiz(ctx context.Context) {
 	}
 }
 
+func (b *BaseProvider) syncAllPodStatus(ctx context.Context) {
+	logger := log.G(ctx)
+	pods := b.runtimeInfoStore.GetPods()
+	// sort by create time
+	sort.Slice(pods, func(i, j int) bool {
+		return pods[i].CreationTimestamp.UnixMilli() > pods[j].CreationTimestamp.UnixMilli()
+	})
+	for _, pod := range pods {
+		if shouldSkipPodStatusUpdate(pod) {
+			continue
+		}
+		if err := b.updatePodStatus(ctx, pod); err != nil {
+			logger.WithError(err).Error("update pod status error")
+		}
+	}
+}
+
+func (b *BaseProvider) updatePodStatus(ctx context.Context, pod *corev1.Pod) error {
+	podStatus, err := b.GetPodStatus(ctx, pod.Namespace, pod.Name)
+	if err != nil {
+		return err
+	}
+
+	podInfo := pod.DeepCopy()
+	podStatus.DeepCopyInto(&podInfo.Status)
+	b.notify(podInfo)
+	return nil
+}
+
+func shouldSkipPodStatusUpdate(pod *corev1.Pod) bool {
+	return pod.Status.Phase == corev1.PodSucceeded ||
+		pod.Status.Phase == corev1.PodFailed || pod.DeletionTimestamp != nil
+}
+
 func (b *BaseProvider) SyncBizInfo(bizInfos []ark.ArkBizInfo) {
 	b.bizInfosCache.Lock()
-	defer b.bizInfosCache.Unlock()
 	b.bizInfosCache.LatestBizInfos = bizInfos
+	b.bizInfosCache.Unlock()
+
+	b.syncAllPodStatus(context.Background())
 }
 
 func (b *BaseProvider) queryAllBiz(_ context.Context) ([]ark.ArkBizInfo, error) {
@@ -205,8 +247,6 @@ func (b *BaseProvider) handleInstallOperation(ctx context.Context, bizIdentity s
 	}
 
 	if bizInfo != nil && bizInfo.BizState != "DEACTIVATED" {
-		// todo: support retry accordingly
-		//       we should check the related defaultPod failed strategy and retry accordingly
 		logger.Error("BizInstalledButNotActivated")
 		return errors.New("BizInstalledButNotActivated")
 	}
@@ -432,31 +472,6 @@ func (b *BaseProvider) GetPodStatus(ctx context.Context, namespace, name string)
 	return podStatus, nil
 }
 
-// funcs below support call from users, should not support in module management
 func (b *BaseProvider) GetPods(_ context.Context) ([]*corev1.Pod, error) {
 	return b.runtimeInfoStore.GetPods(), nil
-}
-
-func (b *BaseProvider) GetContainerLogs(_ context.Context, _, _, _ string, _ api.ContainerLogOpts) (io.ReadCloser, error) {
-	return nil, nil
-}
-
-func (b *BaseProvider) RunInContainer(_ context.Context, _, _, _ string, _ []string, _ api.AttachIO) error {
-	panic("koupleless java virtual base does not support run")
-}
-
-func (b *BaseProvider) AttachToContainer(_ context.Context, _, _, _ string, _ api.AttachIO) error {
-	panic("koupleless java virtual base does not support attach")
-}
-
-func (b *BaseProvider) GetStatsSummary(_ context.Context) (*statsv1alpha1.Summary, error) {
-	return nil, nil
-}
-
-func (b *BaseProvider) GetMetricsResource(_ context.Context) ([]*io_prometheus_client.MetricFamily, error) {
-	return make([]*io_prometheus_client.MetricFamily, 0), nil
-}
-
-func (b *BaseProvider) PortForward(_ context.Context, _, _ string, _ int32, _ io.ReadWriteCloser) error {
-	panic("koupleless java virtual base does not support port forward")
 }

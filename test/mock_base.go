@@ -24,6 +24,21 @@ type BaseMock struct {
 	exit chan struct{}
 }
 
+// ArkMqttMsg is the response of mqtt message payload.
+type ArkMqttMsg[T any] struct {
+	PublishTimestamp int64 `json:"publishTimestamp"`
+	Data             T     `json:"data"`
+}
+
+// HeartBeatData is the data of base heart beat.
+type HeartBeatData struct {
+	MasterBizInfo ark.MasterBizInfo `json:"masterBizInfo"`
+	NetworkInfo   struct {
+		LocalIP       string `json:"localIP"`
+		LocalHostName string `json:"localHostName"`
+	} `json:"networkInfo"`
+}
+
 func NewBaseMock(baseID, baseName, baseVersion string, mqttClient *mqtt.Client) *BaseMock {
 	return &BaseMock{
 		Mutex:      sync.Mutex{},
@@ -67,21 +82,46 @@ func (bm *BaseMock) Run() {
 			case <-bm.exit:
 				return
 			case <-ticker.C:
-				masterInfoBytes, _ := json.Marshal(bm.healthData.MasterBizInfo)
-				bm.mqttClient.Pub(fmt.Sprintf("koupleless/%s/base/heart", bm.baseID), 0, masterInfoBytes)
+				mqttResponse := ArkMqttMsg[HeartBeatData]{
+					PublishTimestamp: time.Now().UnixMilli(),
+					Data: HeartBeatData{
+						MasterBizInfo: bm.healthData.MasterBizInfo,
+						NetworkInfo: struct {
+							LocalIP       string `json:"localIP"`
+							LocalHostName string `json:"localHostName"`
+						}{LocalIP: "127.0.0.1", LocalHostName: "test_base"},
+					},
+				}
+				heartInfoBytes, _ := json.Marshal(mqttResponse)
+
+				bm.mqttClient.Pub(fmt.Sprintf("koupleless/%s/base/heart", bm.baseID), 0, heartInfoBytes)
 			}
 		}
 	}()
 	<-bm.exit
+	bm.healthData.MasterBizInfo.BizState = "DEACTIVATED"
+	mqttResponse := ArkMqttMsg[HeartBeatData]{
+		PublishTimestamp: time.Now().UnixMilli(),
+		Data: HeartBeatData{
+			MasterBizInfo: bm.healthData.MasterBizInfo,
+			NetworkInfo: struct {
+				LocalIP       string `json:"localIP"`
+				LocalHostName string `json:"localHostName"`
+			}{LocalIP: "127.0.0.1", LocalHostName: "test_base"},
+		},
+	}
+	heartInfoBytes, _ := json.Marshal(mqttResponse)
+
+	bm.mqttClient.Pub(fmt.Sprintf("koupleless/%s/base/heart", bm.baseID), 0, heartInfoBytes)
 }
 
-func (bm *BaseMock) commandCallback(client paho.Client, msg paho.Message) {
+func (bm *BaseMock) commandCallback(_ paho.Client, msg paho.Message) {
 	topic := msg.Topic()
 	logrus.Info("reach message from: ", topic)
 	fields := strings.Split(topic, "/")
 	switch fields[len(fields)-1] {
 	case model.CommandHealth:
-		healthBytes, _ := json.Marshal(ark.HealthResponse{
+		response := ark.HealthResponse{
 			GenericArkResponseBase: ark.GenericArkResponseBase[ark.HealthInfo]{
 				Code: "SUCCESS",
 				Data: ark.HealthInfo{
@@ -89,30 +129,50 @@ func (bm *BaseMock) commandCallback(client paho.Client, msg paho.Message) {
 				},
 				Message: "",
 			},
-		})
+		}
+		mqttResponse := ArkMqttMsg[ark.HealthResponse]{
+			PublishTimestamp: time.Now().UnixMilli(),
+			Data:             response,
+		}
+		healthBytes, _ := json.Marshal(mqttResponse)
 		bm.mqttClient.Pub(fmt.Sprintf("koupleless/%s/base/health", bm.baseID), 0, healthBytes)
 	case model.CommandQueryAllBiz:
-		bizBytes, _ := json.Marshal(ark.QueryAllArkBizResponse{
+		response := ark.QueryAllArkBizResponse{
 			GenericArkResponseBase: ark.GenericArkResponseBase[[]ark.ArkBizInfo]{
 				Code:    "SUCCESS",
 				Data:    bm.bizInfos,
 				Message: "",
 			},
-		})
+		}
+		mqttResponse := ArkMqttMsg[ark.QueryAllArkBizResponse]{
+			PublishTimestamp: time.Now().UnixMilli(),
+			Data:             response,
+		}
+		bizBytes, _ := json.Marshal(mqttResponse)
+
 		bm.mqttClient.Pub(fmt.Sprintf("koupleless/%s/base/biz", bm.baseID), 0, bizBytes)
 	case model.CommandInstallBiz:
 		var data ark.BizModel
-		json.Unmarshal(msg.Payload(), &data)
+		err := json.Unmarshal(msg.Payload(), &data)
+		if err != nil {
+			logrus.Error(err)
+		}
 		// install biz
 		bm.Lock()
-		installed := false
-		for _, bizInfo := range bm.bizInfos {
+		installedIndex := -1
+		diffVersioInstalledIndex := -1
+		for index, bizInfo := range bm.bizInfos {
 			if bizInfo.BizName == data.BizName && bizInfo.BizVersion == data.BizVersion {
-				installed = true
+				installedIndex = index
 				break
+			} else if bizInfo.BizName == data.BizName && bizInfo.BizVersion != data.BizVersion {
+				diffVersioInstalledIndex = index
 			}
 		}
-		if !installed {
+		if diffVersioInstalledIndex != -1 {
+			bm.bizInfos[diffVersioInstalledIndex].BizState = "DEACTIVATED"
+		}
+		if installedIndex == -1 {
 			bm.bizInfos = append(bm.bizInfos, ark.ArkBizInfo{
 				BizName:    data.BizName,
 				BizState:   "ACTIVATED",
@@ -126,19 +186,30 @@ func (bm *BaseMock) commandCallback(client paho.Client, msg paho.Message) {
 					},
 				},
 			})
+		} else {
+			bm.bizInfos[installedIndex].BizState = "ACTIVATED"
 		}
 		bm.Unlock()
 
-		bizBytes, _ := json.Marshal(ark.QueryAllArkBizResponse{
+		response := ark.QueryAllArkBizResponse{
 			GenericArkResponseBase: ark.GenericArkResponseBase[[]ark.ArkBizInfo]{
-				Code: "SUCCESS",
-				Data: bm.bizInfos,
+				Code:    "SUCCESS",
+				Data:    bm.bizInfos,
+				Message: "",
 			},
-		})
+		}
+		mqttResponse := ArkMqttMsg[ark.QueryAllArkBizResponse]{
+			PublishTimestamp: time.Now().UnixMilli(),
+			Data:             response,
+		}
+		bizBytes, _ := json.Marshal(mqttResponse)
 		bm.mqttClient.Pub(fmt.Sprintf("koupleless/%s/base/biz", bm.baseID), 0, bizBytes)
 	case model.CommandUnInstallBiz:
 		var data ark.BizModel
-		json.Unmarshal(msg.Payload(), &data)
+		err := json.Unmarshal(msg.Payload(), &data)
+		if err != nil {
+			logrus.Error(err)
+		}
 		bm.Lock()
 		index := -1
 		for i, bizInfo := range bm.bizInfos {
@@ -152,12 +223,18 @@ func (bm *BaseMock) commandCallback(client paho.Client, msg paho.Message) {
 		}
 		bm.Unlock()
 
-		bizBytes, _ := json.Marshal(ark.QueryAllArkBizResponse{
+		response := ark.QueryAllArkBizResponse{
 			GenericArkResponseBase: ark.GenericArkResponseBase[[]ark.ArkBizInfo]{
-				Code: "SUCCESS",
-				Data: bm.bizInfos,
+				Code:    "SUCCESS",
+				Data:    bm.bizInfos,
+				Message: "",
 			},
-		})
+		}
+		mqttResponse := ArkMqttMsg[ark.QueryAllArkBizResponse]{
+			PublishTimestamp: time.Now().UnixMilli(),
+			Data:             response,
+		}
+		bizBytes, _ := json.Marshal(mqttResponse)
 		bm.mqttClient.Pub(fmt.Sprintf("koupleless/%s/base/biz", bm.baseID), 0, bizBytes)
 	}
 }

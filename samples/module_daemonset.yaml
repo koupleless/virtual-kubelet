@@ -9,8 +9,7 @@ spec: # 资源规范字段
   revisionHistoryLimit: 3 # 保留历史版本
   selector: # 选择器
     matchLabels: # 匹配标签
-      module.koupleless.io/module0: 0.1.0
-      module.koupleless.io/module1: 0.1.0
+      app: test-module-daemon-set
   updateStrategy: # 策略
     type: RollingUpdate # 滚动更新策略
     rollingUpdate: # 滚动更新
@@ -18,6 +17,7 @@ spec: # 资源规范字段
   template: # 模版
     metadata: # 资源的元数据/属性
       labels: # 设定资源的标签
+        module-controller.koupleless.io/component: module # 必要，声明pod的类型，用于module controller管理
         module.koupleless.io/module0: 0.1.0
         module.koupleless.io/module1: 0.1.0
         # deployment unique id

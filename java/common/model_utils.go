@@ -16,10 +16,11 @@ package common
 
 import (
 	"context"
+	"github.com/google/go-cmp/cmp"
 	"github.com/koupleless/arkctl/common/fileutil"
 	"github.com/koupleless/arkctl/v1/service/ark"
+	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/java/model"
-	"github.com/virtual-kubelet/virtual-kubelet/log"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -200,4 +201,25 @@ func (c ModelUtils) BuildVirtualNode(config *model.BuildVirtualNodeConfig, node 
 			corev1.ResourcePods: resource.MustParse("2000"),
 		},
 	}
+}
+
+// PodsEqual checks if two pods are equal according to the fields we know that are allowed
+// to be modified after startup time.
+func PodsEqual(pod1, pod2 *corev1.Pod) bool {
+	// Pod Update Only Permits update of:
+	// - `spec.containers[*].image`
+	// - `spec.initContainers[*].image`
+	// - `spec.activeDeadlineSeconds`
+	// - `spec.tolerations` (only additions to existing tolerations)
+	// - `objectmeta.labels`
+	// - `objectmeta.annotations`
+	// compare the values of the pods to see if the values actually changed
+
+	return cmp.Equal(pod1.Spec.Containers, pod2.Spec.Containers) &&
+		cmp.Equal(pod1.Spec.InitContainers, pod2.Spec.InitContainers) &&
+		cmp.Equal(pod1.Spec.ActiveDeadlineSeconds, pod2.Spec.ActiveDeadlineSeconds) &&
+		cmp.Equal(pod1.Spec.Tolerations, pod2.Spec.Tolerations) &&
+		cmp.Equal(pod1.ObjectMeta.Labels, pod2.Labels) &&
+		cmp.Equal(pod1.ObjectMeta.Annotations, pod2.Annotations)
+
 }

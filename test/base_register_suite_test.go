@@ -1,6 +1,7 @@
 package test
 
 import (
+	"github.com/koupleless/virtual-kubelet/java/pod/node"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -26,7 +27,7 @@ var _ = Describe("Base Register", func() {
 
 		It("should has target node", func() {
 			Eventually(func() bool {
-				_, err := k8sClient.CoreV1().Nodes().Get(mainContext, nodeId, metav1.GetOptions{})
+				_, err := k8sClient.CoreV1().Nodes().Get(mainContext, node.VIRTUAL_NODE_NAME_PREFIX+nodeId, metav1.GetOptions{})
 				return !errors.IsNotFound(err)
 			}, timeout, interval).Should(BeTrue())
 		})
@@ -38,7 +39,7 @@ var _ = Describe("Base Register", func() {
 				mockBase.Exit()
 			}
 			Eventually(func() bool {
-				_, err := k8sClient.CoreV1().Nodes().Get(mainContext, nodeId, metav1.GetOptions{})
+				_, err := k8sClient.CoreV1().Nodes().Get(mainContext, node.VIRTUAL_NODE_NAME_PREFIX+nodeId, metav1.GetOptions{})
 				return errors.IsNotFound(err)
 			}, timeout, interval).Should(BeTrue())
 		})

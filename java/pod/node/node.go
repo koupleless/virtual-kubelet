@@ -17,10 +17,10 @@ package node
 import (
 	"context"
 	"github.com/koupleless/arkctl/v1/service/ark"
+	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/java/common"
 	"github.com/koupleless/virtual-kubelet/java/model"
-	"github.com/virtual-kubelet/virtual-kubelet/log"
-	"github.com/virtual-kubelet/virtual-kubelet/node"
+	"github.com/koupleless/virtual-kubelet/node"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sync"
@@ -94,7 +94,7 @@ func (v *VirtualKubeletNode) Register(_ context.Context, node *corev1.Node) erro
 	return nil
 }
 
-func (v *VirtualKubeletNode) Ping(ctx context.Context) error {
+func (v *VirtualKubeletNode) Ping(_ context.Context) error {
 	return nil
 }
 

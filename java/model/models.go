@@ -16,6 +16,9 @@ package model
 
 import (
 	"github.com/koupleless/virtual-kubelet/common/mqtt"
+	"k8s.io/client-go/kubernetes"
+	v1 "k8s.io/client-go/listers/core/v1"
+	"time"
 )
 
 const (
@@ -43,13 +46,24 @@ type BuildBaseRegisterControllerConfig struct {
 	// MqttConfig is the config of mqtt client
 	MqttConfig *mqtt.ClientConfig
 
+	// K8SConfig is the config of k8s client
+	K8SConfig *K8SConfig
+}
+
+type K8SConfig struct {
 	// KubeConfigPath is the path of k8s client
 	KubeConfigPath string
+
+	// InformerSyncPeriod
+	InformerSyncPeriod time.Duration
 }
 
 type BuildKouplelessNodeConfig struct {
-	// KubeConfigPath is the path of kube config file
-	KubeConfigPath string
+	// KubeClient is the kube client instance
+	KubeClient *kubernetes.Clientset
+
+	// PodLister is the pod lister
+	PodLister v1.PodLister
 
 	// MqttClient is the mqtt client, for sub and pub
 	MqttClient *mqtt.Client

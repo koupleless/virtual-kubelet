@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"github.com/koupleless/virtual-kubelet/java/pod/node"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
@@ -46,7 +47,7 @@ var _ = Describe("Module Deployment", func() {
 		mockBase = NewBaseMock(nodeId, "base", "1.1.1", baseMqttClient)
 		go mockBase.Run()
 		Eventually(func() bool {
-			_, err := k8sClient.CoreV1().Nodes().Get(ctx, nodeId, metav1.GetOptions{})
+			_, err := k8sClient.CoreV1().Nodes().Get(ctx, node.VIRTUAL_NODE_NAME_PREFIX+nodeId, metav1.GetOptions{})
 			return !errors.IsNotFound(err)
 		}, timeout, interval).Should(BeTrue())
 	})
@@ -231,7 +232,7 @@ var _ = Describe("Module Deployment", func() {
 			mockBase.Exit()
 		}
 		Eventually(func() bool {
-			_, err := k8sClient.CoreV1().Nodes().Get(ctx, nodeId, metav1.GetOptions{})
+			_, err := k8sClient.CoreV1().Nodes().Get(ctx, node.VIRTUAL_NODE_NAME_PREFIX+nodeId, metav1.GetOptions{})
 			return errors.IsNotFound(err)
 		}, timeout, interval).Should(BeTrue())
 	})

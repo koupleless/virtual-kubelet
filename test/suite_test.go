@@ -21,18 +21,20 @@ import (
 	"github.com/koupleless/virtual-kubelet/common/mqtt"
 	"github.com/koupleless/virtual-kubelet/java/controller"
 	"github.com/koupleless/virtual-kubelet/java/model"
+	"github.com/koupleless/virtual-kubelet/node/nodeutil"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/virtual-kubelet/virtual-kubelet/node/nodeutil"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/homedir"
+	"log"
 	"os"
 	"path"
 	"testing"
+	"time"
 )
 
 const (
@@ -63,27 +65,34 @@ var _ = BeforeSuite(func() {
 	k8sClient, err = nodeutil.ClientsetFromEnv(DefaultKubeConfigPath)
 	Expect(err).NotTo(HaveOccurred())
 	baseMqttClient, err = mqtt.NewMqttClient(&mqtt.ClientConfig{
-		Broker:    "broker.emqx.io",
-		Port:      1883,
-		ClientID:  "base-mqtt-client",
-		Username:  "emqx",
-		Password:  "public",
-		KeepAlive: 60,
+		Broker:   "broker.emqx.io",
+		Port:     1883,
+		ClientID: "base-mqtt-client",
+		Username: "emqx",
+		Password: "public",
 	})
 	Expect(err).NotTo(HaveOccurred())
 	// start mc
-	registerController, err := controller.NewBaseRegisterController(&model.BuildBaseRegisterControllerConfig{MqttConfig: &mqtt.ClientConfig{
-		Broker:    "broker.emqx.io",
-		Port:      1883,
-		ClientID:  "mc-server-mqtt-client",
-		Username:  "emqx",
-		Password:  "public",
-		KeepAlive: 60,
-	}})
+	registerController, err := controller.NewBaseRegisterController(&model.BuildBaseRegisterControllerConfig{
+		MqttConfig: &mqtt.ClientConfig{
+			Broker:   "broker.emqx.io",
+			Port:     1883,
+			ClientID: "mc-server-mqtt-client",
+			Username: "emqx",
+			Password: "public",
+		},
+		K8SConfig: &model.K8SConfig{
+			KubeConfigPath:     DefaultKubeConfigPath,
+			InformerSyncPeriod: time.Minute * 5,
+		},
+	})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(registerController).NotTo(BeNil())
 
 	go registerController.Run(mainContext)
+
+	<-registerController.Ready()
+	log.Println("Registering controller ready")
 })
 
 var _ = AfterSuite(func() {

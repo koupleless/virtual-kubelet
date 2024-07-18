@@ -19,11 +19,12 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/common/mqtt"
 	"github.com/koupleless/virtual-kubelet/java/controller"
 	"github.com/koupleless/virtual-kubelet/java/model"
 	"github.com/spf13/cobra"
-	"github.com/virtual-kubelet/virtual-kubelet/log"
+	"time"
 )
 
 // NewCommand creates a new top-level command.
@@ -71,7 +72,10 @@ func runRootCommand(ctx context.Context, c Opts) error {
 			ClientKeyPath: c.MqttClientKeyPath,
 			CleanSession:  true,
 		},
-		KubeConfigPath: c.KubeConfigPath,
+		K8SConfig: &model.K8SConfig{
+			KubeConfigPath:     c.KubeConfigPath,
+			InformerSyncPeriod: time.Minute,
+		},
 	}
 
 	registerController, err := controller.NewBaseRegisterController(&config)

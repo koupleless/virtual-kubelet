@@ -17,6 +17,7 @@ package controller
 import (
 	"github.com/koupleless/virtual-kubelet/java/pod/node"
 	"github.com/pkg/errors"
+	"strings"
 	"sync"
 	"time"
 )
@@ -99,4 +100,18 @@ func (r *RuntimeInfoStore) GetOfflineBases(maxUnreachableMilliSec int64) []strin
 		offlineBaseIDs = append(offlineBaseIDs, baseID)
 	}
 	return offlineBaseIDs
+}
+
+func (r *RuntimeInfoStore) getBaseIDFromNodeID(nodeID string) string {
+	if !strings.HasPrefix(nodeID, node.VIRTUAL_NODE_NAME_PREFIX) {
+		return ""
+	}
+	return nodeID[len(node.VIRTUAL_NODE_NAME_PREFIX):]
+}
+
+func (r *RuntimeInfoStore) GetBaseNodeByNodeID(nodeID string) *node.KouplelessNode {
+	r.Lock()
+	defer r.Unlock()
+	baseID := r.getBaseIDFromNodeID(nodeID)
+	return r.baseIDToKouplelessNode[baseID]
 }

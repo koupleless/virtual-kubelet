@@ -47,8 +47,6 @@ var defaultMessageHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqt
 
 var defaultOnConnectHandler mqtt.OnConnectHandler = func(client mqtt.Client) {
 	logrus.Info("Connected")
-	reader := client.OptionsReader()
-	logrus.Info("Connect options: ", reader.ClientID())
 }
 
 var defaultConnectionLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err error) {

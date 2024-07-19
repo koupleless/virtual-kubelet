@@ -6,7 +6,7 @@ metadata:  # 资源的元数据/属性
   labels:  # 设定资源的标签
     deployment.koupleless.io/deployment0: 0.1.0
 spec: # 资源规范字段
-  replicas: 3
+  replicas: 1
   revisionHistoryLimit: 3 # 保留历史版本
   selector: # 选择器
     matchLabels: # 匹配标签
@@ -43,7 +43,7 @@ spec: # 资源规范字段
                   - key: base.koupleless.io/version
                     operator: In
                     values:
-                      - 1.1.1  # 模块可能只能被调度到一些特殊版本的 node 上，如有这种限制，则必须有这个字段。
+                      - 1.1.1 # 模块可能只能被调度到一些特殊版本的 node 上，如有这种限制，则必须有这个字段。
                   - key: base.koupleless.io/name
                     operator: In
                     values:

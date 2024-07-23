@@ -1,6 +1,7 @@
 package nodeutil
 
 import (
+	"k8s.io/client-go/util/flowcontrol"
 	"os"
 
 	"github.com/pkg/errors"
@@ -25,6 +26,8 @@ func ClientsetFromEnv(kubeConfigPath string) (*kubernetes.Clientset, error) {
 	} else {
 		config, err = rest.InClusterConfig()
 	}
+
+	config.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(1000, 1000)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "error getting rest client config")

@@ -21,8 +21,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/common/mqtt"
-	"github.com/koupleless/virtual-kubelet/java/controller"
-	"github.com/koupleless/virtual-kubelet/java/model"
+	"github.com/koupleless/virtual-kubelet/controller/baseRegisterController"
+	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/spf13/cobra"
 	"time"
 )
@@ -78,7 +78,7 @@ func runRootCommand(ctx context.Context, c Opts) error {
 		},
 	}
 
-	registerController, err := controller.NewBaseRegisterController(&config)
+	registerController, err := baseRegisterController.NewBaseRegisterController(&config)
 	if err != nil {
 		return err
 	}

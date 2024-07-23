@@ -2,7 +2,7 @@ package test
 
 import (
 	"context"
-	"github.com/koupleless/virtual-kubelet/java/pod/node"
+	"github.com/koupleless/virtual-kubelet/provider/javaBase/node_provider"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sirupsen/logrus"
@@ -38,7 +38,7 @@ var _ = Describe("Module Publish", func() {
 		mockBase = NewBaseMock(nodeId, "base", "1.1.1", baseMqttClient)
 		go mockBase.Run()
 		Eventually(func() bool {
-			_, err := k8sClient.CoreV1().Nodes().Get(ctx, node.VIRTUAL_NODE_NAME_PREFIX+nodeId, metav1.GetOptions{})
+			_, err := k8sClient.CoreV1().Nodes().Get(ctx, node_provider.VIRTUAL_NODE_NAME_PREFIX+nodeId, metav1.GetOptions{})
 			return !errors.IsNotFound(err)
 		}, timeout, interval).Should(BeTrue())
 	})
@@ -215,7 +215,7 @@ var _ = Describe("Module Publish", func() {
 				mockBase.Exit()
 			}
 			Eventually(func() bool {
-				_, err := k8sClient.CoreV1().Nodes().Get(ctx, node.VIRTUAL_NODE_NAME_PREFIX+nodeId, metav1.GetOptions{})
+				_, err := k8sClient.CoreV1().Nodes().Get(ctx, node_provider.VIRTUAL_NODE_NAME_PREFIX+nodeId, metav1.GetOptions{})
 				return errors.IsNotFound(err)
 			}, timeout, interval).Should(BeTrue())
 		})

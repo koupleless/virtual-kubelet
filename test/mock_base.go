@@ -6,7 +6,7 @@ import (
 	paho "github.com/eclipse/paho.mqtt.golang"
 	"github.com/koupleless/arkctl/v1/service/ark"
 	"github.com/koupleless/virtual-kubelet/common/mqtt"
-	"github.com/koupleless/virtual-kubelet/java/model"
+	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/sirupsen/logrus"
 	"strings"
 	"sync"

@@ -19,9 +19,9 @@ limitations under the License.
 import (
 	"context"
 	"github.com/koupleless/virtual-kubelet/common/mqtt"
-	"github.com/koupleless/virtual-kubelet/java/controller"
-	"github.com/koupleless/virtual-kubelet/java/model"
-	"github.com/koupleless/virtual-kubelet/node/nodeutil"
+	"github.com/koupleless/virtual-kubelet/controller/baseRegisterController"
+	"github.com/koupleless/virtual-kubelet/model"
+	"github.com/koupleless/virtual-kubelet/vnode/nodeutil"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/apps/v1"
@@ -73,7 +73,7 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).NotTo(HaveOccurred())
 	// start mc
-	registerController, err := controller.NewBaseRegisterController(&model.BuildBaseRegisterControllerConfig{
+	registerController, err := baseRegisterController.NewBaseRegisterController(&model.BuildBaseRegisterControllerConfig{
 		MqttConfig: &mqtt.ClientConfig{
 			Broker:   "broker.emqx.io",
 			Port:     1883,

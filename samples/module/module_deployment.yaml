@@ -20,17 +20,17 @@ spec: # 资源规范字段
     metadata: # 资源的元数据/属性
       labels: # 设定资源的标签
         module-controller.koupleless.io/component: module # 必要，声明pod的类型，用于module controller管理
-        module.koupleless.io/module0: 0.1.0
-        module.koupleless.io/module1: 0.1.0
+        module.koupleless.io/name: bizName
+        module.koupleless.io/version: bizVersion
         # deployment unique id
         app: test-module-deployment-non-peer
     spec: # 资源规范字段
       containers:
-        - name: biz1
-          image: https://serverless-opensource.oss-cn-shanghai.aliyuncs.com/module-packages/stable/biz1-web-single-host-0.0.1-SNAPSHOT-ark-biz.jar
+        - name: bizName
+          image: https://serverless-opensource.oss-cn-shanghai.aliyuncs.com/module-packages/stable/bizName-bizVersion-ark-biz.jar
           env:
             - name: BIZ_VERSION
-              value: 0.0.1-SNAPSHOT
+              value: bizVersion
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -48,6 +48,19 @@ spec: # 资源规范字段
                     operator: In
                     values:
                       - base  # 模块可能只能被调度到一些特殊版本的 node 上，如有这种限制，则必须有这个字段。
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: topology.kubernetes.io/zone
+              labelSelector:
+                - matchExpressions:
+                    - key: module.koupleless.io/name
+                      operator: In
+                      values:
+                        - bizName
+                    - key: module.koupleless.io/version
+                      operator: In
+                      values:
+                        - bizVersion
       tolerations:
         - key: "schedule.koupleless.io/virtual-node"
           operator: "Equal"

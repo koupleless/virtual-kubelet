@@ -16,8 +16,4 @@ tidy: ## Run go mod tidy
 
 .PHONY: test
 test: fmt vet tidy ## Run tests.
-	go test ./... -coverprofile=coverage.out
-
-.PHONY: unit-test
-unit-test: fmt vet tidy ## Run unit tests.
 	go test ${shell go list ./... | grep -v test} -coverprofile=coverage.out;

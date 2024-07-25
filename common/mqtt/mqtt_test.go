@@ -76,7 +76,7 @@ func TestClient_Pub_Sub(t *testing.T) {
 	})
 	assert.Assert(t, success)
 
-	success = client.Pub("topic/test/virtual-kubelet", Qos1, "test-message")
+	success = client.Pub("topic/test/virtual-kubelet", Qos1, []byte("test-message"))
 	assert.Assert(t, success)
 	<-recieved
 }
@@ -107,7 +107,7 @@ func TestClient_Pub_Sub_Timeout(t *testing.T) {
 	})
 	assert.Assert(t, success)
 
-	success = client.PubWithTimeout("topic/test/virtual-kubelet", Qos1, "test-message", time.Second*5)
+	success = client.PubWithTimeout("topic/test/virtual-kubelet", Qos1, []byte("test-message"), time.Second*5)
 	assert.Assert(t, success)
 	<-recieved
 	assert.Assert(t, len(msgList) >= 1)

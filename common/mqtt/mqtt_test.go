@@ -25,7 +25,7 @@ func TestNewMqttClient_CA(t *testing.T) {
 		Broker:   "broker.emqx.io",
 		Port:     8883,
 		ClientID: "TestNewMqttClientID",
-		CAPath:   "../../samples/sample-ca.crt",
+		CAPath:   "../../samples/mqtt/sample-ca.crt",
 	})
 	if err != nil {
 		fmt.Println(err.Error())
@@ -55,6 +55,9 @@ func TestClient_Pub_Sub(t *testing.T) {
 		Username: "emqx",
 		Password: "public",
 	})
+	if err != nil {
+		fmt.Println(err.Error())
+	}
 	assert.Assert(t, err == nil)
 	assert.Assert(t, client != nil)
 

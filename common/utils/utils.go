@@ -30,7 +30,3 @@ func ConvertByteNumToResourceQuantity(byteNum int64) resource.Quantity {
 	resourceStr = fmt.Sprintf("%dKi", byteNum)
 	return resource.MustParse(resourceStr)
 }
-
-func FormatArkletCommandTopic(baseID, command string) string {
-	return fmt.Sprintf("koupleless/%s/%s", baseID, command)
-}

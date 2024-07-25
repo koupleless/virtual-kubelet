@@ -20,12 +20,12 @@ import (
 	"github.com/koupleless/arkctl/common/fileutil"
 	"github.com/koupleless/arkctl/v1/service/ark"
 	"github.com/koupleless/virtual-kubelet/common/log"
-	"github.com/koupleless/virtual-kubelet/model"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"time"
 )
+
+var ModelUtil ModelUtils
 
 // ModelUtils
 // reference spec: https://github.com/koupleless/module-controller/discussions/8
@@ -109,26 +109,8 @@ func (c ModelUtils) TranslateArkBizInfoToV1ContainerStatus(bizModel *ark.BizMode
 	// therefore, the operation method should all be performed in sync way.
 	// and there would be no waiting state
 	if bizInfo.BizState == "ACTIVATED" {
-		latestActivatedTime := time.UnixMilli(0)
-		for _, record := range bizInfo.BizStateRecords {
-			if record.State != "ACTIVATED" {
-				continue
-			}
-			if len(record.ChangeTime) < 3 {
-				continue
-			}
-			changeTime, err := time.Parse("2006-01-02 15:04:05", record.ChangeTime[:len(record.ChangeTime)-3])
-			if err != nil {
-				log.G(context.Background()).Errorf("failed to parse change time %s", record.ChangeTime)
-				continue
-			}
-			if changeTime.UnixMilli() > latestActivatedTime.UnixMilli() {
-				latestActivatedTime = changeTime
-			}
-		}
+		latestActivatedTime := getLatestStateTime(bizInfo.BizState, bizInfo.BizStateRecords)
 		ret.State.Running = &corev1.ContainerStateRunning{
-			// for now we can just leave it empty,
-			// in the future when the arklet supports this, we can fill this field.
 			StartedAt: metav1.Time{
 				Time: latestActivatedTime,
 			},
@@ -136,23 +118,7 @@ func (c ModelUtils) TranslateArkBizInfoToV1ContainerStatus(bizModel *ark.BizMode
 	}
 
 	if bizInfo.BizState == "DEACTIVATED" {
-		latestDeactivatedTime := time.UnixMilli(0)
-		for _, record := range bizInfo.BizStateRecords {
-			if record.State != "DEACTIVATED" {
-				continue
-			}
-			if len(record.ChangeTime) < 3 {
-				continue
-			}
-			changeTime, err := time.Parse("2006-01-02 15:04:05", record.ChangeTime[:len(record.ChangeTime)-3])
-			if err != nil {
-				log.G(context.Background()).Errorf("failed to parse change time %s", record.ChangeTime)
-				continue
-			}
-			if changeTime.UnixMilli() > latestDeactivatedTime.UnixMilli() {
-				latestDeactivatedTime = changeTime
-			}
-		}
+		latestDeactivatedTime := getLatestStateTime(bizInfo.BizState, bizInfo.BizStateRecords)
 		ret.State.Terminated = &corev1.ContainerStateTerminated{
 			ExitCode: 1,
 			Reason:   "BizDeactivated",
@@ -166,41 +132,25 @@ func (c ModelUtils) TranslateArkBizInfoToV1ContainerStatus(bizModel *ark.BizMode
 	return ret
 }
 
-func (c ModelUtils) BuildVirtualNode(config *model.BuildVirtualNodeConfig, node *corev1.Node) {
-	if node.ObjectMeta.Labels == nil {
-		node.ObjectMeta.Labels = make(map[string]string)
+func getLatestStateTime(state string, records []ark.ArkBizStateRecord) time.Time {
+	latestStateTime := time.UnixMilli(0)
+	for _, record := range records {
+		if record.State != state {
+			continue
+		}
+		if len(record.ChangeTime) < 3 {
+			continue
+		}
+		changeTime, err := time.Parse("2006-01-02 15:04:05", record.ChangeTime[:len(record.ChangeTime)-3])
+		if err != nil {
+			log.G(context.Background()).Errorf("failed to parse change time %s", record.ChangeTime)
+			continue
+		}
+		if changeTime.UnixMilli() > latestStateTime.UnixMilli() {
+			latestStateTime = changeTime
+		}
 	}
-	node.Labels["base.koupleless.io/stack"] = config.TechStack
-	node.Labels["base.koupleless.io/version"] = config.Version
-	node.Labels["base.koupleless.io/name"] = config.BizName
-	node.Spec.Taints = []corev1.Taint{
-		{
-			Key:    "schedule.koupleless.io/virtual-node",
-			Value:  "True",
-			Effect: corev1.TaintEffectNoExecute,
-		},
-	}
-	node.Status = corev1.NodeStatus{
-		Phase: corev1.NodePending,
-		Addresses: []corev1.NodeAddress{
-			{
-				Type:    corev1.NodeInternalIP,
-				Address: config.NodeIP,
-			},
-		},
-		Conditions: []corev1.NodeCondition{
-			{
-				Type:   corev1.NodeReady,
-				Status: corev1.ConditionFalse,
-			},
-		},
-		Capacity: map[corev1.ResourceName]resource.Quantity{
-			corev1.ResourcePods: resource.MustParse("2000"),
-		},
-		Allocatable: map[corev1.ResourceName]resource.Quantity{
-			corev1.ResourcePods: resource.MustParse("2000"),
-		},
-	}
+	return latestStateTime
 }
 
 // PodsEqual checks if two pods are equal according to the fields we know that are allowed

@@ -17,12 +17,11 @@ package root
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/google/uuid"
 	"github.com/koupleless/virtual-kubelet/common/log"
-	"github.com/koupleless/virtual-kubelet/common/mqtt"
-	"github.com/koupleless/virtual-kubelet/controller/baseRegisterController"
-	"github.com/koupleless/virtual-kubelet/model"
+	"github.com/koupleless/virtual-kubelet/controller/base_register_controller"
+	"github.com/koupleless/virtual-kubelet/tunnel"
+	"github.com/koupleless/virtual-kubelet/tunnel/mqtt_tunnel"
 	"github.com/spf13/cobra"
 	"time"
 )
@@ -60,25 +59,20 @@ func runRootCommand(ctx context.Context, c Opts) error {
 		"clientID":        clientID,
 	}))
 
-	config := model.BuildBaseRegisterControllerConfig{
-		MqttConfig: &mqtt.ClientConfig{
-			Broker:        c.MqttBroker,
-			Port:          c.MqttPort,
-			ClientID:      fmt.Sprintf("%s@@@%s", c.MqttClientPrefix, clientID),
-			Username:      c.MqttUsername,
-			Password:      c.MqttPassword,
-			CAPath:        c.MqttCAPath,
-			ClientCrtPath: c.MqttClientCrtPath,
-			ClientKeyPath: c.MqttClientKeyPath,
-			CleanSession:  true,
-		},
-		K8SConfig: &model.K8SConfig{
+	tunnels := make([]tunnel.Tunnel, 0)
+	if c.EnableMqttTunnel {
+		tunnels = append(tunnels, &mqtt_tunnel.MqttTunnel{})
+	}
+	config := base_register_controller.BuildBaseRegisterControllerConfig{
+		ClientID: clientID,
+		K8SConfig: &base_register_controller.K8SConfig{
 			KubeConfigPath:     c.KubeConfigPath,
 			InformerSyncPeriod: time.Minute,
 		},
+		Tunnels: tunnels,
 	}
 
-	registerController, err := baseRegisterController.NewBaseRegisterController(&config)
+	registerController, err := base_register_controller.NewBaseRegisterController(&config)
 	if err != nil {
 		return err
 	}

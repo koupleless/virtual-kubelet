@@ -19,9 +19,8 @@ limitations under the License.
 import (
 	"context"
 	"github.com/koupleless/virtual-kubelet/common/mqtt"
-	"github.com/koupleless/virtual-kubelet/controller/baseRegisterController"
-	"github.com/koupleless/virtual-kubelet/model"
-	"github.com/koupleless/virtual-kubelet/vnode/nodeutil"
+	"github.com/koupleless/virtual-kubelet/controller/base_register_controller"
+	"github.com/koupleless/virtual-kubelet/virtual_kubelet/nodeutil"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/apps/v1"
@@ -73,18 +72,12 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).NotTo(HaveOccurred())
 	// start mc
-	registerController, err := baseRegisterController.NewBaseRegisterController(&model.BuildBaseRegisterControllerConfig{
-		MqttConfig: &mqtt.ClientConfig{
-			Broker:   "broker.emqx.io",
-			Port:     1883,
-			ClientID: "mc-server-mqtt-client",
-			Username: "emqx",
-			Password: "public",
-		},
-		K8SConfig: &model.K8SConfig{
+	registerController, err := base_register_controller.NewBaseRegisterController(&base_register_controller.BuildBaseRegisterControllerConfig{
+		K8SConfig: &base_register_controller.K8SConfig{
 			KubeConfigPath:     DefaultKubeConfigPath,
 			InformerSyncPeriod: time.Minute * 5,
 		},
+		// TODO add provider
 	})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(registerController).NotTo(BeNil())

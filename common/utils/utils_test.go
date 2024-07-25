@@ -2,7 +2,6 @@ package utils
 
 import (
 	"context"
-	"github.com/koupleless/virtual-kubelet/model"
 	"gotest.tools/assert"
 	"testing"
 	"time"
@@ -40,9 +39,4 @@ func TestConvertByteNumToResourceQuantity(t *testing.T) {
 	assert.Assert(t, quantity.IsZero())
 	quantity = ConvertByteNumToResourceQuantity(1025)
 	assert.Assert(t, quantity.String() == "1Ki")
-}
-
-func TestFormatArkletCommandTopic(t *testing.T) {
-	topic := FormatArkletCommandTopic("test", model.CommandHealth)
-	assert.Assert(t, topic == "koupleless/test/health")
 }

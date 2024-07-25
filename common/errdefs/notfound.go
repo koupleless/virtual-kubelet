@@ -1,6 +1,7 @@
 package errdefs
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -56,4 +57,9 @@ func IsNotFound(err error) bool {
 	}
 
 	return false
+}
+
+// NotFound makes an ErrNotFound from the provided error message
+func NotFound(msg string) error {
+	return &notFoundError{errors.New(msg)}
 }

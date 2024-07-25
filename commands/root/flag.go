@@ -67,16 +67,10 @@ func installFlags(flags *pflag.FlagSet, c *Opts) {
 	flags.StringVar(&c.TraceConfig.ServiceName, "trace-service-name", c.TraceConfig.ServiceName, "sets the name of the service used to register with the trace exporter")
 	flags.Var(mapVar(c.TraceConfig.Tags), "trace-tag", "add tags to include with traces in key=value form")
 	flags.StringVar(&c.TraceSampleRate, "trace-sample-rate", c.TraceSampleRate, "set probability of tracing samples")
-	flags.StringVar(&c.MqttBroker, "mqtt-broker", c.MqttBroker, "set mqtt broker")
-	flags.IntVar(&c.MqttPort, "mqtt-port", c.MqttPort, "set mqtt port")
-	flags.StringVar(&c.MqttUsername, "mqtt-username", c.MqttUsername, "set mqtt username")
-	flags.StringVar(&c.MqttPassword, "mqtt-password", c.MqttPassword, "set mqtt password")
-	flags.StringVar(&c.MqttClientPrefix, "mqtt-client-prefix", c.MqttClientPrefix, "set mqtt client prefix")
-	flags.StringVar(&c.MqttCAPath, "mqtt-ca", c.MqttCAPath, "set mqtt ca path")
-	flags.StringVar(&c.MqttClientCrtPath, "mqtt-client-crt", c.MqttClientCrtPath, "set mqtt client crt path")
-	flags.StringVar(&c.MqttClientKeyPath, "mqtt-client-key", c.MqttClientKeyPath, "set mqtt client key path")
 
 	flags.DurationVar(&c.InformerResyncPeriod, "full-resync-period", c.InformerResyncPeriod, "how often to perform a full resync of pods between kubernetes and the provider")
+
+	flags.BoolVar(&c.EnableMqttTunnel, "enable-mqtt-tunnel", c.EnableMqttTunnel, "mqtt tunnel enable flag")
 
 	flagset := flag.NewFlagSet("klog", flag.PanicOnError)
 	klog.InitFlags(flagset)

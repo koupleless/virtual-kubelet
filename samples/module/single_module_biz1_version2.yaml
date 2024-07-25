@@ -25,7 +25,7 @@ spec:
               - key: base.koupleless.io/version
                 operator: In
                 values:
-                  - 1.1.1  # 模块可能只能被调度到一些特殊版本的 node 上，如有这种限制，则必须有这个字段。
+                  - 1.0.0  # 模块可能只能被调度到一些特殊版本的 node 上，如有这种限制，则必须有这个字段。
               - key: base.koupleless.io/name
                 operator: In
                 values:

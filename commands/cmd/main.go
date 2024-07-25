@@ -32,7 +32,7 @@ import (
 
 var (
 	buildVersion = "0.0.1"
-	k8sVersion   = "v1.15.2" // This should follow the version of k8s.io/kubernetes we are importing
+	k8sVersion   = "v1.28.9" // This should follow the version of k8s.io/kubernetes we are importing
 )
 
 func main() {

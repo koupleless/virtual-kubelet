@@ -3,14 +3,16 @@ package mqtt
 import (
 	"fmt"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/koupleless/virtual-kubelet/common/testutil/mqtt_broker"
 	"gotest.tools/assert"
 	"testing"
 	"time"
 )
 
 func TestNewMqttClient_Username(t *testing.T) {
+	go mqtt_broker.StartLocalMqttBroker()
 	client, err := NewMqttClient(&ClientConfig{
-		Broker:   "broker.emqx.io",
+		Broker:   "localhost",
 		Port:     1883,
 		ClientID: "TestNewMqttClientID",
 		Username: "emqx",
@@ -34,7 +36,7 @@ func TestNewMqttClient_CA(t *testing.T) {
 	assert.Assert(t, client != nil)
 }
 
-func TestNewMqttClient_CA_WithClient(t *testing.T) {
+func TestNewMqttClient_CA_WithClientNotValid(t *testing.T) {
 	client, err := NewMqttClient(&ClientConfig{
 		Broker:        "broker.emqx.io",
 		Port:          8883,
@@ -48,8 +50,9 @@ func TestNewMqttClient_CA_WithClient(t *testing.T) {
 }
 
 func TestClient_Pub_Sub(t *testing.T) {
+	go mqtt_broker.StartLocalMqttBroker()
 	client, err := NewMqttClient(&ClientConfig{
-		Broker:   "broker.emqx.io",
+		Broker:   "localhost",
 		Port:     1883,
 		ClientID: "TestNewMqttClientID",
 		Username: "emqx",
@@ -66,8 +69,8 @@ func TestClient_Pub_Sub(t *testing.T) {
 	success := client.Sub("topic/test/virtual-kubelet", Qos1, func(client mqtt.Client, message mqtt.Message) {
 		select {
 		case <-recieved:
-			assert.Assert(t, string(message.Payload()) == "test-message")
 		default:
+			assert.Assert(t, string(message.Payload()) == "test-message")
 			close(recieved)
 		}
 	})
@@ -79,8 +82,9 @@ func TestClient_Pub_Sub(t *testing.T) {
 }
 
 func TestClient_Pub_Sub_Timeout(t *testing.T) {
+	go mqtt_broker.StartLocalMqttBroker()
 	client, err := NewMqttClient(&ClientConfig{
-		Broker:   "broker.emqx.io",
+		Broker:   "localhost",
 		Port:     1883,
 		ClientID: "TestNewMqttClientID",
 		Username: "emqx",

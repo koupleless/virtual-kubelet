@@ -17,6 +17,10 @@ type Tunnel interface {
 
 	Register(context.Context, string, BaseDiscoveredCallback, HealthDataArrivedCallback, QueryAllBizDataArrivedCallback) error
 
+	OnBaseStart(context.Context, string)
+
+	OnBaseStop(context.Context, string)
+
 	FetchHealthData(context.Context, string) error
 
 	QueryAllBizData(context.Context, string) error

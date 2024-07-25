@@ -10,7 +10,6 @@ import (
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/tunnel"
-	"github.com/koupleless/virtual-kubelet/virtual_kubelet/nodeutil"
 	"github.com/koupleless/virtual-kubelet/vnode/base_node"
 	errpkg "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -20,7 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/client-go/informers"
 	informer "k8s.io/client-go/informers/core/v1"
-	"k8s.io/client-go/kubernetes"
 	lister "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"time"
@@ -31,7 +29,6 @@ type BaseRegisterController struct {
 
 	tunnels []tunnel.Tunnel
 
-	kubeClient  *kubernetes.Clientset
 	podLister   lister.PodLister
 	podInformer informer.PodInformer
 	done        chan struct{}
@@ -71,11 +68,6 @@ func (brc *BaseRegisterController) Run(ctx context.Context) {
 		close(brc.done)
 	}()
 
-	clientSet, err := nodeutil.ClientsetFromEnv(brc.config.K8SConfig.KubeConfigPath)
-	if err != nil {
-		return
-	}
-
 	// init all tunnels, and at least one provider start successfully
 	anyProviderStarted := false
 	for _, provider := range brc.tunnels {
@@ -99,7 +91,7 @@ func (brc *BaseRegisterController) Run(ctx context.Context) {
 	}
 
 	podInformerFactory := informers.NewSharedInformerFactoryWithOptions(
-		clientSet,
+		brc.config.K8SConfig.KubeClient,
 		brc.config.K8SConfig.InformerSyncPeriod,
 		informers.WithTweakListOptions(func(options *metav1.ListOptions) {
 			// filter all module pods
@@ -117,7 +109,6 @@ func (brc *BaseRegisterController) Run(ctx context.Context) {
 		return
 	}
 
-	brc.kubeClient = clientSet
 	brc.podLister = podLister
 	brc.podInformer = podInformer
 
@@ -136,16 +127,18 @@ func (brc *BaseRegisterController) Run(ctx context.Context) {
 
 	go utils.TimedTaskWithInterval(ctx, time.Second, brc.checkAndDeleteOfflineBase)
 
+	close(brc.ready)
+
 	select {
 	case <-brc.done:
 	case <-ctx.Done():
 	}
 }
 
-func (brc *BaseRegisterController) baseDiscoveredCallback(baseID string, data model.HeartBeatData, provider tunnel.Tunnel) {
+func (brc *BaseRegisterController) baseDiscoveredCallback(baseID string, data model.HeartBeatData, t tunnel.Tunnel) {
 	if data.MasterBizInfo.BizState == "ACTIVATED" {
 		// base online message
-		brc.startVirtualKubelet(baseID, data)
+		go brc.startVirtualKubelet(baseID, data, t)
 	} else {
 		// base offline message
 		brc.shutdownVirtualKubelet(baseID)
@@ -293,7 +286,7 @@ func (brc *BaseRegisterController) Err() error {
 	return brc.err
 }
 
-func (brc *BaseRegisterController) startVirtualKubelet(baseID string, initData model.HeartBeatData) {
+func (brc *BaseRegisterController) startVirtualKubelet(baseID string, initData model.HeartBeatData, t tunnel.Tunnel) {
 	var err error
 	// first apply for local lock
 	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), "baseID", baseID))
@@ -318,10 +311,11 @@ func (brc *BaseRegisterController) startVirtualKubelet(baseID string, initData m
 		}
 	}()
 
-	kn, err := base_node.NewBaseNode(&base_node.BuildBaseNodeConfig{
-		KubeClient:  brc.kubeClient,
+	bn, err := base_node.NewBaseNode(&base_node.BuildBaseNodeConfig{
+		KubeClient:  brc.config.K8SConfig.KubeClient,
 		PodLister:   brc.podLister,
 		PodInformer: brc.podInformer,
+		Tunnel:      t,
 		NodeID:      baseID,
 		NodeIP:      initData.NetworkInfo.LocalIP,
 		// TODO support read from base heart beat data
@@ -334,14 +328,14 @@ func (brc *BaseRegisterController) startVirtualKubelet(baseID string, initData m
 		return
 	}
 
-	go kn.Run(ctx)
+	go bn.Run(ctx)
 
-	if err = kn.WaitReady(ctx, time.Minute); err != nil {
+	if err = bn.WaitReady(ctx, time.Minute); err != nil {
 		err = errpkg.Wrap(err, "Error waiting Koupleless node ready")
 		return
 	}
 
-	brc.localStore.PutBaseNode(baseID, kn)
+	brc.localStore.PutBaseNode(baseID, bn)
 
 	logrus.Infof("koupleless node running: %s", baseID)
 
@@ -349,8 +343,8 @@ func (brc *BaseRegisterController) startVirtualKubelet(baseID string, initData m
 	brc.localStore.BaseMsgArrived(baseID)
 
 	select {
-	case <-kn.Done():
-		err = kn.Err()
+	case <-bn.Done():
+		err = bn.Err()
 	case <-ctx.Done():
 		err = ctx.Err()
 	}
@@ -362,5 +356,5 @@ func (brc *BaseRegisterController) shutdownVirtualKubelet(baseID string) {
 		// exited
 		return
 	}
-	close(baseNode.BaseBizExitChan)
+	baseNode.Exit()
 }

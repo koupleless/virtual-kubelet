@@ -2,6 +2,7 @@ package base_register_controller
 
 import (
 	"github.com/koupleless/virtual-kubelet/tunnel"
+	"k8s.io/client-go/kubernetes"
 	"time"
 )
 
@@ -16,8 +17,8 @@ type BuildBaseRegisterControllerConfig struct {
 }
 
 type K8SConfig struct {
-	// KubeConfigPath is the path of k8s client
-	KubeConfigPath string
+	// KubeClient
+	KubeClient kubernetes.Interface
 
 	// InformerSyncPeriod
 	InformerSyncPeriod time.Duration

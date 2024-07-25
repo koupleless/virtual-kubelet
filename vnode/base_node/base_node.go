@@ -22,7 +22,7 @@ import (
 
 type BaseNode struct {
 	nodeID    string
-	clientSet *kubernetes.Clientset
+	clientSet kubernetes.Interface
 	tunnel    tunnel.Tunnel
 
 	vnode       *node_provider.BaseNodeProvider
@@ -32,7 +32,7 @@ type BaseNode struct {
 	done               chan struct{}
 	BaseHealthInfoChan chan ark.HealthData
 	BaseBizInfoChan    chan []ark.ArkBizInfo
-	BaseBizExitChan    chan struct{}
+	exit               chan struct{}
 
 	err error
 }
@@ -56,6 +56,8 @@ func (n *BaseNode) Run(ctx context.Context) {
 
 	go n.listenAndSync(ctx)
 
+	n.tunnel.OnBaseStart(ctx, n.nodeID)
+
 	go utils.TimedTaskWithInterval(ctx, time.Second*9, func(ctx context.Context) {
 		err = n.tunnel.FetchHealthData(ctx, n.nodeID)
 		if err != nil {
@@ -74,7 +76,7 @@ func (n *BaseNode) Run(ctx context.Context) {
 	case <-ctx.Done():
 		// exit
 		err = errors.Wrap(ctx.Err(), "context canceled")
-	case <-n.BaseBizExitChan:
+	case <-n.exit:
 		// base exit, process node delete and pod evict
 		err = n.clientSet.CoreV1().Nodes().Delete(ctx, n.vnode.CurrNodeInfo().Name, metav1.DeleteOptions{})
 		if err != nil {
@@ -96,6 +98,7 @@ func (n *BaseNode) Run(ctx context.Context) {
 				return
 			}
 		}
+		n.tunnel.OnBaseStop(ctx, n.nodeID)
 	}
 }
 
@@ -126,6 +129,14 @@ func (n *BaseNode) Done() <-chan struct{} {
 // Err returns err which causes koupleless node exit
 func (n *BaseNode) Err() error {
 	return n.err
+}
+
+func (n *BaseNode) Exit() {
+	select {
+	case <-n.exit:
+	default:
+		close(n.exit)
+	}
 }
 
 func (n *BaseNode) PodStore(key string, pod *corev1.Pod) {
@@ -200,10 +211,11 @@ func NewBaseNode(config *BuildBaseNodeConfig) (kn *BaseNode, err error) {
 		clientSet:          config.KubeClient,
 		vnode:              nodeProvider,
 		podProvider:        podProvider,
+		tunnel:             config.Tunnel,
 		node:               cm,
 		done:               make(chan struct{}),
 		BaseBizInfoChan:    make(chan []ark.ArkBizInfo),
 		BaseHealthInfoChan: make(chan ark.HealthData),
-		BaseBizExitChan:    make(chan struct{}),
+		exit:               make(chan struct{}),
 	}, nil
 }

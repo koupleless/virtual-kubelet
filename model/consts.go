@@ -23,8 +23,8 @@ const (
 
 const (
 	BaseHeartBeatTopic = "koupleless/+/base/heart"
-	BaseHealthTopic    = "koupleless/+/base/health"
-	BaseBizTopic       = "koupleless/+/base/biz"
+	BaseHealthTopic    = "koupleless/%s/base/health"
+	BaseBizTopic       = "koupleless/%s/base/biz"
 )
 
 const (

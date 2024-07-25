@@ -61,6 +61,27 @@ func TestVirtualKubeletNode_NotifyNodeStatus(t *testing.T) {
 	vnode.NotifyNodeStatus(context.Background(), func(node *corev1.Node) {
 		nodeList = append(nodeList, node)
 	})
-	vnode.Notify(ark.HealthData{})
+	vnode.Notify(ark.HealthData{
+		Jvm: ark.JvmInfo{
+			JavaUsedMetaspace:      10000,
+			JavaCommittedMetaspace: 10000,
+			JavaMaxMetaspace:       100000,
+		},
+	})
 	assert.Assert(t, len(nodeList) == 1)
+}
+
+func TestVirtualKubeletNode_NotifyNodeStatusWithoutInit(t *testing.T) {
+	vnode := NewVirtualKubeletNode(BuildBaseNodeProviderConfig{
+		NodeIP:    "127.0.0.1",
+		TechStack: "java",
+		BizName:   "test",
+		Version:   "1.0.0",
+	})
+	nodeList := make([]*corev1.Node, 0)
+	vnode.NotifyNodeStatus(context.Background(), func(node *corev1.Node) {
+		nodeList = append(nodeList, node)
+	})
+	vnode.Notify(ark.HealthData{})
+	assert.Assert(t, len(nodeList) == 0)
 }

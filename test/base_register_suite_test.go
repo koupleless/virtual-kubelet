@@ -1,6 +1,7 @@
 package test
 
 import (
+	"github.com/koupleless/virtual-kubelet/common/testutil/base"
 	"github.com/koupleless/virtual-kubelet/model"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -17,11 +18,11 @@ var _ = Describe("Base Register", func() {
 
 	nodeId := "test-base"
 
-	var mockBase *BaseMock
+	var mockBase *base.MockMqttBase
 
 	Context("base online test", func() {
 		It("mock base should start successfully", func() {
-			mockBase = NewBaseMock(nodeId, "base", "1.1.1", baseMqttClient)
+			mockBase = base.NewBaseMock(nodeId, "base", "1.1.1", baseMqttClient)
 			go mockBase.Run()
 		})
 

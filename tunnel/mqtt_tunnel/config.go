@@ -5,6 +5,14 @@ import (
 	"strconv"
 )
 
+const (
+	DefaultMQTTBroker       = "localhost"
+	DefaultMQTTUsername     = "local"
+	DefaultMQTTPassword     = "pwd"
+	DefaultMQTTClientPrefix = "koupleless"
+	DefaultMQTTPort         = 1883
+)
+
 type MqttConfig struct {
 	MqttBroker        string
 	MqttPort          int
@@ -17,39 +25,32 @@ type MqttConfig struct {
 }
 
 func (c *MqttConfig) init() {
+	c.MqttBroker = os.Getenv("MQTT_BROKER")
 	if c.MqttBroker == "" {
-		c.MqttBroker = os.Getenv("MQTT_BROKER")
+		c.MqttBroker = DefaultMQTTBroker
 	}
-
+	portStr := os.Getenv("MQTT_PORT")
+	port, err := strconv.Atoi(portStr)
+	if err == nil {
+		c.MqttPort = port
+	}
 	if c.MqttPort == 0 {
-		portStr := os.Getenv("MQTT_PORT")
-		port, err := strconv.Atoi(portStr)
-		if err == nil {
-			c.MqttPort = port
-		}
+		c.MqttPort = DefaultMQTTPort
 	}
 
+	c.MqttUsername = os.Getenv("MQTT_USERNAME")
 	if c.MqttUsername == "" {
-		c.MqttUsername = os.Getenv("MQTT_USERNAME")
+		c.MqttUsername = DefaultMQTTUsername
 	}
-
+	c.MqttPassword = os.Getenv("MQTT_PASSWORD")
 	if c.MqttPassword == "" {
-		c.MqttPassword = os.Getenv("MQTT_PASSWORD")
+		c.MqttPassword = DefaultMQTTPassword
 	}
-
+	c.MqttClientPrefix = os.Getenv("MQTT_CLIENT_PREFIX")
 	if c.MqttClientPrefix == "" {
-		c.MqttClientPrefix = os.Getenv("MQTT_CLIENT_PREFIX")
+		c.MqttClientPrefix = DefaultMQTTClientPrefix
 	}
-
-	if c.MqttCAPath == "" {
-		c.MqttCAPath = os.Getenv("MQTT_CA_PATH")
-	}
-
-	if c.MqttClientCrtPath == "" {
-		c.MqttClientCrtPath = os.Getenv("MQTT_CLIENT_CRT_PATH")
-	}
-
-	if c.MqttClientKeyPath == "" {
-		c.MqttClientKeyPath = os.Getenv("MQTT_CLIENT_KEY_PATH")
-	}
+	c.MqttCAPath = os.Getenv("MQTT_CA_PATH")
+	c.MqttClientCrtPath = os.Getenv("MQTT_CLIENT_CRT_PATH")
+	c.MqttClientKeyPath = os.Getenv("MQTT_CLIENT_KEY_PATH")
 }

@@ -13,9 +13,11 @@ RUN go mod download
 
 # Copy the go source
 COPY commands/ commands/
-COPY java/ java/
-COPY common/ common/
-COPY node/ node/
+COPY controller/ controller/
+COPY model/ model/
+COPY tunnel/ tunnel/
+COPY virtual_kubelet/ virtual_kubelet/
+COPY vnode/ vnode/
 
 # Build
 # the GOARCH has not a default value to allow the binary be built according to the host where the command

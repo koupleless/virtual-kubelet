@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"github.com/koupleless/virtual-kubelet/common/testutil/base"
 	"github.com/koupleless/virtual-kubelet/model"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -40,13 +41,13 @@ var _ = Describe("Module DaemonSet", func() {
 		selector = labels.NewSelector().Add(*requirement)
 	})
 
-	var mockBase *BaseMock
-	var mockScaleBase *BaseMock
+	var mockBase *base.MockMqttBase
+	var mockScaleBase *base.MockMqttBase
 	nodeId := "test-base"
 	scaleNodeId := "test-base-scale"
 
 	It("mock base should start successfully", func() {
-		mockBase = NewBaseMock(nodeId, "base", "1.1.1", baseMqttClient)
+		mockBase = base.NewBaseMock(nodeId, "base", "1.1.1", baseMqttClient)
 		go mockBase.Run()
 		Eventually(func() bool {
 			_, err := k8sClient.CoreV1().Nodes().Get(ctx, model.VIRTUAL_NODE_NAME_PREFIX+nodeId, metav1.GetOptions{})
@@ -81,7 +82,7 @@ var _ = Describe("Module DaemonSet", func() {
 
 	Context("base pod scale", func() {
 		It("should base pod scale successfully", func() {
-			mockScaleBase = NewBaseMock(scaleNodeId, "base", "1.1.1", baseMqttClient)
+			mockScaleBase = base.NewBaseMock(scaleNodeId, "base", "1.1.1", baseMqttClient)
 			go mockScaleBase.Run()
 			Eventually(func() bool {
 				_, err := k8sClient.CoreV1().Nodes().Get(ctx, model.VIRTUAL_NODE_NAME_PREFIX+scaleNodeId, metav1.GetOptions{})

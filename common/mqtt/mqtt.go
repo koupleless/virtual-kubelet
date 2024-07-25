@@ -132,27 +132,35 @@ func NewMqttClient(cfg *ClientConfig) (*Client, error) {
 }
 
 // PubWithTimeout publish a message to target topic with timeout config, return false if send failed or timeout
-func (c *Client) PubWithTimeout(topic string, qos byte, msg interface{}, timeout time.Duration) bool {
-	return c.client.Publish(topic, qos, true, msg).WaitTimeout(timeout)
+func (c *Client) PubWithTimeout(topic string, qos byte, msg []byte, timeout time.Duration) error {
+	token := c.client.Publish(topic, qos, true, msg)
+	token.WaitTimeout(timeout)
+	return token.Error()
 }
 
 // Pub publish a message to target topic, waiting for publish operation finish, return false if send failed
-func (c *Client) Pub(topic string, qos byte, msg interface{}) bool {
-	return c.client.Publish(topic, qos, true, msg).Wait()
+func (c *Client) Pub(topic string, qos byte, msg []byte) error {
+	token := c.client.Publish(topic, qos, true, msg)
+	token.Wait()
+	return token.Error()
 }
 
 // SubWithTimeout subscribe a topic with callback, return false if subscription's creation fail or creation timeout
-func (c *Client) SubWithTimeout(topic string, qos byte, timeout time.Duration, callBack mqtt.MessageHandler) bool {
-	return c.client.Subscribe(topic, qos, callBack).WaitTimeout(timeout)
+func (c *Client) SubWithTimeout(topic string, qos byte, timeout time.Duration, callBack mqtt.MessageHandler) error {
+	token := c.client.Subscribe(topic, qos, callBack)
+	token.WaitTimeout(timeout)
+	return token.Error()
 }
 
 // Sub subscribe a topic with callback, return false if subscription's creation fail
-func (c *Client) Sub(topic string, qos byte, callBack mqtt.MessageHandler) bool {
-	return c.client.Subscribe(topic, qos, callBack).Wait()
+func (c *Client) Sub(topic string, qos byte, callBack mqtt.MessageHandler) error {
+	token := c.client.Subscribe(topic, qos, callBack)
+	token.Wait()
+	return token.Error()
 }
 
 // UnSub unsubscribe a topic
-func (c *Client) UnSub(topic string) bool {
-	logrus.Info("unSub topic: ", topic)
-	return c.client.Unsubscribe(topic).Wait()
+func (c *Client) UnSub(topic string) error {
+	c.client.Unsubscribe(topic)
+	return nil
 }

@@ -154,6 +154,38 @@ func WithNodeEnableLeaseV1WithRenewInterval(client coordclientset.LeaseInterface
 	}
 }
 
+// WithNodePingTimeout limits the amount of time that the virtual kubelet will wait for the node provider to
+// respond to the ping callback. If it does not return within this time, it will be considered an error
+// condition
+func WithNodePingTimeout(timeout time.Duration) NodeControllerOpt {
+	return func(n *NodeController) error {
+		n.pingTimeout = &timeout
+		return nil
+	}
+}
+
+// WithNodePingInterval sets the interval between checking for node statuses via Ping()
+// If node leases are not supported (or not enabled), this is the frequency
+// with which the node status will be updated in Kubernetes.
+func WithNodePingInterval(d time.Duration) NodeControllerOpt {
+	return func(n *NodeController) error {
+		n.pingInterval = d
+		return nil
+	}
+}
+
+// WithNodeStatusUpdateInterval sets the interval for updating node status
+// This is only used when leases are supported and only for updating the actual
+// node status, not the node lease.
+// When node leases are not enabled (or are not supported on the cluster) this
+// has no affect and node status is updated on the "ping" interval.
+func WithNodeStatusUpdateInterval(d time.Duration) NodeControllerOpt {
+	return func(n *NodeController) error {
+		n.statusInterval = d
+		return nil
+	}
+}
+
 // WithNodeStatusUpdateErrorHandler adds an error handler for cases where there is an error
 // when updating the node status.
 // This allows the caller to have some control on how errors are dealt with when

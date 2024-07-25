@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"github.com/koupleless/virtual-kubelet/common/testutil/base"
 	"github.com/koupleless/virtual-kubelet/model"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -31,11 +32,11 @@ var _ = Describe("Module Publish", func() {
 		Expect(singleModuleBiz1Pod).NotTo(BeNil())
 	})
 
-	var mockBase *BaseMock
+	var mockBase *base.MockMqttBase
 	nodeId := "test-base"
 
 	It("mock base should start successfully", func() {
-		mockBase = NewBaseMock(nodeId, "base", "1.1.1", baseMqttClient)
+		mockBase = base.NewBaseMock(nodeId, "base", "1.1.1", baseMqttClient)
 		go mockBase.Run()
 		Eventually(func() bool {
 			_, err := k8sClient.CoreV1().Nodes().Get(ctx, model.VIRTUAL_NODE_NAME_PREFIX+nodeId, metav1.GetOptions{})

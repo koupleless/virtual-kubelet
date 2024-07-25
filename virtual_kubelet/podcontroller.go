@@ -254,7 +254,10 @@ func (pc *PodController) Run(ctx context.Context, podSyncWorkers int) (retErr er
 	if p, ok := pc.provider.(asyncProvider); ok {
 		provider = p
 	} else {
-		return pkgerrors.New("invalid provider type")
+		wrapped := &syncProviderWrapper{PodLifecycleHandler: pc.provider, l: pc.lister}
+		runProvider = wrapped.run
+		provider = wrapped
+		log.G(ctx).Debug("Wrapped non-async provider with async")
 	}
 	pc.provider = provider
 
@@ -262,6 +265,11 @@ func (pc *PodController) Run(ctx context.Context, podSyncWorkers int) (retErr er
 		pc.enqueuePodStatusUpdate(ctx, pod.DeepCopy())
 	})
 	go runProvider(ctx)
+
+	// Perform a reconciliation step that deletes any dangling pods from the provider.
+	// This happens only when the virtual-kubelet is starting, and operates on a "best-effort" basis.
+	// If by any reason the provider fails to delete a dangling pod, it will stay in the provider and deletion won't be retried.
+	pc.deleteDanglingPods(ctx, podSyncWorkers)
 
 	log.G(ctx).Info("starting workers")
 	group := &wait.Group{}
@@ -475,6 +483,74 @@ func (pc *PodController) syncPodInProvider(ctx context.Context, pod *corev1.Pod,
 		return err
 	}
 	return nil
+}
+
+// deleteDanglingPods checks whether the provider knows about any pods which Kubernetes doesn't know about, and deletes them.
+func (pc *PodController) deleteDanglingPods(ctx context.Context, threadiness int) {
+	ctx, span := trace.StartSpan(ctx, "deleteDanglingPods")
+	defer span.End()
+
+	// Grab the list of pods known to the provider.
+	pps, err := pc.provider.GetPods(ctx)
+	if err != nil {
+		err := pkgerrors.Wrap(err, "failed to fetch the list of pods from the provider")
+		span.SetStatus(err)
+		log.G(ctx).Error(err)
+		return
+	}
+
+	// Create a slice to hold the pods we will be deleting from the provider.
+	ptd := make([]*corev1.Pod, 0)
+
+	// Iterate over the pods known to the provider, marking for deletion those that don't exist in Kubernetes.
+	// Take on this opportunity to populate the list of key that correspond to pods known to the provider.
+	for _, pp := range pps {
+		if _, err := pc.lister.Pods(pp.Namespace).Get(pp.Name); err != nil {
+			if errors.IsNotFound(err) {
+				// The current pod does not exist in Kubernetes, so we mark it for deletion.
+				ptd = append(ptd, pp)
+				continue
+			}
+			// For some reason we couldn't fetch the pod from the lister, so we propagate the error.
+			err := pkgerrors.Wrap(err, "failed to fetch pod from the lister")
+			span.SetStatus(err)
+			log.G(ctx).Error(err)
+			return
+		}
+	}
+
+	// We delete each pod in its own goroutine, allowing a maximum of "threadiness" concurrent deletions.
+	semaphore := make(chan struct{}, threadiness)
+	var wg sync.WaitGroup
+	wg.Add(len(ptd))
+
+	// Iterate over the slice of pods to be deleted and delete them in the provider.
+	for _, pod := range ptd {
+		go func(ctx context.Context, pod *corev1.Pod) {
+			defer wg.Done()
+
+			ctx, span := trace.StartSpan(ctx, "deleteDanglingPod")
+			defer span.End()
+
+			semaphore <- struct{}{}
+			defer func() {
+				<-semaphore
+			}()
+
+			// Add the pod's attributes to the current span.
+			ctx = addPodAttributes(ctx, span, pod)
+			// Actually delete the pod.
+			if err := pc.provider.DeletePod(ctx, pod.DeepCopy()); err != nil && !errdefs.IsNotFound(err) {
+				span.SetStatus(err)
+				log.G(ctx).Errorf("failed to delete pod %q in provider", loggablePodName(pod))
+			} else {
+				log.G(ctx).Infof("deleted leaked pod %q in provider", loggablePodName(pod))
+			}
+		}(ctx, pod)
+	}
+
+	// Wait for all pods to be deleted.
+	wg.Wait()
 }
 
 // loggablePodName returns the "namespace/name" key for the specified pod.

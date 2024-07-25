@@ -22,6 +22,7 @@ import (
 	"github.com/koupleless/virtual-kubelet/controller/base_register_controller"
 	"github.com/koupleless/virtual-kubelet/tunnel"
 	"github.com/koupleless/virtual-kubelet/tunnel/mqtt_tunnel"
+	"github.com/koupleless/virtual-kubelet/virtual_kubelet/nodeutil"
 	"github.com/spf13/cobra"
 	"time"
 )
@@ -63,10 +64,16 @@ func runRootCommand(ctx context.Context, c Opts) error {
 	if c.EnableMqttTunnel {
 		tunnels = append(tunnels, &mqtt_tunnel.MqttTunnel{})
 	}
+
+	clientSet, err := nodeutil.ClientsetFromEnv(c.KubeConfigPath)
+	if err != nil {
+		return err
+	}
+
 	config := base_register_controller.BuildBaseRegisterControllerConfig{
 		ClientID: clientID,
 		K8SConfig: &base_register_controller.K8SConfig{
-			KubeConfigPath:     c.KubeConfigPath,
+			KubeClient:         clientSet,
 			InformerSyncPeriod: time.Minute,
 		},
 		Tunnels: tunnels,

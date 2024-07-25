@@ -9,7 +9,7 @@ import (
 
 type BuildBaseNodeConfig struct {
 	// KubeClient is the kube client instance
-	KubeClient *kubernetes.Clientset
+	KubeClient kubernetes.Interface
 
 	// PodLister is the pod lister
 	PodLister lister.PodLister

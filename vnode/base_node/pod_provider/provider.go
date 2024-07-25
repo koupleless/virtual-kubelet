@@ -21,6 +21,7 @@ import (
 	"github.com/koupleless/virtual-kubelet/tunnel"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet/nodeutil"
+	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/utils/ptr"
@@ -42,7 +43,7 @@ type BaseProvider struct {
 	Namespace        string
 	nodeID           string
 	localIP          string
-	k8sClient        *kubernetes.Clientset
+	k8sClient        kubernetes.Interface
 	runtimeInfoStore *RuntimeInfoStore
 
 	tunnel tunnel.Tunnel
@@ -66,7 +67,7 @@ type bizInfosCache struct {
 	LatestBizInfos []ark.ArkBizInfo
 }
 
-func NewBaseProvider(namespace, localIP, nodeID string, k8sClient *kubernetes.Clientset, t tunnel.Tunnel) *BaseProvider {
+func NewBaseProvider(namespace, localIP, nodeID string, k8sClient kubernetes.Interface, t tunnel.Tunnel) *BaseProvider {
 	provider := &BaseProvider{
 		Namespace:        namespace,
 		localIP:          localIP,
@@ -74,6 +75,9 @@ func NewBaseProvider(namespace, localIP, nodeID string, k8sClient *kubernetes.Cl
 		k8sClient:        k8sClient,
 		tunnel:           t,
 		runtimeInfoStore: NewRuntimeInfoStore(),
+		notify: func(pod *corev1.Pod) {
+			logrus.Info("default pod notifier notified", pod.Name)
+		},
 	}
 
 	provider.installOperationQueue = queue.New(
@@ -123,13 +127,9 @@ func (b *BaseProvider) checkAndUninstallDanglingBiz(ctx context.Context) {
 		}
 	}
 	// query all modules loading now, if not in binding, queue to uninstall
-	bizInfos, err := b.queryAllBiz(ctx)
-	if err != nil {
-		logger.WithError(err).Error("query biz info error")
-		return
-	}
+	bizInfos := b.queryAllBiz(ctx)
 	for _, bizInfo := range bizInfos {
-		if bizInfo.BizState == "RESOLVED" {
+		if bizInfo.BizState != "ACTIVATED" {
 			continue
 		}
 		bizIdentity := utils.ModelUtil.GetBizIdentityFromBizInfo(&bizInfo)
@@ -175,26 +175,23 @@ func (b *BaseProvider) SyncBizInfo(bizInfos []ark.ArkBizInfo) {
 	b.syncAllPodStatus(context.Background())
 }
 
-func (b *BaseProvider) queryAllBiz(_ context.Context) ([]ark.ArkBizInfo, error) {
+func (b *BaseProvider) queryAllBiz(_ context.Context) []ark.ArkBizInfo {
 	b.bizInfosCache.Lock()
 	defer b.bizInfosCache.Unlock()
-	return b.bizInfosCache.LatestBizInfos, nil
+	return b.bizInfosCache.LatestBizInfos
 }
 
-func (b *BaseProvider) queryBiz(ctx context.Context, bizIdentity string) (*ark.ArkBizInfo, error) {
-	infos, err := b.queryAllBiz(ctx)
-	if err != nil {
-		return nil, err
-	}
+func (b *BaseProvider) queryBiz(ctx context.Context, bizIdentity string) *ark.ArkBizInfo {
+	infos := b.queryAllBiz(ctx)
 
 	for _, info := range infos {
 		infoIdentity := utils.ModelUtil.GetBizIdentityFromBizInfo(&info)
 		if infoIdentity == bizIdentity {
-			return &info, nil
+			return &info
 		}
 	}
 
-	return nil, nil
+	return nil
 }
 
 func (b *BaseProvider) installBiz(ctx context.Context, bizModel *ark.BizModel) error {
@@ -212,14 +209,10 @@ func (b *BaseProvider) handleInstallOperation(ctx context.Context, bizIdentity s
 	bizModel := b.runtimeInfoStore.GetBizModel(bizIdentity)
 	if bizModel == nil {
 		// for installation, this should never happen, no retry here
-		logger.Error("Installing non-existent defaultPod")
+		logger.Error("Installing non-existent pod")
 		return nil
 	}
-	bizInfo, err := b.queryBiz(ctx, bizIdentity)
-	if err != nil {
-		logger.WithError(err).Error("QueryBizFailed")
-		return err
-	}
+	bizInfo := b.queryBiz(ctx, bizIdentity)
 
 	if bizInfo != nil && bizInfo.BizState == "ACTIVATED" {
 		logger.Info("BizAlreadyActivated")
@@ -232,12 +225,12 @@ func (b *BaseProvider) handleInstallOperation(ctx context.Context, bizIdentity s
 		return nil
 	}
 
-	if bizInfo != nil && bizInfo.BizState != "DEACTIVATED" {
+	if bizInfo != nil && bizInfo.BizState == "DEACTIVATED" {
 		logger.Error("BizInstalledButNotActivated")
 		return errors.New("BizInstalledButNotActivated")
 	}
 
-	if err = b.installBiz(ctx, bizModel); err != nil {
+	if err := b.installBiz(ctx, bizModel); err != nil {
 		logger.WithError(err).Error("InstallBizFailed")
 		return err
 	}
@@ -250,15 +243,11 @@ func (b *BaseProvider) handleUnInstallOperation(ctx context.Context, bizIdentity
 	logger := log.G(ctx).WithField("bizIdentity", bizIdentity)
 	logger.Info("HandleUnInstallOperationStarted")
 
-	bizInfo, err := b.queryBiz(ctx, bizIdentity)
-	if err != nil {
-		logger.WithError(err).Error("QueryBizFailed")
-		return err
-	}
+	bizInfo := b.queryBiz(ctx, bizIdentity)
 
 	if bizInfo != nil {
 		// local installed, call uninstall
-		if err = b.unInstallBiz(ctx, &ark.BizModel{
+		if err := b.unInstallBiz(ctx, &ark.BizModel{
 			BizName:    bizInfo.BizName,
 			BizVersion: bizInfo.BizVersion,
 		}); err != nil {
@@ -341,7 +330,6 @@ func (b *BaseProvider) GetPodStatus(ctx context.Context, namespace, name string)
 	podKey := namespace + "/" + name
 	pod := b.runtimeInfoStore.GetPodByKey(podKey)
 	podStatus := &corev1.PodStatus{}
-	logger := log.G(ctx)
 	if pod == nil {
 		podStatus.Phase = corev1.PodSucceeded
 		podStatus.Conditions = []corev1.PodCondition{
@@ -370,11 +358,7 @@ func (b *BaseProvider) GetPodStatus(ctx context.Context, namespace, name string)
 	// not in deletion
 	bizModels := utils.ModelUtil.GetBizModelsFromCoreV1Pod(pod)
 
-	bizInfos, err := b.queryAllBiz(ctx)
-	if err != nil {
-		logger.WithError(err).Error("QueryBizFailed")
-	}
-
+	bizInfos := b.queryAllBiz(ctx)
 	// bizIdentity
 	bizRuntimeInfos := make(map[string]*ark.ArkBizInfo)
 	for _, info := range bizInfos {

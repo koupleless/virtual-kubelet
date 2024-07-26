@@ -11,7 +11,6 @@ require (
 	github.com/google/go-cmp v0.6.0
 	github.com/google/uuid v1.4.0
 	github.com/koupleless/arkctl v0.2.2-0.20240702132710-aba4f6ced448
-	github.com/mochi-mqtt/server/v2 v2.6.4
 	github.com/onsi/ginkgo/v2 v2.15.0
 	github.com/onsi/gomega v1.31.0
 	github.com/pkg/errors v0.9.1
@@ -74,7 +73,6 @@ require (
 	github.com/prometheus/client_model v0.4.0 // indirect
 	github.com/prometheus/common v0.44.0 // indirect
 	github.com/prometheus/procfs v0.10.1 // indirect
-	github.com/rs/xid v1.4.0 // indirect
 	github.com/uber/jaeger-client-go v2.25.0+incompatible // indirect
 	go.opentelemetry.io/otel/metric v1.22.0 // indirect
 	golang.org/x/net v0.23.0 // indirect

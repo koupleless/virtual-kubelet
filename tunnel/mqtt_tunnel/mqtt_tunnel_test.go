@@ -2,18 +2,20 @@ package mqtt_tunnel
 
 import (
 	"context"
-	"fmt"
 	"github.com/koupleless/arkctl/v1/service/ark"
-	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/common/mqtt"
-	"github.com/koupleless/virtual-kubelet/common/testutil/base"
-	"github.com/koupleless/virtual-kubelet/common/testutil/mqtt_broker"
+	"github.com/koupleless/virtual-kubelet/common/testutil/mqtt_client"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/tunnel"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
 )
+
+func init() {
+	mqtt.DefaultMqttClientInitFunc = mqtt_client.NewMockMqttClient
+}
 
 var currBaseID string
 
@@ -24,17 +26,17 @@ var currBaseBizFetched string
 var currBizInfoFetched []ark.ArkBizInfo
 
 func baseDiscoverCallback(baseID string, data model.HeartBeatData, t tunnel.Tunnel) {
-	log.G(context.TODO()).Debugf("Discovered base id: %s", baseID)
+	logrus.Info("Discovered base id:", baseID)
 	currBaseID = baseID
 }
 
 func healthDataCallback(s string, data ark.HealthData) {
-	log.G(context.TODO()).Debugf("Health data received: %s", s)
+	logrus.Info("Health data received: ", s)
 	currBaseHealthFetched = s
 }
 
 func bizDataCallback(s string, infos []ark.ArkBizInfo) {
-	log.G(context.TODO()).Debugf("Biz data received: %s", s)
+	logrus.Info("Biz data received:", s)
 	currBaseBizFetched = s
 	currBizInfoFetched = infos
 }
@@ -42,7 +44,6 @@ func bizDataCallback(s string, infos []ark.ArkBizInfo) {
 func TestMqttTunnel_Register(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go mqtt_broker.StartLocalMqttBroker()
 	mt := MqttTunnel{}
 
 	err := mt.Register(ctx, "test-client", baseDiscoverCallback, healthDataCallback, bizDataCallback)
@@ -53,27 +54,20 @@ func TestMqttTunnel_Register(t *testing.T) {
 func TestMqttTunnel_BaseDiscover(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go mqtt_broker.StartLocalMqttBroker()
 	mt := MqttTunnel{}
 
 	err := mt.Register(ctx, "test-client", baseDiscoverCallback, healthDataCallback, bizDataCallback)
 	assert.NoError(t, err)
 
-	client, err := mqtt.NewMqttClient(&mqtt.ClientConfig{
-		Broker:   "localhost",
-		Port:     1883,
-		ClientID: "TestNewMqttClientID",
-		Username: "local",
-		Password: "public",
-	})
-	if err != nil {
-		fmt.Println(err.Error())
-	}
 	// mock base online
 	id := "test-base-discover"
-	mockBase := base.NewBaseMock(id, "base", "1.0.0", client)
 
-	go mockBase.Run()
+	mt.OnBaseStart(ctx, id)
+
+	mt.baseDiscoveredCallback(id, model.HeartBeatData{}, &mt)
+
+	mt.OnBaseStop(ctx, id)
+
 	assert.Eventually(t, func() bool {
 		return currBaseID == id
 	}, time.Second*5, 100*time.Millisecond)
@@ -82,33 +76,25 @@ func TestMqttTunnel_BaseDiscover(t *testing.T) {
 func TestMqttTunnel_FetchBaseInfo(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go mqtt_broker.StartLocalMqttBroker()
 	mt := MqttTunnel{}
 
 	err := mt.Register(ctx, "test-client", baseDiscoverCallback, healthDataCallback, bizDataCallback)
 	assert.NoError(t, err)
 
-	client, err := mqtt.NewMqttClient(&mqtt.ClientConfig{
-		Broker:   "localhost",
-		Port:     1883,
-		ClientID: "TestNewMqttClientID",
-		Username: "local",
-		Password: "public",
-	})
-	if err != nil {
-		fmt.Println(err.Error())
-	}
 	// mock base online
 	id := "test-base-fetch"
-	mockBase := base.NewBaseMock(id, "base", "1.0.0", client)
 
-	go mockBase.Run()
+	mt.baseDiscoveredCallback(id, model.HeartBeatData{}, &mt)
 
 	err = mt.FetchHealthData(ctx, id)
 	assert.NoError(t, err)
 
+	mt.healthDataArrivedCallback(id, ark.HealthData{})
+
 	err = mt.QueryAllBizData(ctx, id)
 	assert.NoError(t, err)
+
+	mt.queryAllBizDataArrivedCallback(id, []ark.ArkBizInfo{})
 
 	assert.Eventually(t, func() bool {
 		return currBaseID == id && currBaseHealthFetched == id && currBaseBizFetched == id
@@ -118,27 +104,15 @@ func TestMqttTunnel_FetchBaseInfo(t *testing.T) {
 func TestMqttTunnel_BaseBizOperation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go mqtt_broker.StartLocalMqttBroker()
 	mt := MqttTunnel{}
 
 	err := mt.Register(ctx, "test-client", baseDiscoverCallback, healthDataCallback, bizDataCallback)
 	assert.NoError(t, err)
 
-	client, err := mqtt.NewMqttClient(&mqtt.ClientConfig{
-		Broker:   "localhost",
-		Port:     1883,
-		ClientID: "TestNewMqttClientID",
-		Username: "local",
-		Password: "public",
-	})
-	if err != nil {
-		fmt.Println(err.Error())
-	}
 	// mock base online
 	id := "test-base-biz-operation"
-	mockBase := base.NewBaseMock(id, "base", "1.0.0", client)
 
-	go mockBase.Run()
+	mt.baseDiscoveredCallback(id, model.HeartBeatData{}, &mt)
 
 	assert.Eventually(t, func() bool {
 		return currBaseID == id
@@ -152,6 +126,14 @@ func TestMqttTunnel_BaseBizOperation(t *testing.T) {
 	err = mt.InstallBiz(ctx, id, &bizModel)
 	assert.NoError(t, err)
 
+	mt.queryAllBizDataArrivedCallback(id, []ark.ArkBizInfo{
+		{
+			BizName:    bizModel.BizName,
+			BizVersion: bizModel.BizVersion,
+			BizState:   "ACTIVATED",
+		},
+	})
+
 	assert.Eventually(t, func() bool {
 		return len(currBizInfoFetched) == 1 && currBizInfoFetched[0].BizName == bizModel.BizName
 	}, time.Second*5, 100*time.Millisecond)
@@ -159,7 +141,123 @@ func TestMqttTunnel_BaseBizOperation(t *testing.T) {
 	err = mt.UninstallBiz(ctx, id, &bizModel)
 	assert.NoError(t, err)
 
+	mt.queryAllBizDataArrivedCallback(id, []ark.ArkBizInfo{})
+
 	assert.Eventually(t, func() bool {
 		return len(currBizInfoFetched) == 0
+	}, time.Second*5, 100*time.Millisecond)
+}
+
+func TestMqttTunnel_MqttHeartCallback(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	mt := MqttTunnel{}
+
+	err := mt.Register(ctx, "test-client", baseDiscoverCallback, healthDataCallback, bizDataCallback)
+	assert.NoError(t, err)
+
+	// mock base online
+	id := "test-base-mqtt-heart-callback"
+
+	// error msg
+	mt.heartBeatMsgCallback(nil, &mqtt_client.MockMessage{
+		T: "koupleless/" + id + "/base/heart",
+		P: []byte(""),
+	})
+
+	// expired msg
+	mt.heartBeatMsgCallback(nil, &mqtt_client.MockMessage{
+		T: "koupleless/" + id + "/base/heart",
+		P: []byte("{}"),
+	})
+
+	// valid msg
+	mt.heartBeatMsgCallback(nil, &mqtt_client.MockMessage{
+		T: "koupleless/" + id + "/base/heart",
+		P: []byte("{\"publishTimestamp\":1000000000000000}"),
+	})
+
+	assert.Eventually(t, func() bool {
+		return currBaseID == id
+	}, time.Second*5, 100*time.Millisecond)
+}
+
+func TestMqttTunnel_MqttHealthCallback(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	mt := MqttTunnel{}
+
+	err := mt.Register(ctx, "test-client", baseDiscoverCallback, healthDataCallback, bizDataCallback)
+	assert.NoError(t, err)
+
+	// mock base online
+	id := "test-base-mqtt-health-callback"
+
+	// error msg
+	mt.healthMsgCallback(nil, &mqtt_client.MockMessage{
+		T: "koupleless/" + id + "/base/health",
+		P: []byte(""),
+	})
+
+	// expired msg
+	mt.healthMsgCallback(nil, &mqtt_client.MockMessage{
+		T: "koupleless/" + id + "/base/health",
+		P: []byte("{}"),
+	})
+
+	// not success
+	mt.healthMsgCallback(nil, &mqtt_client.MockMessage{
+		T: "koupleless/" + id + "/base/health",
+		P: []byte("{\"publishTimestamp\":1000000000000000}"),
+	})
+
+	// valid msg
+	mt.healthMsgCallback(nil, &mqtt_client.MockMessage{
+		T: "koupleless/" + id + "/base/health",
+		P: []byte("{\"publishTimestamp\":1000000000000000, \"data\":{\"code\":\"SUCCESS\"}}"),
+	})
+
+	assert.Eventually(t, func() bool {
+		return currBaseHealthFetched == id
+	}, time.Second*5, 100*time.Millisecond)
+}
+
+func TestMqttTunnel_MqttBizCallback(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	mt := MqttTunnel{}
+
+	err := mt.Register(ctx, "test-client", baseDiscoverCallback, healthDataCallback, bizDataCallback)
+	assert.NoError(t, err)
+
+	// mock base online
+	id := "test-base-mqtt-biz-callback"
+
+	// error msg
+	mt.bizMsgCallback(nil, &mqtt_client.MockMessage{
+		T: "koupleless/" + id + "/base/biz",
+		P: []byte(""),
+	})
+
+	// expired msg
+	mt.bizMsgCallback(nil, &mqtt_client.MockMessage{
+		T: "koupleless/" + id + "/base/biz",
+		P: []byte("{}"),
+	})
+
+	// not success
+	mt.bizMsgCallback(nil, &mqtt_client.MockMessage{
+		T: "koupleless/" + id + "/base/biz",
+		P: []byte("{\"publishTimestamp\":1000000000000000}"),
+	})
+
+	// valid msg
+	mt.bizMsgCallback(nil, &mqtt_client.MockMessage{
+		T: "koupleless/" + id + "/base/biz",
+		P: []byte("{\"publishTimestamp\":1000000000000000, \"data\":{\"code\":\"SUCCESS\"}}"),
+	})
+
+	assert.Eventually(t, func() bool {
+		return currBaseBizFetched == id
 	}, time.Second*5, 100*time.Millisecond)
 }

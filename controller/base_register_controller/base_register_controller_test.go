@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/koupleless/virtual-kubelet/common/mqtt"
 	"github.com/koupleless/virtual-kubelet/common/testutil/base"
-	"github.com/koupleless/virtual-kubelet/common/testutil/mqtt_broker"
+	"github.com/koupleless/virtual-kubelet/common/testutil/mqtt_client"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/tunnel"
 	"github.com/koupleless/virtual-kubelet/tunnel/mqtt_tunnel"
@@ -16,6 +16,10 @@ import (
 	"testing"
 	"time"
 )
+
+func init() {
+	mqtt.DefaultMqttClientInitFunc = mqtt_client.NewMockMqttClient
+}
 
 func TestNewBaseRegisterController_ConfigNil(t *testing.T) {
 	controller, err := NewBaseRegisterController(nil)
@@ -30,7 +34,6 @@ func TestNewBaseRegisterController_TunnelNotProvided(t *testing.T) {
 }
 
 func TestNewBaseRegisterController(t *testing.T) {
-	go mqtt_broker.StartLocalMqttBroker()
 	kubeClient := fake.NewSimpleClientset()
 
 	controller, err := NewBaseRegisterController(&BuildBaseRegisterControllerConfig{
@@ -50,7 +53,6 @@ func TestNewBaseRegisterController(t *testing.T) {
 func TestBaseRegisterController_Run(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go mqtt_broker.StartLocalMqttBroker()
 	kubeClient := fake.NewSimpleClientset()
 
 	controller, err := NewBaseRegisterController(&BuildBaseRegisterControllerConfig{
@@ -71,15 +73,18 @@ func TestBaseRegisterController_Run(t *testing.T) {
 
 	// mock base online
 	client, err := mqtt.NewMqttClient(&mqtt.ClientConfig{
-		Broker:   "localhost",
-		Port:     1883,
-		ClientID: "TestNewMqttClientID",
-		Username: "local",
-		Password: "public",
+		Broker:         "test-broker",
+		Port:           1883,
+		ClientID:       "TestNewMqttClientID",
+		Username:       "test-username",
+		Password:       "public",
+		ClientInitFunc: mqtt_client.NewMockMqttClient,
 	})
 	if err != nil {
 		fmt.Println(err.Error())
 	}
+	defer client.Disconnect()
+
 	// mock base online
 	id := "test-base"
 	mockBase := base.NewBaseMock(id, "base", "1.0.0", client)

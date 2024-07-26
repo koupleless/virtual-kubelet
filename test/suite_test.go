@@ -19,6 +19,7 @@ limitations under the License.
 import (
 	"context"
 	"github.com/koupleless/virtual-kubelet/common/mqtt"
+	"github.com/koupleless/virtual-kubelet/common/testutil/mqtt_client"
 	"github.com/koupleless/virtual-kubelet/controller/base_register_controller"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -63,11 +64,12 @@ var _ = BeforeSuite(func() {
 	By("preparing test environment")
 	k8sClient = fake.NewSimpleClientset()
 	baseMqttClient, err = mqtt.NewMqttClient(&mqtt.ClientConfig{
-		Broker:   "broker.emqx.io",
-		Port:     1883,
-		ClientID: "base-mqtt-client",
-		Username: "emqx",
-		Password: "public",
+		Broker:         "test-broker",
+		Port:           1883,
+		ClientID:       "base-mqtt-client",
+		Username:       "test-username",
+		Password:       "public",
+		ClientInitFunc: mqtt_client.NewMockMqttClient,
 	})
 	Expect(err).NotTo(HaveOccurred())
 	// start mc
@@ -90,6 +92,7 @@ var _ = BeforeSuite(func() {
 var _ = AfterSuite(func() {
 	By("shutting down test environment")
 	mainCancel()
+	baseMqttClient.Disconnect()
 })
 
 func getPodFromYamlFile(filePath string) (*corev1.Pod, error) {

@@ -2,7 +2,8 @@ package base_node
 
 import (
 	"context"
-	"github.com/koupleless/virtual-kubelet/common/testutil/mqtt_broker"
+	"github.com/koupleless/virtual-kubelet/common/mqtt"
+	"github.com/koupleless/virtual-kubelet/common/testutil/mqtt_client"
 	"github.com/koupleless/virtual-kubelet/tunnel/mqtt_tunnel"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
@@ -12,6 +13,10 @@ import (
 	"testing"
 	"time"
 )
+
+func init() {
+	mqtt.DefaultMqttClientInitFunc = mqtt_client.NewMockMqttClient
+}
 
 func TestNewBaseNode_NoTunnel(t *testing.T) {
 	_, err := NewBaseNode(&BuildBaseNodeConfig{})
@@ -51,7 +56,6 @@ func TestNewBaseNode(t *testing.T) {
 func TestBaseNode_RunAndContextDone(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go mqtt_broker.StartLocalMqttBroker()
 	mt := &mqtt_tunnel.MqttTunnel{}
 
 	err := mt.Register(ctx, "test-client", nil, nil, nil)
@@ -86,7 +90,6 @@ func TestBaseNode_RunAndContextDone(t *testing.T) {
 func TestBaseNode_RunAndExit(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go mqtt_broker.StartLocalMqttBroker()
 	mt := &mqtt_tunnel.MqttTunnel{}
 
 	err := mt.Register(ctx, "test-client", nil, nil, nil)
@@ -123,7 +126,6 @@ func TestBaseNode_RunAndExit(t *testing.T) {
 func TestBaseNode_PodOperator(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go mqtt_broker.StartLocalMqttBroker()
 	mt := &mqtt_tunnel.MqttTunnel{}
 
 	err := mt.Register(ctx, "test-client", nil, nil, nil)

@@ -6,9 +6,9 @@ import (
 )
 
 const (
-	DefaultMQTTBroker       = "localhost"
-	DefaultMQTTUsername     = "local"
-	DefaultMQTTPassword     = "pwd"
+	DefaultMQTTBroker       = "test-broker"
+	DefaultMQTTUsername     = "test-username"
+	DefaultMQTTPassword     = "public"
 	DefaultMQTTClientPrefix = "koupleless"
 	DefaultMQTTPort         = 1883
 )

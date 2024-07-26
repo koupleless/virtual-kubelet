@@ -21,6 +21,10 @@ const (
 	Qos2
 )
 
+type ClientInitFunc func(*mqtt.ClientOptions) mqtt.Client
+
+var DefaultMqttClientInitFunc ClientInitFunc = mqtt.NewClient
+
 type Client struct {
 	client mqtt.Client
 }
@@ -39,6 +43,7 @@ type ClientConfig struct {
 	DefaultMessageHandler mqtt.MessageHandler
 	OnConnectHandler      mqtt.OnConnectHandler
 	ConnectionLostHandler mqtt.ConnectionLostHandler
+	ClientInitFunc        ClientInitFunc
 }
 
 var defaultMessageHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
@@ -112,6 +117,10 @@ func NewMqttClient(cfg *ClientConfig) (*Client, error) {
 		cfg.ConnectionLostHandler = defaultConnectionLostHandler
 	}
 
+	if cfg.ClientInitFunc == nil {
+		cfg.ClientInitFunc = DefaultMqttClientInitFunc
+	}
+
 	if cfg.KeepAlive == 0 {
 		cfg.KeepAlive = time.Minute * 3
 	}
@@ -122,7 +131,7 @@ func NewMqttClient(cfg *ClientConfig) (*Client, error) {
 	opts.SetCleanSession(cfg.CleanSession)
 	opts.SetOnConnectHandler(cfg.OnConnectHandler)
 	opts.SetConnectionLostHandler(cfg.ConnectionLostHandler)
-	client := mqtt.NewClient(opts)
+	client := cfg.ClientInitFunc(opts)
 	if token := client.Connect(); token.Wait() && token.Error() != nil {
 		return nil, token.Error()
 	}
@@ -163,4 +172,9 @@ func (c *Client) Sub(topic string, qos byte, callBack mqtt.MessageHandler) error
 func (c *Client) UnSub(topic string) error {
 	c.client.Unsubscribe(topic)
 	return nil
+}
+
+// Disconnect unsubscribe a topic
+func (c *Client) Disconnect() {
+	c.client.Disconnect(200)
 }

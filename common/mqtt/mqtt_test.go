@@ -3,66 +3,68 @@ package mqtt
 import (
 	"fmt"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/koupleless/virtual-kubelet/common/testutil/mqtt_broker"
+	"github.com/koupleless/virtual-kubelet/common/testutil/mqtt_client"
 	"gotest.tools/assert"
 	"testing"
 	"time"
 )
 
 func TestNewMqttClient_Username(t *testing.T) {
-	go mqtt_broker.StartLocalMqttBroker()
 	client, err := NewMqttClient(&ClientConfig{
-		Broker:   "localhost",
-		Port:     1883,
-		ClientID: "TestNewMqttClientID",
-		Username: "emqx",
-		Password: "public",
+		Broker:         "test-broker",
+		Port:           1883,
+		ClientID:       "TestNewMqttClientID",
+		Username:       "test-username",
+		Password:       "public",
+		ClientInitFunc: mqtt_client.NewMockMqttClient,
 	})
+	defer client.Disconnect()
 	assert.Assert(t, err == nil)
 	assert.Assert(t, client != nil)
 }
 
 func TestNewMqttClient_CA(t *testing.T) {
 	client, err := NewMqttClient(&ClientConfig{
-		Broker:   "broker.emqx.io",
-		Port:     8883,
-		ClientID: "TestNewMqttClientID",
-		CAPath:   "../../samples/mqtt/sample-ca.crt",
+		Broker:         "test-broker",
+		Port:           8883,
+		ClientID:       "TestNewMqttClientID",
+		CAPath:         "../../samples/mqtt/sample-ca.crt",
+		ClientInitFunc: mqtt_client.NewMockMqttClient,
 	})
 	if err != nil {
 		fmt.Println(err.Error())
 	}
+	defer client.Disconnect()
 	assert.Assert(t, err == nil)
 	assert.Assert(t, client != nil)
 }
 
 func TestNewMqttClient_CA_WithClientNotValid(t *testing.T) {
 	client, err := NewMqttClient(&ClientConfig{
-		Broker:        "broker.emqx.io",
-		Port:          8883,
-		ClientID:      "TestNewMqttClientID",
-		CAPath:        "samples/sample-ca.crt",
-		ClientCrtPath: "test",
-		ClientKeyPath: "test",
+		Broker:         "test-broker",
+		Port:           8883,
+		ClientID:       "TestNewMqttClientID",
+		CAPath:         "samples/sample-ca.crt",
+		ClientCrtPath:  "test",
+		ClientKeyPath:  "test",
+		ClientInitFunc: mqtt_client.NewMockMqttClient,
 	})
 	assert.Assert(t, err != nil)
 	assert.Assert(t, client == nil)
 }
 
 func TestClient_Pub_Sub(t *testing.T) {
-	go mqtt_broker.StartLocalMqttBroker()
 	client, err := NewMqttClient(&ClientConfig{
-		Broker:   "localhost",
-		Port:     1883,
-		ClientID: "TestNewMqttClientID",
-		Username: "emqx",
-		Password: "public",
+		Broker:         "test-broker",
+		Port:           1883,
+		ClientID:       "TestNewMqttClientID",
+		Username:       "test-username",
+		Password:       "public",
+		ClientInitFunc: mqtt_client.NewMockMqttClient,
 	})
-	if err != nil {
-		fmt.Println(err.Error())
-	}
 	assert.Assert(t, err == nil)
 	assert.Assert(t, client != nil)
+	defer client.Disconnect()
 
 	recieved := make(chan struct{})
 
@@ -82,16 +84,17 @@ func TestClient_Pub_Sub(t *testing.T) {
 }
 
 func TestClient_Pub_Sub_Timeout(t *testing.T) {
-	go mqtt_broker.StartLocalMqttBroker()
 	client, err := NewMqttClient(&ClientConfig{
-		Broker:   "localhost",
-		Port:     1883,
-		ClientID: "TestNewMqttClientID",
-		Username: "emqx",
-		Password: "public",
+		Broker:         "test-broker",
+		Port:           1883,
+		ClientID:       "TestNewMqttClientID",
+		Username:       "test-username",
+		Password:       "public",
+		ClientInitFunc: mqtt_client.NewMockMqttClient,
 	})
 	assert.Assert(t, err == nil)
 	assert.Assert(t, client != nil)
+	defer client.Disconnect()
 
 	msgList := make([]mqtt.Message, 0)
 

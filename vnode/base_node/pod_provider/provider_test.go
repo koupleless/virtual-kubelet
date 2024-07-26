@@ -3,7 +3,8 @@ package pod_provider
 import (
 	"context"
 	"github.com/koupleless/arkctl/v1/service/ark"
-	"github.com/koupleless/virtual-kubelet/common/testutil/mqtt_broker"
+	"github.com/koupleless/virtual-kubelet/common/mqtt"
+	"github.com/koupleless/virtual-kubelet/common/testutil/mqtt_client"
 	"github.com/koupleless/virtual-kubelet/tunnel/mqtt_tunnel"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
@@ -12,10 +13,13 @@ import (
 	"testing"
 )
 
+func init() {
+	mqtt.DefaultMqttClientInitFunc = mqtt_client.NewMockMqttClient
+}
+
 func TestBaseProvider_Lifecycle(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go mqtt_broker.StartLocalMqttBroker()
 	mt := &mqtt_tunnel.MqttTunnel{}
 
 	err := mt.Register(ctx, "test-client", nil, nil, nil)

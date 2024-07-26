@@ -58,10 +58,11 @@ func (m *MqttTunnel) Register(ctx context.Context, clientID string, baseDiscover
 
 	c := &MqttConfig{}
 	c.init()
+	clientID = fmt.Sprintf("%s@@@%s", c.MqttClientPrefix, clientID)
 	m.mqttClient, err = mqtt.NewMqttClient(&mqtt.ClientConfig{
 		Broker:        c.MqttBroker,
 		Port:          c.MqttPort,
-		ClientID:      fmt.Sprintf("%s@@@%s", c.MqttClientPrefix, clientID),
+		ClientID:      clientID,
 		Username:      c.MqttUsername,
 		Password:      c.MqttPassword,
 		CAPath:        c.MqttCAPath,
@@ -69,12 +70,15 @@ func (m *MqttTunnel) Register(ctx context.Context, clientID string, baseDiscover
 		ClientKeyPath: c.MqttClientKeyPath,
 		CleanSession:  true,
 		OnConnectHandler: func(client paho.Client) {
-			log.G(ctx).Info("Connected")
-			reader := client.OptionsReader()
-			log.G(ctx).Info("Connect options: ", reader.ClientID())
+			log.G(ctx).Info("Connected :", clientID)
 			client.Subscribe(model.BaseHeartBeatTopic, mqtt.Qos1, m.heartBeatMsgCallback)
 		},
 	})
+
+	go func() {
+		<-ctx.Done()
+		m.mqttClient.Disconnect()
+	}()
 
 	return
 }

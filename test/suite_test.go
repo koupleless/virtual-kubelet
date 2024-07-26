@@ -20,7 +20,6 @@ import (
 	"context"
 	"github.com/koupleless/virtual-kubelet/common/mqtt"
 	"github.com/koupleless/virtual-kubelet/controller/base_register_controller"
-	"github.com/koupleless/virtual-kubelet/virtual_kubelet/nodeutil"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/apps/v1"
@@ -28,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/util/homedir"
 	"log"
 	"os"
@@ -61,8 +61,7 @@ var mainCancel context.CancelFunc
 var _ = BeforeSuite(func() {
 	mainContext, mainCancel = context.WithCancel(context.Background())
 	By("preparing test environment")
-	k8sClient, err = nodeutil.ClientsetFromEnv(DefaultKubeConfigPath)
-	Expect(err).NotTo(HaveOccurred())
+	k8sClient = fake.NewSimpleClientset()
 	baseMqttClient, err = mqtt.NewMqttClient(&mqtt.ClientConfig{
 		Broker:   "broker.emqx.io",
 		Port:     1883,
@@ -74,7 +73,7 @@ var _ = BeforeSuite(func() {
 	// start mc
 	registerController, err := base_register_controller.NewBaseRegisterController(&base_register_controller.BuildBaseRegisterControllerConfig{
 		K8SConfig: &base_register_controller.K8SConfig{
-			KubeConfigPath:     DefaultKubeConfigPath,
+			KubeClient:         k8sClient,
 			InformerSyncPeriod: time.Minute * 5,
 		},
 		// TODO add provider

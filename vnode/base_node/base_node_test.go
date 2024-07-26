@@ -2,6 +2,7 @@ package base_node
 
 import (
 	"context"
+	"github.com/koupleless/arkctl/v1/service/ark"
 	"github.com/koupleless/virtual-kubelet/common/mqtt"
 	"github.com/koupleless/virtual-kubelet/common/testutil/mqtt_client"
 	"github.com/koupleless/virtual-kubelet/tunnel/mqtt_tunnel"
@@ -30,6 +31,14 @@ func TestNewBaseNode_NoNodeID(t *testing.T) {
 	assert.NotNil(t, err)
 }
 
+func TestNewBaseNode_NoClient(t *testing.T) {
+	_, err := NewBaseNode(&BuildBaseNodeConfig{
+		Tunnel: &mqtt_tunnel.MqttTunnel{},
+		NodeID: "test-node",
+	})
+	assert.NotNil(t, err)
+}
+
 func TestNewBaseNode(t *testing.T) {
 	kubeClient := fake.NewSimpleClientset()
 
@@ -51,6 +60,39 @@ func TestNewBaseNode(t *testing.T) {
 	})
 	assert.NotNil(t, baseNode)
 	assert.Nil(t, err)
+}
+
+func TestBaseNode_Data_flow(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	kubeClient := fake.NewSimpleClientset()
+
+	fakeFactory := informers.NewSharedInformerFactory(kubeClient, time.Minute)
+
+	fakeInformer := fakeFactory.Core().V1().Pods()
+	fakeLister := fakeInformer.Lister()
+
+	baseNode, err := NewBaseNode(&BuildBaseNodeConfig{
+		KubeClient:  kubeClient,
+		PodLister:   fakeLister,
+		PodInformer: fakeInformer,
+		Tunnel:      &mqtt_tunnel.MqttTunnel{},
+		NodeID:      "test-node",
+		NodeIP:      "127.0.0.1",
+		TechStack:   "java",
+		BizName:     "testMaster",
+		BizVersion:  "1.0.0",
+	})
+	assert.NotNil(t, baseNode)
+	assert.Nil(t, err)
+
+	go baseNode.listenAndSync(ctx)
+
+	baseNode.BaseBizInfoChan <- []ark.ArkBizInfo{}
+
+	baseNode.BaseHealthInfoChan <- ark.HealthData{}
+
 }
 
 func TestBaseNode_RunAndContextDone(t *testing.T) {

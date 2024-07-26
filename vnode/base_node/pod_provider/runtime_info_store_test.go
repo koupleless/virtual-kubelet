@@ -123,3 +123,10 @@ func TestRuntimeInfoStore_GetRelatedPodKeyByBizIdentity(t *testing.T) {
 	}))
 	assert.Assert(t, podKey == "")
 }
+
+func TestRuntimeInfoStore_DeletePod(t *testing.T) {
+	runtimeInfoStore = NewRuntimeInfoStore()
+	runtimeInfoStore.PutPod(defaultPod)
+	runtimeInfoStore.DeletePod(runtimeInfoStore.getPodKey(defaultPod))
+	assert.Assert(t, len(runtimeInfoStore.GetPods()) == 0)
+}

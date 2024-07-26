@@ -15,35 +15,19 @@
 package root
 
 import (
-	"fmt"
-	"github.com/mitchellh/go-homedir"
 	"os"
-	"path/filepath"
-	"strconv"
 	"time"
-
-	"github.com/pkg/errors"
-	corev1 "k8s.io/api/core/v1"
 )
 
 // Defaults for root command options
 const (
-	DefaultNodeName             = "virtual-kubelet"
+	DefaultNodeName             = "module-controller"
 	DefaultOperatingSystem      = "linux"
 	DefaultInformerResyncPeriod = 1 * time.Minute
-	DefaultMetricsAddr          = ":10255"
-	DefaultListenPort           = 10250 // TODO(cpuguy83)(VK1.0): Change this to an addr instead of just a port.. we should not be listening on all interfaces.
-	DefaultPodSyncWorkers       = 10
-	DefaultKubeNamespace        = corev1.NamespaceAll
-	DefaultKubeClusterDomain    = "cluster.local"
-
-	DefaultTaintEffect           = string(corev1.TaintEffectNoSchedule)
-	DefaultTaintKey              = "virtual-kubelet.io/provider"
-	DefaultStreamIdleTimeout     = 30 * time.Second
-	DefaultStreamCreationTimeout = 30 * time.Second
+	DefaultPodSyncWorkers       = 4
 )
 
-// Opts stores all the options for configuring the root virtual-kubelet command.
+// Opts stores all the options for configuring the root module-controller command.
 // It is used for setting flag values.
 //
 // You can set the default options by creating a new `Opts` struct and passing
@@ -51,52 +35,22 @@ const (
 type Opts struct {
 	// Path to the kubeconfig to use to connect to the Kubernetes API server.
 	KubeConfigPath string
-	// Namespace to watch for pods and other resources
-	KubeNamespace string
-	// Domain suffix to append to search domains for the pods created by virtual-kubelet
-	KubeClusterDomain string
-
-	// Sets the port to listen for requests from the Kubernetes API server
-	ListenPort int32
-
-	// Node name to use when creating a node in Kubernetes
-	NodeName string
-
 	// Operating system to run pods for
 	OperatingSystem string
-
-	Provider           string
-	ProviderConfigPath string
-
-	TaintKey     string
-	TaintEffect  string
-	DisableTaint bool
-
-	MetricsAddr string
 
 	// Number of workers to use to handle pod notifications
 	PodSyncWorkers       int
 	InformerResyncPeriod time.Duration
 
-	// Use node leases when supported by Kubernetes (instead of node status updates)
-	EnableNodeLease bool
-
 	TraceExporters  []string
 	TraceSampleRate string
 	TraceConfig     TracingExporterOptions
 
-	// Startup Timeout is how long to wait for the kubelet to start
-	StartupTimeout time.Duration
-	// StreamIdleTimeout is the maximum time a streaming connection
-	// can be idle before the connection is automatically closed.
-	StreamIdleTimeout time.Duration
-	// StreamCreationTimeout is the maximum time for streaming connection
-	StreamCreationTimeout time.Duration
+	// Tunnel config
+	EnableMqttTunnel bool
 
 	Version string
 }
-
-const maxInt32 = 1<<31 - 1
 
 // SetDefaultOpts sets default options for unset values on the passed in option struct.
 // Fields tht are already set will not be modified.
@@ -105,16 +59,8 @@ func SetDefaultOpts(c *Opts) error {
 		c.OperatingSystem = DefaultOperatingSystem
 	}
 
-	if c.NodeName == "" {
-		c.NodeName = getEnv("VNODE_NAME", DefaultNodeName)
-	}
-
 	if c.InformerResyncPeriod == 0 {
 		c.InformerResyncPeriod = DefaultInformerResyncPeriod
-	}
-
-	if c.MetricsAddr == "" {
-		c.MetricsAddr = DefaultMetricsAddr
 	}
 
 	if c.PodSyncWorkers == 0 {
@@ -125,56 +71,9 @@ func SetDefaultOpts(c *Opts) error {
 		c.TraceConfig.ServiceName = DefaultNodeName
 	}
 
-	if c.ListenPort == 0 {
-		if kp := os.Getenv("KUBELET_PORT"); kp != "" {
-			p, err := strconv.Atoi(kp)
-			if err != nil {
-				return errors.Wrap(err, "error parsing KUBELET_PORT environment variable")
-			}
-			if p > maxInt32 {
-				return fmt.Errorf("KUBELET_PORT environment variable is too large")
-			}
-			/* #nosec */
-			c.ListenPort = int32(p)
-		} else {
-			c.ListenPort = DefaultListenPort
-		}
-	}
-
-	if c.KubeNamespace == "" {
-		c.KubeNamespace = getEnv("KUBE_NAME_SPACE", DefaultKubeNamespace)
-	}
-
-	if c.KubeClusterDomain == "" {
-		c.KubeClusterDomain = DefaultKubeClusterDomain
-	}
-
-	if c.TaintKey == "" {
-		c.TaintKey = DefaultTaintKey
-	}
-	if c.TaintEffect == "" {
-		c.TaintEffect = DefaultTaintEffect
-	}
-
 	if c.KubeConfigPath == "" {
-		c.KubeConfigPath = os.Getenv("KUBECONFIG")
-		if c.KubeConfigPath == "" {
-			home, _ := homedir.Dir()
-			if home != "" {
-				c.KubeConfigPath = filepath.Join(home, ".kube", "config")
-			}
-		}
+		c.KubeConfigPath = os.Getenv("KUBE_CONFIG_PATH")
 	}
-
-	if c.StreamIdleTimeout == 0 {
-		c.StreamIdleTimeout = DefaultStreamIdleTimeout
-	}
-
-	if c.StreamCreationTimeout == 0 {
-		c.StreamCreationTimeout = DefaultStreamCreationTimeout
-	}
-
-	c.Provider = "mock"
 
 	return nil
 }

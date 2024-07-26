@@ -16,25 +16,23 @@ package main
 
 import (
 	"context"
-
+	"github.com/koupleless/virtual-kubelet/commands/root"
+	"github.com/koupleless/virtual-kubelet/common/log"
+	logruslogger "github.com/koupleless/virtual-kubelet/common/log/logrus"
+	"github.com/koupleless/virtual-kubelet/common/trace"
+	"github.com/koupleless/virtual-kubelet/common/trace/opencensus"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
-
-	"github.com/koupleless/virtual-kubelet/commands/root"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-	"github.com/spf13/cobra"
-	"github.com/virtual-kubelet/virtual-kubelet/log"
-	logruslogger "github.com/virtual-kubelet/virtual-kubelet/log/logrus"
-	"github.com/virtual-kubelet/virtual-kubelet/trace"
-	"github.com/virtual-kubelet/virtual-kubelet/trace/opencensus"
 )
 
 var (
-	buildVersion = "N/A"
-	k8sVersion   = "v1.15.2" // This should follow the version of k8s.io/kubernetes we are importing
+	buildVersion = "0.0.1"
+	k8sVersion   = "v1.28.9" // This should follow the version of k8s.io/kubernetes we are importing
 )
 
 func main() {

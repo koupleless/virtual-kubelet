@@ -23,9 +23,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/koupleless/virtual-kubelet/common/errdefs"
+	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/pkg/errors"
-	"github.com/virtual-kubelet/virtual-kubelet/errdefs"
-	"github.com/virtual-kubelet/virtual-kubelet/log"
 	octrace "go.opencensus.io/trace"
 	"go.opencensus.io/zpages"
 )
@@ -48,8 +48,6 @@ func setupTracing(ctx context.Context, c Opts) error {
 		c.TraceConfig.Tags = make(map[string]string, 3)
 	}
 	c.TraceConfig.Tags["operatingSystem"] = c.OperatingSystem
-	c.TraceConfig.Tags["provider"] = c.Provider
-	c.TraceConfig.Tags["nodeName"] = c.NodeName
 	for _, e := range c.TraceExporters {
 		if e == "zpages" {
 			setupZpages(ctx)

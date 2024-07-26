@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/koupleless/virtual-kubelet/common/log"
+	logruslogger "github.com/koupleless/virtual-kubelet/common/log/logrus"
 	"github.com/sirupsen/logrus"
-	"github.com/virtual-kubelet/virtual-kubelet/log"
-	logruslogger "github.com/virtual-kubelet/virtual-kubelet/log/logrus"
 	"golang.org/x/time/rate"
 	"gotest.tools/assert"
 	is "gotest.tools/assert/cmp"
@@ -493,18 +493,18 @@ func (n nonmovingClock) Since(t time.Time) time.Duration {
 	return n.Now().Sub(t)
 }
 
-func (n nonmovingClock) After(d time.Duration) <-chan time.Time {
+func (n nonmovingClock) After(_ time.Duration) <-chan time.Time {
 	panic("implement me")
 }
 
-func (n nonmovingClock) NewTimer(d time.Duration) clock.Timer {
+func (n nonmovingClock) NewTimer(_ time.Duration) clock.Timer {
 	panic("implement me")
 }
 
-func (n nonmovingClock) Sleep(d time.Duration) {
+func (n nonmovingClock) Sleep(_ time.Duration) {
 	panic("implement me")
 }
 
-func (n nonmovingClock) Tick(d time.Duration) <-chan time.Time {
+func (n nonmovingClock) Tick(_ time.Duration) <-chan time.Time {
 	panic("implement me")
 }

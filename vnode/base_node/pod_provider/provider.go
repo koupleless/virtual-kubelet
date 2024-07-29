@@ -129,7 +129,7 @@ func (b *BaseProvider) checkAndUninstallDanglingBiz(ctx context.Context) {
 	// query all modules loading now, if not in binding, queue to uninstall
 	bizInfos := b.queryAllBiz(ctx)
 	for _, bizInfo := range bizInfos {
-		if bizInfo.BizState != "ACTIVATED" {
+		if bizInfo.BizState != "ACTIVATED" && bizInfo.BizState != "DEACTIVATED" {
 			continue
 		}
 		bizIdentity := utils.ModelUtil.GetBizIdentityFromBizInfo(&bizInfo)
@@ -418,7 +418,7 @@ func (b *BaseProvider) GetPodStatus(ctx context.Context, namespace, name string)
 	}
 
 	if isSomeContainerFailed {
-		podStatus.Phase = corev1.PodFailed
+		podStatus.Phase = corev1.PodRunning
 		podStatus.Conditions = []corev1.PodCondition{
 			{
 				Type:   "basement.koupleless.io/installed",

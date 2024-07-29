@@ -94,7 +94,7 @@ func TestBaseProvider_Lifecycle(t *testing.T) {
 
 	podStatus, err = provider.GetPodStatus(ctx, pod.Namespace, pod.Name)
 	assert.NoError(t, err)
-	assert.Equal(t, podStatus.Phase, corev1.PodFailed)
+	assert.Equal(t, podStatus.Phase, corev1.PodRunning)
 
 	podCopy := pod.DeepCopy()
 	podCopy.Spec.Containers = []corev1.Container{

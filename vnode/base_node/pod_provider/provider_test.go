@@ -115,6 +115,21 @@ func TestBaseProvider_Lifecycle(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Nil(t, podLocal)
 
+	podCopy = pod.DeepCopy()
+	podCopy.Spec.Containers = []corev1.Container{
+		{
+			Name:  "test-container",
+			Image: "test-image",
+			Env: []corev1.EnvVar{
+				{
+					Name:  "BIZ_VERSION",
+					Value: "0.0.1",
+				},
+			},
+		},
+	}
+	provider.runtimeInfoStore.PutPod(pod)
+
 	provider.SyncBizInfo([]ark.ArkBizInfo{
 		{
 			BizName:    "test-container",
@@ -124,6 +139,16 @@ func TestBaseProvider_Lifecycle(t *testing.T) {
 		{
 			BizName:    "test-container2",
 			BizState:   "ACTIVATED",
+			BizVersion: "0.0.1",
+		},
+		{
+			BizName:    "test-container3",
+			BizState:   "RESOLVED",
+			BizVersion: "0.0.1",
+		},
+		{
+			BizName:    "test-container4",
+			BizState:   "DEACTIVATED",
 			BizVersion: "0.0.1",
 		},
 	})

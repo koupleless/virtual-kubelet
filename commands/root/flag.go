@@ -16,46 +16,11 @@ package root
 
 import (
 	"flag"
-	"fmt"
 	"os"
-	"strings"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 	klog "k8s.io/klog/v2"
 )
-
-type mapVar map[string]string
-
-func (mv mapVar) String() string {
-	var s string
-	for k, v := range mv {
-		if s == "" {
-			s = fmt.Sprintf("%s=%v", k, v)
-		} else {
-			s += fmt.Sprintf(", %s=%v", k, v)
-		}
-	}
-	return s
-}
-
-func (mv mapVar) Set(s string) error {
-	split := strings.SplitN(s, "=", 2)
-	if len(split) != 2 {
-		return errors.Errorf("invalid format, must be `key=value`: %s", s)
-	}
-
-	_, ok := mv[split[0]]
-	if ok {
-		return errors.Errorf("duplicate key: %s", split[0])
-	}
-	mv[split[0]] = split[1]
-	return nil
-}
-
-func (mv mapVar) Type() string {
-	return "map"
-}
 
 func installFlags(flags *pflag.FlagSet, c *Opts) {
 	flags.StringVar(&c.KubeConfigPath, "kubeconfig", c.KubeConfigPath, "kube config file to use for connecting to the Kubernetes API server")
@@ -63,14 +28,10 @@ func installFlags(flags *pflag.FlagSet, c *Opts) {
 
 	flags.IntVar(&c.PodSyncWorkers, "pod-sync-workers", c.PodSyncWorkers, `set the number of pod synchronization workers`)
 
-	flags.StringSliceVar(&c.TraceExporters, "trace-exporter", c.TraceExporters, fmt.Sprintf("sets the tracing exporter to use, available exporters: %s", AvailableTraceExporters()))
-	flags.StringVar(&c.TraceConfig.ServiceName, "trace-service-name", c.TraceConfig.ServiceName, "sets the name of the service used to register with the trace exporter")
-	flags.Var(mapVar(c.TraceConfig.Tags), "trace-tag", "add tags to include with traces in key=value form")
-	flags.StringVar(&c.TraceSampleRate, "trace-sample-rate", c.TraceSampleRate, "set probability of tracing samples")
-
 	flags.DurationVar(&c.InformerResyncPeriod, "full-resync-period", c.InformerResyncPeriod, "how often to perform a full resync of pods between kubernetes and the provider")
 
 	flags.BoolVar(&c.EnableMqttTunnel, "enable-mqtt-tunnel", c.EnableMqttTunnel, "mqtt tunnel enable flag")
+	flags.StringVar(&c.Env, "env", c.Env, "env config")
 
 	flagset := flag.NewFlagSet("klog", flag.PanicOnError)
 	klog.InitFlags(flagset)

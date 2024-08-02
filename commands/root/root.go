@@ -49,15 +49,12 @@ func runRootCommand(ctx context.Context, c Opts) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	if err := setupTracing(ctx, c); err != nil {
-		return err
-	}
-
 	clientID := uuid.New().String()
 
 	ctx = log.WithLogger(ctx, log.G(ctx).WithFields(log.Fields{
 		"operatingSystem": c.OperatingSystem,
 		"clientID":        clientID,
+		"env":             c.Env,
 	}))
 
 	tunnels := make([]tunnel.Tunnel, 0)
@@ -72,6 +69,7 @@ func runRootCommand(ctx context.Context, c Opts) error {
 
 	config := base_register_controller.BuildBaseRegisterControllerConfig{
 		ClientID: clientID,
+		Env:      c.Env,
 		K8SConfig: &base_register_controller.K8SConfig{
 			KubeClient:         clientSet,
 			InformerSyncPeriod: time.Minute,
@@ -88,11 +86,18 @@ func runRootCommand(ctx context.Context, c Opts) error {
 		return errors.New("register controller is nil")
 	}
 
-	registerController.Run(ctx)
+	go registerController.Run(ctx)
+
+	// waiting for register controller ready
+	<-registerController.Ready()
+
+	log.G(ctx).Info("Module controller running")
 
 	select {
 	case <-ctx.Done():
+		log.G(ctx).Error("context canceled")
 	case <-registerController.Done():
+		log.G(ctx).WithError(registerController.Err()).Error("register controller is stopped")
 	}
 
 	return registerController.Err()

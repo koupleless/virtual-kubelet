@@ -99,10 +99,16 @@ func (v *BaseNodeProvider) BuildVirtualNode(node *corev1.Node) {
 	node.Labels["base.koupleless.io/stack"] = config.TechStack
 	node.Labels["base.koupleless.io/version"] = config.Version
 	node.Labels["base.koupleless.io/name"] = config.BizName
+	node.Labels["base.koupleless.io/env"] = config.Env
 	node.Spec.Taints = []corev1.Taint{
 		{
 			Key:    "schedule.koupleless.io/virtual-node",
 			Value:  "True",
+			Effect: corev1.TaintEffectNoExecute,
+		},
+		{
+			Key:    "schedule.koupleless.io/node-env",
+			Value:  config.Env,
 			Effect: corev1.TaintEffectNoExecute,
 		},
 	}

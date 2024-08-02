@@ -35,3 +35,7 @@ spec:
       operator: "Equal"
       value: "True"
       effect: "NoExecute"
+    - key: "schedule.koupleless.io/node-env" # 确保模块能够调度到特定环境的基座node上，这里Virtual Kubelet使用taint对env做了强管控，以实现更强的隔离能力
+      operator: "Equal"
+      value: "dev"
+      effect: "NoExecute"

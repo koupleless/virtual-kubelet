@@ -40,3 +40,26 @@ func TestConvertByteNumToResourceQuantity(t *testing.T) {
 	quantity = ConvertByteNumToResourceQuantity(1025)
 	assert.Assert(t, quantity.String() == "1Ki")
 }
+
+func TestCheckAndFinallyCall_timeout(t *testing.T) {
+	success := false
+	CheckAndFinallyCall(func() bool {
+		return success
+	}, time.Second, time.Millisecond*100, func() {
+		return
+	})
+}
+
+func TestCheckAndFinallyCall_success(t *testing.T) {
+	success := false
+	called := false
+	go CheckAndFinallyCall(func() bool {
+		return success
+	}, time.Second, time.Millisecond*100, func() {
+		called = true
+		return
+	})
+	success = true
+	time.Sleep(time.Millisecond * 200)
+	assert.Assert(t, called)
+}

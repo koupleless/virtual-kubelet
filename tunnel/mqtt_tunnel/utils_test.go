@@ -23,6 +23,6 @@ func TestExpired(t *testing.T) {
 }
 
 func TestFormatArkletCommandTopic(t *testing.T) {
-	topic := formatArkletCommandTopic("test", model.CommandHealth)
-	assert.Assert(t, topic == "koupleless/test/health")
+	topic := formatArkletCommandTopic("test", "test", model.CommandHealth)
+	assert.Assert(t, topic == "koupleless_test/test/health")
 }

@@ -17,6 +17,7 @@ var _ tunnel.Tunnel = &MqttTunnel{}
 
 type MqttTunnel struct {
 	mqttClient *mqtt.Client
+	env        string
 
 	baseDiscoveredCallback         func(string, model.HeartBeatData, tunnel.Tunnel)
 	healthDataArrivedCallback      func(string, ark.HealthData)
@@ -24,22 +25,22 @@ type MqttTunnel struct {
 }
 
 func (m *MqttTunnel) OnBaseStart(ctx context.Context, baseID string) {
-	err := m.mqttClient.Sub(fmt.Sprintf(model.BaseHealthTopic, baseID), mqtt.Qos1, m.healthMsgCallback)
+	err := m.mqttClient.Sub(fmt.Sprintf(model.BaseHealthTopic, m.env, baseID), mqtt.Qos1, m.healthMsgCallback)
 	if err != nil {
 		log.G(ctx).Error(err.Error())
 	}
-	err = m.mqttClient.Sub(fmt.Sprintf(model.BaseBizTopic, baseID), mqtt.Qos1, m.bizMsgCallback)
+	err = m.mqttClient.Sub(fmt.Sprintf(model.BaseBizTopic, m.env, baseID), mqtt.Qos1, m.bizMsgCallback)
 	if err != nil {
 		log.G(ctx).Error(err.Error())
 	}
 }
 
 func (m *MqttTunnel) OnBaseStop(ctx context.Context, baseID string) {
-	err := m.mqttClient.UnSub(fmt.Sprintf(model.BaseHealthTopic, baseID))
+	err := m.mqttClient.UnSub(fmt.Sprintf(model.BaseHealthTopic, m.env, baseID))
 	if err != nil {
 		log.G(ctx).Error(err.Error())
 	}
-	err = m.mqttClient.UnSub(fmt.Sprintf(model.BaseBizTopic, baseID))
+	err = m.mqttClient.UnSub(fmt.Sprintf(model.BaseBizTopic, m.env, baseID))
 	if err != nil {
 		log.G(ctx).Error(err.Error())
 	}
@@ -49,7 +50,7 @@ func (m *MqttTunnel) Name() string {
 	return "mqtt_tunnel_provider"
 }
 
-func (m *MqttTunnel) Register(ctx context.Context, clientID string, baseDiscoveredCallback tunnel.BaseDiscoveredCallback, healthDataArrivedCallback tunnel.HealthDataArrivedCallback, queryAllBizDataArrivedCallback tunnel.QueryAllBizDataArrivedCallback) (err error) {
+func (m *MqttTunnel) Register(ctx context.Context, clientID, env string, baseDiscoveredCallback tunnel.BaseDiscoveredCallback, healthDataArrivedCallback tunnel.HealthDataArrivedCallback, queryAllBizDataArrivedCallback tunnel.QueryAllBizDataArrivedCallback) (err error) {
 	m.baseDiscoveredCallback = baseDiscoveredCallback
 
 	m.healthDataArrivedCallback = healthDataArrivedCallback
@@ -59,6 +60,7 @@ func (m *MqttTunnel) Register(ctx context.Context, clientID string, baseDiscover
 	c := &MqttConfig{}
 	c.init()
 	clientID = fmt.Sprintf("%s@@@%s", c.MqttClientPrefix, clientID)
+	m.env = env
 	m.mqttClient, err = mqtt.NewMqttClient(&mqtt.ClientConfig{
 		Broker:        c.MqttBroker,
 		Port:          c.MqttPort,
@@ -70,8 +72,8 @@ func (m *MqttTunnel) Register(ctx context.Context, clientID string, baseDiscover
 		ClientKeyPath: c.MqttClientKeyPath,
 		CleanSession:  true,
 		OnConnectHandler: func(client paho.Client) {
-			log.G(ctx).Info("Connected :", clientID)
-			client.Subscribe(model.BaseHeartBeatTopic, mqtt.Qos1, m.heartBeatMsgCallback)
+			log.G(ctx).Info("MQTT client connected :", clientID)
+			client.Subscribe(fmt.Sprintf(model.BaseHeartBeatTopic, m.env), mqtt.Qos1, m.heartBeatMsgCallback)
 		},
 	})
 
@@ -142,19 +144,19 @@ func (m *MqttTunnel) bizMsgCallback(_ paho.Client, msg paho.Message) {
 }
 
 func (m *MqttTunnel) FetchHealthData(_ context.Context, baseID string) error {
-	return m.mqttClient.Pub(formatArkletCommandTopic(baseID, model.CommandHealth), mqtt.Qos0, []byte("{}"))
+	return m.mqttClient.Pub(formatArkletCommandTopic(m.env, baseID, model.CommandHealth), mqtt.Qos0, []byte("{}"))
 }
 
 func (m *MqttTunnel) QueryAllBizData(_ context.Context, baseID string) error {
-	return m.mqttClient.Pub(formatArkletCommandTopic(baseID, model.CommandQueryAllBiz), mqtt.Qos0, []byte("{}"))
+	return m.mqttClient.Pub(formatArkletCommandTopic(m.env, baseID, model.CommandQueryAllBiz), mqtt.Qos0, []byte("{}"))
 }
 
 func (m *MqttTunnel) InstallBiz(_ context.Context, deviceID string, bizModel *ark.BizModel) error {
 	installBizRequestBytes, _ := json.Marshal(bizModel)
-	return m.mqttClient.Pub(formatArkletCommandTopic(deviceID, model.CommandInstallBiz), mqtt.Qos0, installBizRequestBytes)
+	return m.mqttClient.Pub(formatArkletCommandTopic(m.env, deviceID, model.CommandInstallBiz), mqtt.Qos0, installBizRequestBytes)
 }
 
 func (m *MqttTunnel) UninstallBiz(_ context.Context, deviceID string, bizModel *ark.BizModel) error {
 	unInstallBizRequestBytes, _ := json.Marshal(bizModel)
-	return m.mqttClient.Pub(formatArkletCommandTopic(deviceID, model.CommandUnInstallBiz), mqtt.Qos0, unInstallBizRequestBytes)
+	return m.mqttClient.Pub(formatArkletCommandTopic(m.env, deviceID, model.CommandUnInstallBiz), mqtt.Qos0, unInstallBizRequestBytes)
 }

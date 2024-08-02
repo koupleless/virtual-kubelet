@@ -34,7 +34,7 @@ func TestNewBaseNode_NoNodeID(t *testing.T) {
 func TestNewBaseNode_NoClient(t *testing.T) {
 	_, err := NewBaseNode(&BuildBaseNodeConfig{
 		Tunnel: &mqtt_tunnel.MqttTunnel{},
-		NodeID: "test-node",
+		BaseID: "test-node",
 	})
 	assert.NotNil(t, err)
 }
@@ -52,7 +52,7 @@ func TestNewBaseNode(t *testing.T) {
 		PodLister:   fakeLister,
 		PodInformer: fakeInformer,
 		Tunnel:      &mqtt_tunnel.MqttTunnel{},
-		NodeID:      "test-node",
+		BaseID:      "test-node",
 		NodeIP:      "127.0.0.1",
 		TechStack:   "java",
 		BizName:     "testMaster",
@@ -78,7 +78,7 @@ func TestBaseNode_Data_flow(t *testing.T) {
 		PodLister:   fakeLister,
 		PodInformer: fakeInformer,
 		Tunnel:      &mqtt_tunnel.MqttTunnel{},
-		NodeID:      "test-node",
+		BaseID:      "test-node",
 		NodeIP:      "127.0.0.1",
 		TechStack:   "java",
 		BizName:     "testMaster",
@@ -100,7 +100,7 @@ func TestBaseNode_RunAndContextDone(t *testing.T) {
 	defer cancel()
 	mt := &mqtt_tunnel.MqttTunnel{}
 
-	err := mt.Register(ctx, "test-client", nil, nil, nil)
+	err := mt.Register(ctx, "test-client", "test", nil, nil, nil)
 	assert.NoError(t, err)
 	kubeClient := fake.NewSimpleClientset()
 
@@ -114,7 +114,7 @@ func TestBaseNode_RunAndContextDone(t *testing.T) {
 		PodLister:   fakeLister,
 		PodInformer: fakeInformer,
 		Tunnel:      mt,
-		NodeID:      "test-node",
+		BaseID:      "test-node",
 		NodeIP:      "127.0.0.1",
 		TechStack:   "java",
 		BizName:     "testMaster",
@@ -134,7 +134,7 @@ func TestBaseNode_RunAndExit(t *testing.T) {
 	defer cancel()
 	mt := &mqtt_tunnel.MqttTunnel{}
 
-	err := mt.Register(ctx, "test-client", nil, nil, nil)
+	err := mt.Register(ctx, "test-client", "test", nil, nil, nil)
 	assert.NoError(t, err)
 	kubeClient := fake.NewSimpleClientset()
 
@@ -148,7 +148,7 @@ func TestBaseNode_RunAndExit(t *testing.T) {
 		PodLister:   fakeLister,
 		PodInformer: fakeInformer,
 		Tunnel:      mt,
-		NodeID:      "test-node",
+		BaseID:      "test-node",
 		NodeIP:      "127.0.0.1",
 		TechStack:   "java",
 		BizName:     "testMaster",
@@ -170,7 +170,7 @@ func TestBaseNode_PodOperator(t *testing.T) {
 	defer cancel()
 	mt := &mqtt_tunnel.MqttTunnel{}
 
-	err := mt.Register(ctx, "test-client", nil, nil, nil)
+	err := mt.Register(ctx, "test-client", "test", nil, nil, nil)
 	assert.NoError(t, err)
 	kubeClient := fake.NewSimpleClientset()
 
@@ -184,7 +184,7 @@ func TestBaseNode_PodOperator(t *testing.T) {
 		PodLister:   fakeLister,
 		PodInformer: fakeInformer,
 		Tunnel:      mt,
-		NodeID:      "test-node",
+		BaseID:      "test-node",
 		NodeIP:      "127.0.0.1",
 		TechStack:   "java",
 		BizName:     "testMaster",

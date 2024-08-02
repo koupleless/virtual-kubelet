@@ -22,11 +22,11 @@ const (
 )
 
 const (
-	BaseHeartBeatTopic = "koupleless/+/base/heart"
-	BaseHealthTopic    = "koupleless/%s/base/health"
-	BaseBizTopic       = "koupleless/%s/base/biz"
+	BaseHeartBeatTopic = "koupleless_%s/+/base/heart"
+	BaseHealthTopic    = "koupleless_%s/%s/base/health"
+	BaseBizTopic       = "koupleless_%s/%s/base/biz"
 )
 
 const (
-	VIRTUAL_NODE_NAME_PREFIX = "virtual-kubenode-"
+	BaseNodePrefix = "base-node"
 )

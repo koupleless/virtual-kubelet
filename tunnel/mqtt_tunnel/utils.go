@@ -18,6 +18,6 @@ func expired(publishTimestamp int64, maxLiveMilliSec int64) bool {
 	return publishTimestamp+maxLiveMilliSec <= time.Now().UnixMilli()
 }
 
-func formatArkletCommandTopic(baseID, command string) string {
-	return fmt.Sprintf("koupleless/%s/%s", baseID, command)
+func formatArkletCommandTopic(env, baseID, command string) string {
+	return fmt.Sprintf("koupleless_%s/%s/%s", env, baseID, command)
 }

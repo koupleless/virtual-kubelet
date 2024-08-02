@@ -21,10 +21,10 @@ import (
 
 // Defaults for root command options
 const (
-	DefaultNodeName             = "module-controller"
 	DefaultOperatingSystem      = "linux"
 	DefaultInformerResyncPeriod = 1 * time.Minute
 	DefaultPodSyncWorkers       = 4
+	DefaultENV                  = "dev"
 )
 
 // Opts stores all the options for configuring the root module-controller command.
@@ -37,14 +37,12 @@ type Opts struct {
 	KubeConfigPath string
 	// Operating system to run pods for
 	OperatingSystem string
+	// Env is the env of running
+	Env string
 
 	// Number of workers to use to handle pod notifications
 	PodSyncWorkers       int
 	InformerResyncPeriod time.Duration
-
-	TraceExporters  []string
-	TraceSampleRate string
-	TraceConfig     TracingExporterOptions
 
 	// Tunnel config
 	EnableMqttTunnel bool
@@ -67,12 +65,12 @@ func SetDefaultOpts(c *Opts) error {
 		c.PodSyncWorkers = DefaultPodSyncWorkers
 	}
 
-	if c.TraceConfig.ServiceName == "" {
-		c.TraceConfig.ServiceName = DefaultNodeName
-	}
-
 	if c.KubeConfigPath == "" {
 		c.KubeConfigPath = os.Getenv("KUBE_CONFIG_PATH")
+	}
+
+	if c.Env == "" {
+		c.Env = getEnv("ENV", DefaultENV)
 	}
 
 	return nil

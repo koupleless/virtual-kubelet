@@ -12,4 +12,7 @@ type BuildBaseNodeProviderConfig struct {
 
 	// Version is the version of ths underlying runtime
 	Version string `json:"version"`
+
+	// ENV is the env of base runtime
+	Env string `json:"env"`
 }

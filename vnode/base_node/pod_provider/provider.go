@@ -106,39 +106,7 @@ func NewBaseProvider(namespace, localIP, nodeID string, k8sClient kubernetes.Int
 func (b *BaseProvider) Run(ctx context.Context) {
 	go b.installOperationQueue.Run(ctx, 1)
 	go b.uninstallOperationQueue.Run(ctx, 1)
-	go utils.TimedTaskWithInterval(ctx, time.Second*5, b.checkAndUninstallDanglingBiz)
 	go utils.TimedTaskWithInterval(ctx, time.Minute, b.syncAllPodStatus)
-}
-
-// checkAndUninstallDanglingBiz mainly process a pod being deleted before biz activated, in resolved status, biz can't uninstall
-func (b *BaseProvider) checkAndUninstallDanglingBiz(ctx context.Context) {
-	logger := log.G(ctx)
-	bindingModels := make(map[string]bool)
-	for _, pod := range b.runtimeInfoStore.GetPods() {
-		if pod.DeletionTimestamp != nil {
-			// skip pod in deletion
-			continue
-		}
-		podKey := utils.ModelUtil.GetPodKey(pod)
-		bizModels := b.runtimeInfoStore.GetRelatedBizModels(podKey)
-		for _, bizModel := range bizModels {
-			bizIdentity := utils.ModelUtil.GetBizIdentityFromBizModel(bizModel)
-			bindingModels[bizIdentity] = true
-		}
-	}
-	// query all modules loading now, if not in binding, queue to uninstall
-	bizInfos := b.queryAllBiz(ctx)
-	for _, bizInfo := range bizInfos {
-		if bizInfo.BizState != "ACTIVATED" && bizInfo.BizState != "DEACTIVATED" {
-			continue
-		}
-		bizIdentity := utils.ModelUtil.GetBizIdentityFromBizInfo(&bizInfo)
-		if !bindingModels[bizIdentity] {
-			// not binding,send to uninstall
-			b.uninstallOperationQueue.Enqueue(ctx, bizIdentity)
-			logger.WithField("bizName", bizInfo.BizName).WithField("bizVersion", bizInfo.BizVersion).Info("ItemEnqueued")
-		}
-	}
 }
 
 func (b *BaseProvider) syncAllPodStatus(ctx context.Context) {
@@ -285,14 +253,42 @@ func (b *BaseProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 	newModels := utils.ModelUtil.GetBizModelsFromCoreV1Pod(pod)
 
 	// check pod deletion timestamp
-	if pod.ObjectMeta.DeletionTimestamp == nil {
-		b.runtimeInfoStore.PutPod(pod.DeepCopy())
+	if pod.ObjectMeta.DeletionTimestamp != nil {
+		// skip deleted pod
+		return nil
+	}
+
+	oldModels := b.runtimeInfoStore.GetRelatedBizModels(podKey)
+	// uninstall first
+	for _, bizModel := range oldModels {
+		// sending to delete
+		b.uninstallOperationQueue.Enqueue(ctx, utils.ModelUtil.GetBizIdentityFromBizModel(bizModel))
+		logger.WithField("bizName", bizModel.BizName).WithField("bizVersion", bizModel.BizVersion).Info("ItemEnqueued")
+	}
+	b.runtimeInfoStore.PutPod(pod.DeepCopy())
+
+	// start a go runtime, check all biz models delete successfully, then install new biz
+	go utils.CheckAndFinallyCall(func() bool {
+		bizInfos := b.queryAllBiz(context.Background())
+		existBizMap := make(map[string]bool)
+		for _, bizInfo := range bizInfos {
+			bizIdentity := utils.ModelUtil.GetBizIdentityFromBizInfo(&bizInfo)
+			existBizMap[bizIdentity] = true
+		}
+		for _, bizModel := range oldModels {
+			exist := existBizMap[utils.ModelUtil.GetBizIdentityFromBizModel(bizModel)]
+			if exist {
+				return false
+			}
+		}
+		return true
+	}, time.Minute, time.Second, func() {
 		// not in deletion, install new models
 		for _, newModel := range newModels {
 			b.installOperationQueue.Enqueue(ctx, utils.ModelUtil.GetBizIdentityFromBizModel(newModel))
 			logger.WithField("bizName", newModel.BizName).WithField("bizVersion", newModel.BizVersion).Info("ItemEnqueued")
 		}
-	}
+	})
 
 	return nil
 }
@@ -303,16 +299,44 @@ func (b *BaseProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 	logger := log.G(ctx).WithField("podKey", podKey)
 	logger.Info("DeletePodStarted")
 
-	// check is deleted
-	b.runtimeInfoStore.DeletePod(podKey)
-
-	if b.k8sClient != nil {
-		// delete pod with no grace period, mock kubelet
-		return b.k8sClient.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{
-			// grace period for base pod controller deleting target finalizer
-			GracePeriodSeconds: ptr.To[int64](0),
-		})
+	bizModels := b.runtimeInfoStore.GetRelatedBizModels(podKey)
+	for _, bizModel := range bizModels {
+		// sending to delete
+		b.uninstallOperationQueue.Enqueue(ctx, utils.ModelUtil.GetBizIdentityFromBizModel(bizModel))
+		logger.WithField("bizName", bizModel.BizName).WithField("bizVersion", bizModel.BizVersion).Info("ItemEnqueued")
 	}
+
+	// start a go runtime, check all biz models delete successfully
+	go utils.CheckAndFinallyCall(func() bool {
+		bizInfos := b.queryAllBiz(context.Background())
+		existBizMap := make(map[string]bool)
+		for _, bizInfo := range bizInfos {
+			bizIdentity := utils.ModelUtil.GetBizIdentityFromBizInfo(&bizInfo)
+			existBizMap[bizIdentity] = true
+		}
+		for _, bizModel := range bizModels {
+			exist := existBizMap[utils.ModelUtil.GetBizIdentityFromBizModel(bizModel)]
+			if exist {
+				return false
+			}
+		}
+		return true
+	}, time.Minute, time.Second, func() {
+		b.runtimeInfoStore.DeletePod(podKey)
+
+		if b.k8sClient != nil {
+			// delete pod with no grace period, mock kubelet
+			err := b.k8sClient.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{
+				// grace period for base pod controller deleting target finalizer
+				GracePeriodSeconds: ptr.To[int64](0),
+			})
+			if err != nil {
+				// might have been deleted manually or exceeded grace period, logger error msg
+				logger.WithError(err).Error("Pod has been deleted in k8s")
+			}
+		}
+	})
+
 	return nil
 }
 

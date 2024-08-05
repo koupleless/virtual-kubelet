@@ -5,7 +5,6 @@ import (
 	"github.com/koupleless/arkctl/v1/service/ark"
 	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/common/utils"
-	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/tunnel"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet/nodeutil"
@@ -168,22 +167,23 @@ func NewBaseNode(config *BuildBaseNodeConfig) (kn *BaseNode, err error) {
 		return nil, errors.New("tunnel provider be nil")
 	}
 
-	if config.NodeID == "" {
+	if config.BaseID == "" {
 		return nil, errors.New("node name cannot be empty")
 	}
 	var nodeProvider *node_provider.BaseNodeProvider
 	var podProvider *pod_provider.BaseProvider
 	cm, err := nodeutil.NewNode(
-		model.VIRTUAL_NODE_NAME_PREFIX+config.NodeID,
+		utils.FormatBaseNodeName(config.BaseID),
 		func(cfg nodeutil.ProviderConfig) (nodeutil.Provider, virtual_kubelet.NodeProvider, error) {
 			nodeProvider = node_provider.NewVirtualKubeletNode(node_provider.BuildBaseNodeProviderConfig{
 				NodeIP:    config.NodeIP,
 				TechStack: config.TechStack,
 				Version:   config.BizVersion,
 				BizName:   config.BizName,
+				Env:       config.Env,
 			})
 			// initialize node spec on bootstrap
-			podProvider = pod_provider.NewBaseProvider(cfg.Node.Namespace, config.NodeIP, config.NodeID, config.KubeClient, config.Tunnel)
+			podProvider = pod_provider.NewBaseProvider(cfg.Node.Namespace, config.NodeIP, config.BaseID, config.KubeClient, config.Tunnel)
 
 			err = nodeProvider.Register(context.Background(), cfg.Node)
 			if err != nil {
@@ -207,7 +207,7 @@ func NewBaseNode(config *BuildBaseNodeConfig) (kn *BaseNode, err error) {
 	}
 
 	return &BaseNode{
-		nodeID:             config.NodeID,
+		nodeID:             config.BaseID,
 		clientSet:          config.KubeClient,
 		vnode:              nodeProvider,
 		podProvider:        podProvider,

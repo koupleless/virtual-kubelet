@@ -1,7 +1,7 @@
 package base_register_controller
 
 import (
-	"github.com/koupleless/virtual-kubelet/model"
+	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/vnode/base_node"
 	"gotest.tools/assert"
 	"testing"
@@ -69,9 +69,9 @@ func TestRuntimeInfoStore_PutBaseNodeNX(t *testing.T) {
 
 func TestRuntimeInfoStore_GetBaseNodeByNodeID(t *testing.T) {
 	store := NewRuntimeInfoStore()
-	node := store.GetBaseNodeByNodeID("test")
+	node := store.GetBaseNodeByNodeName("test")
 	assert.Assert(t, node == nil)
 	store.PutBaseNode("test", &base_node.BaseNode{})
-	node = store.GetBaseNodeByNodeID(model.VIRTUAL_NODE_NAME_PREFIX + "test")
+	node = store.GetBaseNodeByNodeName(utils.FormatBaseNodeName("test"))
 	assert.Assert(t, node != nil)
 }

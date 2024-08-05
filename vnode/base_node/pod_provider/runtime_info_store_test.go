@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-var runtimeInfoStore *RuntimeInfoStore
-
 var defaultPod = &corev1.Pod{
 	ObjectMeta: metav1.ObjectMeta{
 		Namespace: "test-Namespace",
@@ -63,12 +61,13 @@ var defaultPod2 = &corev1.Pod{
 }
 
 func TestNewRuntimeInfoStore(t *testing.T) {
-	runtimeInfoStore = NewRuntimeInfoStore()
+	runtimeInfoStore := NewRuntimeInfoStore()
 	assert.Assert(t, runtimeInfoStore != nil)
 }
 
 func TestRuntimeInfoStore_PutPod(t *testing.T) {
 	podKey := utils.ModelUtil.GetPodKey(defaultPod)
+	runtimeInfoStore := NewRuntimeInfoStore()
 	runtimeInfoStore.PutPod(defaultPod)
 	assert.Assert(t, len(runtimeInfoStore.GetPods()) == 1)
 	assert.Assert(t, runtimeInfoStore.GetPods()[0].Name == "test-defaultPod")
@@ -80,6 +79,8 @@ func TestRuntimeInfoStore_PutPod(t *testing.T) {
 }
 
 func TestRuntimeInfoStore_GetBizModel(t *testing.T) {
+	runtimeInfoStore := NewRuntimeInfoStore()
+	runtimeInfoStore.PutPod(defaultPod)
 	model := runtimeInfoStore.GetBizModel(runtimeInfoStore.getBizIdentity(&ark.BizModel{
 		BizName:    "test-container1",
 		BizVersion: "1.1.2",
@@ -93,6 +94,8 @@ func TestRuntimeInfoStore_GetBizModel(t *testing.T) {
 }
 
 func TestRuntimeInfoStore_GetPodByKey(t *testing.T) {
+	runtimeInfoStore := NewRuntimeInfoStore()
+	runtimeInfoStore.PutPod(defaultPod)
 	podKey := utils.ModelUtil.GetPodKey(defaultPod)
 	podKey2 := utils.ModelUtil.GetPodKey(defaultPod2)
 	pod := runtimeInfoStore.GetPodByKey(podKey)
@@ -102,12 +105,16 @@ func TestRuntimeInfoStore_GetPodByKey(t *testing.T) {
 }
 
 func TestRuntimeInfoStore_GetPods(t *testing.T) {
+	runtimeInfoStore := NewRuntimeInfoStore()
+	runtimeInfoStore.PutPod(defaultPod)
 	pods := runtimeInfoStore.GetPods()
 	assert.Assert(t, len(pods) == 1)
 	assert.Assert(t, pods[0].Name == "test-defaultPod")
 }
 
 func TestRuntimeInfoStore_GetRelatedBizModels(t *testing.T) {
+	runtimeInfoStore := NewRuntimeInfoStore()
+	runtimeInfoStore.PutPod(defaultPod)
 	podKey1 := utils.ModelUtil.GetPodKey(defaultPod)
 	podKey2 := utils.ModelUtil.GetPodKey(defaultPod2)
 	bizModels1 := runtimeInfoStore.GetRelatedBizModels(podKey1)
@@ -117,6 +124,7 @@ func TestRuntimeInfoStore_GetRelatedBizModels(t *testing.T) {
 }
 
 func TestRuntimeInfoStore_GetRelatedPodKeyByBizIdentity(t *testing.T) {
+	runtimeInfoStore := NewRuntimeInfoStore()
 	podKey := runtimeInfoStore.GetRelatedPodKeyByBizIdentity(utils.ModelUtil.GetBizIdentityFromBizModel(&ark.BizModel{
 		BizName:    "test-container3",
 		BizVersion: "1.1.3",
@@ -125,7 +133,7 @@ func TestRuntimeInfoStore_GetRelatedPodKeyByBizIdentity(t *testing.T) {
 }
 
 func TestRuntimeInfoStore_DeletePod(t *testing.T) {
-	runtimeInfoStore = NewRuntimeInfoStore()
+	runtimeInfoStore := NewRuntimeInfoStore()
 	runtimeInfoStore.PutPod(defaultPod)
 	runtimeInfoStore.DeletePod(runtimeInfoStore.getPodKey(defaultPod))
 	assert.Assert(t, len(runtimeInfoStore.GetPods()) == 0)

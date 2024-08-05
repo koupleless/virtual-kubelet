@@ -15,10 +15,9 @@
 package base_register_controller
 
 import (
-	"github.com/koupleless/virtual-kubelet/model"
+	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/vnode/base_node"
 	"github.com/pkg/errors"
-	"strings"
 	"sync"
 	"time"
 )
@@ -103,16 +102,9 @@ func (r *RuntimeInfoStore) GetOfflineBases(maxUnreachableMilliSec int64) []strin
 	return offlineBaseIDs
 }
 
-func (r *RuntimeInfoStore) getBaseIDFromNodeID(nodeID string) string {
-	if !strings.HasPrefix(nodeID, model.VIRTUAL_NODE_NAME_PREFIX) {
-		return ""
-	}
-	return nodeID[len(model.VIRTUAL_NODE_NAME_PREFIX):]
-}
-
-func (r *RuntimeInfoStore) GetBaseNodeByNodeID(nodeID string) *base_node.BaseNode {
+func (r *RuntimeInfoStore) GetBaseNodeByNodeName(nodeName string) *base_node.BaseNode {
 	r.Lock()
 	defer r.Unlock()
-	baseID := r.getBaseIDFromNodeID(nodeID)
+	baseID := utils.ExtractBaseIDFromNodeName(nodeName)
 	return r.baseIDToBaseNode[baseID]
 }

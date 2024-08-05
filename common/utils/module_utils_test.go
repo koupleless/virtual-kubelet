@@ -345,3 +345,13 @@ func TestPodsEqual_AnnotationsNotEqual(t *testing.T) {
 func TestPodsEqual_Equal(t *testing.T) {
 	assert.Assert(t, PodsEqual(&corev1.Pod{}, &corev1.Pod{}))
 }
+
+func TestFormatBaseNodeName(t *testing.T) {
+	name := FormatBaseNodeName("test")
+	assert.Assert(t, name == "base-node.test")
+}
+
+func TestExtractBaseIDFromNodeName(t *testing.T) {
+	name := ExtractBaseIDFromNodeName("base-node.test")
+	assert.Assert(t, name == "test")
+}

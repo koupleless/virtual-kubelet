@@ -11,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 	"testing"
+	"time"
 )
 
 func init() {
@@ -22,7 +23,7 @@ func TestBaseProvider_Lifecycle(t *testing.T) {
 	defer cancel()
 	mt := &mqtt_tunnel.MqttTunnel{}
 
-	err := mt.Register(ctx, "test-client", nil, nil, nil)
+	err := mt.Register(ctx, "test-client", "test", nil, nil, nil)
 	assert.NoError(t, err)
 	kubeClient := fake.NewSimpleClientset()
 
@@ -110,10 +111,13 @@ func TestBaseProvider_Lifecycle(t *testing.T) {
 	assert.NotNil(t, podLocal)
 	assert.Equal(t, podCopy.Spec.Containers[0].Name, podLocal.Spec.Containers[0].Name)
 
-	assert.Error(t, provider.DeletePod(ctx, podCopy))
-	podLocal, err = provider.GetPod(ctx, pod.Namespace, pod.Name)
-	assert.NoError(t, err)
-	assert.Nil(t, podLocal)
+	assert.NoError(t, provider.DeletePod(ctx, podCopy))
+	provider.SyncBizInfo([]ark.ArkBizInfo{})
+	assert.Eventually(t, func() bool {
+		podLocal, err = provider.GetPod(ctx, pod.Namespace, pod.Name)
+		assert.NoError(t, err)
+		return podLocal == nil
+	}, time.Second*5, time.Millisecond*100)
 
 	podCopy = pod.DeepCopy()
 	podCopy.Spec.Containers = []corev1.Container{
@@ -152,8 +156,6 @@ func TestBaseProvider_Lifecycle(t *testing.T) {
 			BizVersion: "0.0.1",
 		},
 	})
-
-	provider.checkAndUninstallDanglingBiz(ctx)
 }
 
 func TestBaseProvider_BizInstallCheck(t *testing.T) {

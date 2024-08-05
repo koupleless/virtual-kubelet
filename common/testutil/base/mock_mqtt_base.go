@@ -57,7 +57,7 @@ func (bm *MockMqttBase) Exit() {
 }
 
 func (bm *MockMqttBase) Run() {
-	commandTopic := fmt.Sprintf("koupleless/%s/+", bm.baseID)
+	commandTopic := fmt.Sprintf("koupleless_test/%s/+", bm.baseID)
 	err := bm.mqttClient.Sub(commandTopic, mqtt.Qos1, bm.commandCallback)
 	if err != nil {
 		logrus.Error(err.Error())
@@ -74,7 +74,7 @@ func (bm *MockMqttBase) Run() {
 		}
 		heartInfoBytes, _ := json.Marshal(mqttResponse)
 
-		bm.mqttClient.Pub(fmt.Sprintf("koupleless/%s/base/heart", bm.baseID), mqtt.Qos1, heartInfoBytes)
+		bm.mqttClient.Pub(fmt.Sprintf("koupleless_test/%s/base/heart", bm.baseID), mqtt.Qos1, heartInfoBytes)
 		for {
 			select {
 			case <-bm.exit:
@@ -89,7 +89,7 @@ func (bm *MockMqttBase) Run() {
 				}
 				heartInfoBytes, _ = json.Marshal(mqttResponse)
 
-				bm.mqttClient.Pub(fmt.Sprintf("koupleless/%s/base/heart", bm.baseID), mqtt.Qos1, heartInfoBytes)
+				bm.mqttClient.Pub(fmt.Sprintf("koupleless_test/%s/base/heart", bm.baseID), mqtt.Qos1, heartInfoBytes)
 			}
 		}
 	}()
@@ -104,7 +104,7 @@ func (bm *MockMqttBase) Run() {
 	}
 	heartInfoBytes, _ := json.Marshal(mqttResponse)
 
-	bm.mqttClient.Pub(fmt.Sprintf("koupleless/%s/base/heart", bm.baseID), mqtt.Qos1, heartInfoBytes)
+	bm.mqttClient.Pub(fmt.Sprintf("koupleless_test/%s/base/heart", bm.baseID), mqtt.Qos1, heartInfoBytes)
 }
 
 func (bm *MockMqttBase) commandCallback(_ paho.Client, msg paho.Message) {
@@ -127,7 +127,7 @@ func (bm *MockMqttBase) commandCallback(_ paho.Client, msg paho.Message) {
 			"data":             response,
 		}
 		healthBytes, _ := json.Marshal(mqttResponse)
-		bm.mqttClient.Pub(fmt.Sprintf("koupleless/%s/base/health", bm.baseID), mqtt.Qos1, healthBytes)
+		bm.mqttClient.Pub(fmt.Sprintf("koupleless_test/%s/base/health", bm.baseID), mqtt.Qos1, healthBytes)
 	case model.CommandQueryAllBiz:
 		response := ark.QueryAllArkBizResponse{
 			GenericArkResponseBase: ark.GenericArkResponseBase[[]ark.ArkBizInfo]{
@@ -142,7 +142,7 @@ func (bm *MockMqttBase) commandCallback(_ paho.Client, msg paho.Message) {
 		}
 		bizBytes, _ := json.Marshal(mqttResponse)
 
-		bm.mqttClient.Pub(fmt.Sprintf("koupleless/%s/base/biz", bm.baseID), mqtt.Qos1, bizBytes)
+		bm.mqttClient.Pub(fmt.Sprintf("koupleless_test/%s/base/biz", bm.baseID), mqtt.Qos1, bizBytes)
 	case model.CommandInstallBiz:
 		var data ark.BizModel
 		err := json.Unmarshal(msg.Payload(), &data)
@@ -195,7 +195,7 @@ func (bm *MockMqttBase) commandCallback(_ paho.Client, msg paho.Message) {
 			"data":             response,
 		}
 		bizBytes, _ := json.Marshal(mqttResponse)
-		bm.mqttClient.Pub(fmt.Sprintf("koupleless/%s/base/biz", bm.baseID), mqtt.Qos1, bizBytes)
+		bm.mqttClient.Pub(fmt.Sprintf("koupleless_test/%s/base/biz", bm.baseID), mqtt.Qos1, bizBytes)
 	case model.CommandUnInstallBiz:
 		var data ark.BizModel
 		err := json.Unmarshal(msg.Payload(), &data)
@@ -227,6 +227,6 @@ func (bm *MockMqttBase) commandCallback(_ paho.Client, msg paho.Message) {
 			"data":             response,
 		}
 		bizBytes, _ := json.Marshal(mqttResponse)
-		bm.mqttClient.Pub(fmt.Sprintf("koupleless/%s/base/biz", bm.baseID), mqtt.Qos1, bizBytes)
+		bm.mqttClient.Pub(fmt.Sprintf("koupleless_test/%s/base/biz", bm.baseID), mqtt.Qos1, bizBytes)
 	}
 }

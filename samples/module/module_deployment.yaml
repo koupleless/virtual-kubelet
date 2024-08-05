@@ -47,6 +47,10 @@ spec: # 资源规范字段
                     operator: In
                     values:
                       - base  # 模块可能只能被调度到一些特殊版本的 node 上，如有这种限制，则必须有这个字段。
+                  - key: base.koupleless.io/env
+                    operator: In
+                    values:
+                      - dev  # 模块可能只能被调度到一些特殊环境的 node 上，如有这种限制，则必须有这个字段。
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
@@ -58,4 +62,8 @@ spec: # 资源规范字段
         - key: "schedule.koupleless.io/virtual-node" # 确保模块能够调度到基座node上
           operator: "Equal"
           value: "True"
+          effect: "NoExecute"
+        - key: "schedule.koupleless.io/node-env" # 确保模块能够调度到特定环境的基座node上，这里Virtual Kubelet使用taint对env做了强管控，以实现更强的隔离能力
+          operator: "Equal"
+          value: "dev"
           effect: "NoExecute"

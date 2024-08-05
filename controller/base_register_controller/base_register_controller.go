@@ -71,7 +71,7 @@ func (brc *BaseRegisterController) Run(ctx context.Context) {
 	// init all tunnels, and at least one provider start successfully
 	anyProviderStarted := false
 	for _, provider := range brc.tunnels {
-		err = provider.Register(ctx, brc.config.ClientID, brc.baseDiscoveredCallback, brc.healthDataCallback, brc.bizDataCallback)
+		err = provider.Register(ctx, brc.config.ClientID, brc.config.Env, brc.baseDiscoveredCallback, brc.healthDataCallback, brc.bizDataCallback)
 		if err != nil {
 			log.G(ctx).WithError(err).Error("failed to register tunnel:", provider.Name())
 			continue
@@ -85,10 +85,7 @@ func (brc *BaseRegisterController) Run(ctx context.Context) {
 		return
 	}
 
-	requirement, err := labels.NewRequirement("module-controller.koupleless.io/component", selection.In, []string{"module"})
-	if err != nil {
-		return
-	}
+	requirement, _ := labels.NewRequirement("module-controller.koupleless.io/component", selection.In, []string{"module"})
 
 	podInformerFactory := informers.NewSharedInformerFactoryWithOptions(
 		brc.config.K8SConfig.KubeClient,
@@ -128,6 +125,7 @@ func (brc *BaseRegisterController) Run(ctx context.Context) {
 	go utils.TimedTaskWithInterval(ctx, time.Second, brc.checkAndDeleteOfflineBase)
 
 	close(brc.ready)
+	log.G(ctx).Info("Base register controller ready")
 
 	select {
 	case <-brc.done:
@@ -181,7 +179,7 @@ func (brc *BaseRegisterController) podAddHandler(pod interface{}) {
 	}
 	nodeName := podFromKubernetes.Spec.NodeName
 	// check node name in local storage
-	kn := brc.localStore.GetBaseNodeByNodeID(nodeName)
+	kn := brc.localStore.GetBaseNodeByNodeName(nodeName)
 	if kn == nil {
 		// node not exist, invalid add req
 		return
@@ -210,7 +208,7 @@ func (brc *BaseRegisterController) podUpdateHandler(oldObj, newObj interface{}) 
 
 	nodeName := newPod.Spec.NodeName
 	// check node name in local storage
-	kn := brc.localStore.GetBaseNodeByNodeID(nodeName)
+	kn := brc.localStore.GetBaseNodeByNodeName(nodeName)
 	if kn == nil {
 		// node not exist, invalid add req
 		return
@@ -253,7 +251,7 @@ func (brc *BaseRegisterController) podDeleteHandler(pod interface{}) {
 
 		nodeName := podFromKubernetes.Spec.NodeName
 		// check node name in local storage
-		kn := brc.localStore.GetBaseNodeByNodeID(nodeName)
+		kn := brc.localStore.GetBaseNodeByNodeName(nodeName)
 		if kn == nil {
 			// node not exist, invalid add req
 			return
@@ -316,7 +314,8 @@ func (brc *BaseRegisterController) startVirtualKubelet(baseID string, initData m
 		PodLister:   brc.podLister,
 		PodInformer: brc.podInformer,
 		Tunnel:      t,
-		NodeID:      baseID,
+		BaseID:      baseID,
+		Env:         brc.config.Env,
 		NodeIP:      initData.NetworkInfo.LocalIP,
 		// TODO support read from base heart beat data
 		TechStack:  "java",

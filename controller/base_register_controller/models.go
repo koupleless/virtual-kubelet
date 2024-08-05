@@ -8,6 +8,7 @@ import (
 
 type BuildBaseRegisterControllerConfig struct {
 	ClientID string `json:"clientID"`
+	Env      string `json:"env"`
 
 	// K8SConfig is the config of k8s client
 	K8SConfig *K8SConfig

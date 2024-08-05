@@ -46,7 +46,7 @@ func TestMqttTunnel_Register(t *testing.T) {
 	defer cancel()
 	mt := MqttTunnel{}
 
-	err := mt.Register(ctx, "test-client", baseDiscoverCallback, healthDataCallback, bizDataCallback)
+	err := mt.Register(ctx, "test-client", "test", baseDiscoverCallback, healthDataCallback, bizDataCallback)
 	assert.NoError(t, err)
 	assert.Equal(t, "mqtt_tunnel_provider", mt.Name())
 }
@@ -56,7 +56,7 @@ func TestMqttTunnel_BaseDiscover(t *testing.T) {
 	defer cancel()
 	mt := MqttTunnel{}
 
-	err := mt.Register(ctx, "test-client", baseDiscoverCallback, healthDataCallback, bizDataCallback)
+	err := mt.Register(ctx, "test-client", "test", baseDiscoverCallback, healthDataCallback, bizDataCallback)
 	assert.NoError(t, err)
 
 	// mock base online
@@ -78,7 +78,7 @@ func TestMqttTunnel_FetchBaseInfo(t *testing.T) {
 	defer cancel()
 	mt := MqttTunnel{}
 
-	err := mt.Register(ctx, "test-client", baseDiscoverCallback, healthDataCallback, bizDataCallback)
+	err := mt.Register(ctx, "test-client", "test", baseDiscoverCallback, healthDataCallback, bizDataCallback)
 	assert.NoError(t, err)
 
 	// mock base online
@@ -106,7 +106,7 @@ func TestMqttTunnel_BaseBizOperation(t *testing.T) {
 	defer cancel()
 	mt := MqttTunnel{}
 
-	err := mt.Register(ctx, "test-client", baseDiscoverCallback, healthDataCallback, bizDataCallback)
+	err := mt.Register(ctx, "test-client", "test", baseDiscoverCallback, healthDataCallback, bizDataCallback)
 	assert.NoError(t, err)
 
 	// mock base online
@@ -153,7 +153,7 @@ func TestMqttTunnel_MqttHeartCallback(t *testing.T) {
 	defer cancel()
 	mt := MqttTunnel{}
 
-	err := mt.Register(ctx, "test-client", baseDiscoverCallback, healthDataCallback, bizDataCallback)
+	err := mt.Register(ctx, "test-client", "test", baseDiscoverCallback, healthDataCallback, bizDataCallback)
 	assert.NoError(t, err)
 
 	// mock base online
@@ -161,19 +161,19 @@ func TestMqttTunnel_MqttHeartCallback(t *testing.T) {
 
 	// error msg
 	mt.heartBeatMsgCallback(nil, &mqtt_client.MockMessage{
-		T: "koupleless/" + id + "/base/heart",
+		T: "koupleless_test/" + id + "/base/heart",
 		P: []byte(""),
 	})
 
 	// expired msg
 	mt.heartBeatMsgCallback(nil, &mqtt_client.MockMessage{
-		T: "koupleless/" + id + "/base/heart",
+		T: "koupleless_test/" + id + "/base/heart",
 		P: []byte("{}"),
 	})
 
 	// valid msg
 	mt.heartBeatMsgCallback(nil, &mqtt_client.MockMessage{
-		T: "koupleless/" + id + "/base/heart",
+		T: "koupleless_test/" + id + "/base/heart",
 		P: []byte("{\"publishTimestamp\":1000000000000000}"),
 	})
 
@@ -187,7 +187,7 @@ func TestMqttTunnel_MqttHealthCallback(t *testing.T) {
 	defer cancel()
 	mt := MqttTunnel{}
 
-	err := mt.Register(ctx, "test-client", baseDiscoverCallback, healthDataCallback, bizDataCallback)
+	err := mt.Register(ctx, "test-client", "test", baseDiscoverCallback, healthDataCallback, bizDataCallback)
 	assert.NoError(t, err)
 
 	// mock base online
@@ -195,25 +195,25 @@ func TestMqttTunnel_MqttHealthCallback(t *testing.T) {
 
 	// error msg
 	mt.healthMsgCallback(nil, &mqtt_client.MockMessage{
-		T: "koupleless/" + id + "/base/health",
+		T: "koupleless_test/" + id + "/base/health",
 		P: []byte(""),
 	})
 
 	// expired msg
 	mt.healthMsgCallback(nil, &mqtt_client.MockMessage{
-		T: "koupleless/" + id + "/base/health",
+		T: "koupleless_test/" + id + "/base/health",
 		P: []byte("{}"),
 	})
 
 	// not success
 	mt.healthMsgCallback(nil, &mqtt_client.MockMessage{
-		T: "koupleless/" + id + "/base/health",
+		T: "koupleless_test/" + id + "/base/health",
 		P: []byte("{\"publishTimestamp\":1000000000000000}"),
 	})
 
 	// valid msg
 	mt.healthMsgCallback(nil, &mqtt_client.MockMessage{
-		T: "koupleless/" + id + "/base/health",
+		T: "koupleless_test/" + id + "/base/health",
 		P: []byte("{\"publishTimestamp\":1000000000000000, \"data\":{\"code\":\"SUCCESS\"}}"),
 	})
 
@@ -227,7 +227,7 @@ func TestMqttTunnel_MqttBizCallback(t *testing.T) {
 	defer cancel()
 	mt := MqttTunnel{}
 
-	err := mt.Register(ctx, "test-client", baseDiscoverCallback, healthDataCallback, bizDataCallback)
+	err := mt.Register(ctx, "test-client", "test", baseDiscoverCallback, healthDataCallback, bizDataCallback)
 	assert.NoError(t, err)
 
 	// mock base online
@@ -235,25 +235,25 @@ func TestMqttTunnel_MqttBizCallback(t *testing.T) {
 
 	// error msg
 	mt.bizMsgCallback(nil, &mqtt_client.MockMessage{
-		T: "koupleless/" + id + "/base/biz",
+		T: "koupleless_test/" + id + "/base/biz",
 		P: []byte(""),
 	})
 
 	// expired msg
 	mt.bizMsgCallback(nil, &mqtt_client.MockMessage{
-		T: "koupleless/" + id + "/base/biz",
+		T: "koupleless_test/" + id + "/base/biz",
 		P: []byte("{}"),
 	})
 
 	// not success
 	mt.bizMsgCallback(nil, &mqtt_client.MockMessage{
-		T: "koupleless/" + id + "/base/biz",
+		T: "koupleless_test/" + id + "/base/biz",
 		P: []byte("{\"publishTimestamp\":1000000000000000}"),
 	})
 
 	// valid msg
 	mt.bizMsgCallback(nil, &mqtt_client.MockMessage{
-		T: "koupleless/" + id + "/base/biz",
+		T: "koupleless_test/" + id + "/base/biz",
 		P: []byte("{\"publishTimestamp\":1000000000000000, \"data\":{\"code\":\"SUCCESS\"}}"),
 	})
 

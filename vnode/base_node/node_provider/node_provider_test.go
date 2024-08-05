@@ -24,12 +24,13 @@ func TestVirtualKubeletNode_Register(t *testing.T) {
 		TechStack: "java",
 		BizName:   "test",
 		Version:   "1.0.0",
+		Env:       "test",
 	})
 	node := &corev1.Node{}
 	err := vnode.Register(context.Background(), node)
 	assert.NilError(t, err)
-	assert.Assert(t, len(node.Labels) == 3)
-	assert.Assert(t, len(node.Spec.Taints) == 1)
+	assert.Assert(t, len(node.Labels) == 4)
+	assert.Assert(t, len(node.Spec.Taints) == 2)
 	assert.Assert(t, node.Status.Phase == corev1.NodePending)
 }
 
@@ -84,4 +85,16 @@ func TestVirtualKubeletNode_NotifyNodeStatusWithoutInit(t *testing.T) {
 	})
 	vnode.Notify(ark.HealthData{})
 	assert.Assert(t, len(nodeList) == 0)
+}
+
+func TestBaseNodeProvider_CurrNodeInfo(t *testing.T) {
+	vnode := NewVirtualKubeletNode(BuildBaseNodeProviderConfig{
+		NodeIP:    "127.0.0.1",
+		TechStack: "java",
+		BizName:   "test",
+		Version:   "1.0.0",
+		Env:       "test",
+	})
+	vnode.Register(context.Background(), &corev1.Node{})
+	assert.Assert(t, vnode.CurrNodeInfo() != nil)
 }

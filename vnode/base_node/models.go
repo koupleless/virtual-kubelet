@@ -20,8 +20,8 @@ type BuildBaseNodeConfig struct {
 	// Tunnel is the tunnel of pod management
 	Tunnel tunnel.Tunnel
 
-	// NodeID is the base id of base
-	NodeID string
+	// BaseID is the base id of base
+	BaseID string
 
 	// NodeIP is the base ip of base
 	NodeIP string
@@ -34,4 +34,7 @@ type BuildBaseNodeConfig struct {
 
 	// BizVersion is the base master biz version
 	BizVersion string
+
+	// Env is the runtime env of biz
+	Env string
 }

@@ -15,7 +15,7 @@ type QueryAllBizDataArrivedCallback func(string, []ark.ArkBizInfo)
 type Tunnel interface {
 	Name() string
 
-	Register(context.Context, string, BaseDiscoveredCallback, HealthDataArrivedCallback, QueryAllBizDataArrivedCallback) error
+	Register(context.Context, string, string, BaseDiscoveredCallback, HealthDataArrivedCallback, QueryAllBizDataArrivedCallback) error
 
 	OnBaseStart(context.Context, string)
 

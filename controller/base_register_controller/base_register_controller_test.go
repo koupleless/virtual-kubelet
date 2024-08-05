@@ -3,9 +3,11 @@ package base_register_controller
 import (
 	"context"
 	"fmt"
+	"github.com/koupleless/arkctl/v1/service/ark"
 	"github.com/koupleless/virtual-kubelet/common/mqtt"
 	"github.com/koupleless/virtual-kubelet/common/testutil/base"
 	"github.com/koupleless/virtual-kubelet/common/testutil/mqtt_client"
+	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/tunnel"
 	"github.com/koupleless/virtual-kubelet/tunnel/mqtt_tunnel"
@@ -57,6 +59,7 @@ func TestBaseRegisterController_Run(t *testing.T) {
 
 	controller, err := NewBaseRegisterController(&BuildBaseRegisterControllerConfig{
 		ClientID: "test-client",
+		Env:      "test",
 		K8SConfig: &K8SConfig{
 			KubeClient:         kubeClient,
 			InformerSyncPeriod: time.Minute,
@@ -99,7 +102,7 @@ func TestBaseRegisterController_Run(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: corev1.PodSpec{
-			NodeName: model.VIRTUAL_NODE_NAME_PREFIX + id,
+			NodeName: utils.FormatBaseNodeName(id),
 			Containers: []corev1.Container{
 				{
 					Name:  "test-biz",
@@ -150,4 +153,50 @@ func TestBaseRegisterController_Run(t *testing.T) {
 
 	cancel()
 	<-controller.Done()
+}
+
+func TestBaseRegisterController_CallbackShutdown(t *testing.T) {
+	kubeClient := fake.NewSimpleClientset()
+
+	controller, err := NewBaseRegisterController(&BuildBaseRegisterControllerConfig{
+		ClientID: "test-client",
+		Env:      "test",
+		K8SConfig: &K8SConfig{
+			KubeClient:         kubeClient,
+			InformerSyncPeriod: time.Minute,
+		},
+		Tunnels: []tunnel.Tunnel{
+			&mqtt_tunnel.MqttTunnel{},
+		},
+	})
+	assert.NoError(t, err)
+	assert.NotNil(t, controller)
+
+	controller.baseDiscoveredCallback("test", model.HeartBeatData{
+		DeviceID: "test",
+		MasterBizInfo: ark.MasterBizInfo{
+			BizState: "DEACTIVATED",
+		},
+	}, nil)
+}
+
+func TestBaseRegisterController_CallbackBaseNotExist(t *testing.T) {
+	kubeClient := fake.NewSimpleClientset()
+
+	controller, err := NewBaseRegisterController(&BuildBaseRegisterControllerConfig{
+		ClientID: "test-client",
+		Env:      "test",
+		K8SConfig: &K8SConfig{
+			KubeClient:         kubeClient,
+			InformerSyncPeriod: time.Minute,
+		},
+		Tunnels: []tunnel.Tunnel{
+			&mqtt_tunnel.MqttTunnel{},
+		},
+	})
+	assert.NoError(t, err)
+	assert.NotNil(t, controller)
+
+	controller.healthDataCallback("test", ark.HealthData{})
+	controller.bizDataCallback("test", []ark.ArkBizInfo{})
 }

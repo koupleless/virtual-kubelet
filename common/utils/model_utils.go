@@ -16,12 +16,15 @@ package utils
 
 import (
 	"context"
+	"fmt"
 	"github.com/google/go-cmp/cmp"
 	"github.com/koupleless/arkctl/common/fileutil"
 	"github.com/koupleless/arkctl/v1/service/ark"
 	"github.com/koupleless/virtual-kubelet/common/log"
+	"github.com/koupleless/virtual-kubelet/model"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"strings"
 	"time"
 )
 
@@ -171,5 +174,13 @@ func PodsEqual(pod1, pod2 *corev1.Pod) bool {
 		cmp.Equal(pod1.Spec.Tolerations, pod2.Spec.Tolerations) &&
 		cmp.Equal(pod1.ObjectMeta.Labels, pod2.Labels) &&
 		cmp.Equal(pod1.ObjectMeta.Annotations, pod2.Annotations)
+}
 
+func FormatBaseNodeName(baseID string) string {
+	return fmt.Sprintf("%s.%s", model.BaseNodePrefix, baseID)
+}
+
+func ExtractBaseIDFromNodeName(nodeName string) string {
+	splits := strings.Split(nodeName, ".")
+	return splits[len(splits)-1]
 }

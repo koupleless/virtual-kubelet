@@ -15,7 +15,7 @@ type Inspection interface {
 	Register(kubernetes.Interface)
 
 	// GetIntervalMilliSec returns the inspect interval
-	GetIntervalMilliSec() time.Duration
+	GetInterval() time.Duration
 
 	// Inspect is the main check of inspections
 	Inspect(context.Context)

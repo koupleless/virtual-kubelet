@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/client-go/kubernetes"
+	"sync"
 	"time"
 )
 
@@ -18,6 +19,8 @@ var _ Inspection = &PodScheduleInspection{}
 
 // PodScheduleInspection inspect the pod always in pending status
 type PodScheduleInspection struct {
+	sync.Mutex
+
 	kubeClient kubernetes.Interface
 	ownerMap   map[string]int64
 }
@@ -27,7 +30,7 @@ func (p *PodScheduleInspection) Register(kubeClient kubernetes.Interface) {
 	p.ownerMap = make(map[string]int64)
 }
 
-func (p *PodScheduleInspection) GetIntervalMilliSec() time.Duration {
+func (p *PodScheduleInspection) GetInterval() time.Duration {
 	return time.Second * 60
 }
 
@@ -48,19 +51,21 @@ func (p *PodScheduleInspection) Inspect(ctx context.Context) {
 		// select pods with scheduled but schedule failed
 		if len(pod.Status.Conditions) != 0 && pod.Status.Conditions[0].Type == v1.PodScheduled && pod.Status.Conditions[0].Status == v1.ConditionFalse {
 			// check owner has been reported
-			if len(pod.OwnerReferences) != 0 {
-				now := time.Now().Unix()
-				replicaSetUID := string(pod.OwnerReferences[0].UID)
-				if p.ownerMap[replicaSetUID] >= now-10*60 {
-					delete(p.ownerMap, replicaSetUID)
-					continue
-				}
-				p.ownerMap[replicaSetUID] = now
-			}
-			if pod.Labels == nil {
-				pod.Labels = make(map[string]string)
+			if len(pod.OwnerReferences) != 0 && p.ownerReported(string(pod.OwnerReferences[0].UID), 10*60) {
+				continue
 			}
 			tracker.G().ErrorReport(pod.Labels[model.PodTraceIDLabelKey], model.TrackSceneModuleDeployment, model.TrackEventPodSchedule, pod.Status.Conditions[0].Message, pod.Labels, model.CodeModulePodScheduleFailed)
 		}
 	}
+}
+
+func (p *PodScheduleInspection) ownerReported(uid string, expireSeconds int64) bool {
+	p.Lock()
+	defer p.Unlock()
+	now := time.Now().Unix()
+	if p.ownerMap[uid] >= now-expireSeconds {
+		return true
+	}
+	p.ownerMap[uid] = now
+	return false
 }

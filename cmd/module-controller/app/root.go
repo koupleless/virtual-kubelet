@@ -67,14 +67,19 @@ func runModuleControllerCommand(ctx context.Context, c Opts) error {
 	}
 
 	if c.EnablePrometheus {
-		go prometheus.StartPrometheusListen(c.PrometheusPort)
+		go func() {
+			err = prometheus.StartPrometheusListen(c.PrometheusPort)
+			if err != nil {
+				log.G(ctx).WithError(err).Fatal("failed to start prometheus server")
+			}
+		}()
 		log.G(ctx).Infof("Prometheus listening on port %d", c.PrometheusPort)
 	}
 
 	if c.EnableInspection {
 		for _, insp := range inspection.RegisteredInspection {
 			insp.Register(clientSet)
-			go utils.TimedTaskWithInterval(ctx, insp.GetIntervalMilliSec(), insp.Inspect)
+			go utils.TimedTaskWithInterval(ctx, insp.GetInterval(), insp.Inspect)
 		}
 	}
 

@@ -3,7 +3,6 @@ package tracker
 import (
 	"errors"
 	"github.com/koupleless/virtual-kubelet/model"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"io"
 	"net/http"
@@ -78,9 +77,6 @@ func TestDefaultTracker_ErrorReport(t *testing.T) {
 	tracker := DefaultTracker{}
 	tracker.Init()
 	tracker.ErrorReport("test_trace", "test_scene", "test_event", "test_message", map[string]string{}, model.CodeSuccess)
-
-	handler.waitForMsg()
-	logrus.Info(handler.Message)
 }
 
 func TestDefaultTracker_FuncTrackNoError(t *testing.T) {
@@ -93,9 +89,6 @@ func TestDefaultTracker_FuncTrackNoError(t *testing.T) {
 	tracker.FuncTrack("test_trace", "test_scene", "test_event", map[string]string{}, func() (error, model.ErrorCode) {
 		return nil, model.CodeSuccess
 	})
-
-	handler.waitForMsg()
-	logrus.Info(handler.Message)
 }
 
 func TestDefaultTracker_FuncTrackError(t *testing.T) {
@@ -109,9 +102,6 @@ func TestDefaultTracker_FuncTrackError(t *testing.T) {
 		return errors.New("test_error"), model.CodeSuccess
 	})
 	assert.Error(t, err)
-
-	handler.waitForMsg()
-	logrus.Info(handler.Message)
 }
 
 func TestDefaultTracker_EventuallyTimeout(t *testing.T) {
@@ -134,9 +124,6 @@ func TestDefaultTracker_EventuallyTimeout(t *testing.T) {
 	})
 	assert.True(t, timeout)
 	assert.False(t, checkPass)
-
-	handler.waitForMsg()
-	logrus.Info(handler.Message)
 }
 
 func TestDefaultTracker_EventuallyNoTimeout(t *testing.T) {
@@ -159,7 +146,4 @@ func TestDefaultTracker_EventuallyNoTimeout(t *testing.T) {
 	})
 	assert.True(t, checkPass)
 	assert.False(t, timeout)
-
-	handler.waitForMsg()
-	logrus.Info(handler.Message)
 }

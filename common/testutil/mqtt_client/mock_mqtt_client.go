@@ -16,7 +16,11 @@ var _ mqtt.Message = &MockMessage{}
 
 var msgQueue map[string]chan mqtt.Message
 
+var token chan interface{}
+
 func init() {
+	token = make(chan interface{}, 1)
+	token <- nil
 	msgQueue = make(map[string]chan mqtt.Message)
 }
 
@@ -104,6 +108,10 @@ func (m *MockMqttClient) IsConnectionOpen() bool {
 }
 
 func (m *MockMqttClient) Connect() mqtt.Token {
+	<-token
+	defer func() {
+		token <- nil
+	}()
 	msgQueue[m.opts.ClientID] = m.msgChan
 	go func() {
 		msg := <-m.msgChan

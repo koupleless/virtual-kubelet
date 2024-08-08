@@ -6,16 +6,20 @@ import (
 	"github.com/koupleless/virtual-kubelet/model"
 )
 
-type BaseDiscoveredCallback func(string, model.HeartBeatData, Tunnel)
+type OnBaseDiscovered func(string, model.HeartBeatData, Tunnel)
 
-type HealthDataArrivedCallback func(string, ark.HealthData)
+type OnHealthDataArrived func(string, ark.HealthData)
 
-type QueryAllBizDataArrivedCallback func(string, []ark.ArkBizInfo)
+type OnQueryAllBizDataArrived func(string, []ark.ArkBizInfo)
+
+type OnInstallBizResponseArrived func(string, ark.InstallBizResponse)
+
+type OnUnInstallBizResponseArrived func(string, ark.UnInstallBizResponse)
 
 type Tunnel interface {
 	Name() string
 
-	Register(context.Context, string, string, BaseDiscoveredCallback, HealthDataArrivedCallback, QueryAllBizDataArrivedCallback) error
+	Register(context.Context, string, string, OnBaseDiscovered, OnHealthDataArrived, OnQueryAllBizDataArrived, OnInstallBizResponseArrived, OnUnInstallBizResponseArrived) error
 
 	OnBaseStart(context.Context, string)
 

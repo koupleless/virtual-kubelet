@@ -17,7 +17,9 @@ package pod_provider
 import (
 	"context"
 	"errors"
+	"github.com/koupleless/virtual-kubelet/common/tracker"
 	"github.com/koupleless/virtual-kubelet/common/utils"
+	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/tunnel"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet/nodeutil"
@@ -174,58 +176,75 @@ func (b *BaseProvider) handleInstallOperation(ctx context.Context, bizIdentity s
 	logger := log.G(ctx).WithField("bizIdentity", bizIdentity)
 	logger.Info("HandleBizInstallOperationStarted")
 
-	bizModel := b.runtimeInfoStore.GetBizModel(bizIdentity)
-	if bizModel == nil {
-		// for installation, this should never happen, no retry here
-		logger.Error("Installing non-existent pod")
-		return nil
+	podKey := b.runtimeInfoStore.GetRelatedPodKeyByBizIdentity(bizIdentity)
+	podLocal := b.runtimeInfoStore.GetPodByKey(podKey)
+	var labelMap map[string]string
+	if podLocal != nil {
+		labelMap = podLocal.Labels
 	}
-	bizInfo := b.queryBiz(ctx, bizIdentity)
-
-	if bizInfo != nil && bizInfo.BizState == "ACTIVATED" {
-		logger.Info("BizAlreadyActivated")
-		return nil
+	if labelMap == nil {
+		labelMap = make(map[string]string)
 	}
 
-	if bizInfo != nil && bizInfo.BizState == "RESOLVED" {
-		// process concurrent install operation
-		logger.Info("BizInstalling")
-		return nil
-	}
+	return tracker.G().FuncTrack(labelMap[model.PodTraceIDLabelKey], model.TrackSceneModuleDeployment, model.TrackEventModuleInstall, labelMap, func() (error, model.ErrorCode) {
+		bizModel := b.runtimeInfoStore.GetBizModel(bizIdentity)
+		if bizModel == nil {
+			// for installation, this should never happen, no retry here
+			return nil, model.CodeSuccess
+		}
+		bizInfo := b.queryBiz(ctx, bizIdentity)
 
-	if bizInfo != nil && bizInfo.BizState == "DEACTIVATED" {
-		logger.Error("BizInstalledButNotActivated")
-		return errors.New("BizInstalledButNotActivated")
-	}
+		if bizInfo != nil && bizInfo.BizState == "ACTIVATED" {
+			logger.Info("BizAlreadyActivated")
+			return nil, model.CodeSuccess
+		}
 
-	if err := b.installBiz(ctx, bizModel); err != nil {
-		logger.WithError(err).Error("InstallBizFailed")
-		return err
-	}
+		if bizInfo != nil && bizInfo.BizState == "RESOLVED" {
+			// process concurrent install operation
+			logger.Info("BizInstalling")
+			return nil, model.CodeSuccess
+		}
 
-	logger.Info("HandleBizInstallOperationFinished")
-	return nil
+		if bizInfo != nil && bizInfo.BizState == "DEACTIVATED" {
+			return errors.New("BizInstalledButNotActivated"), model.CodeModuleInstalledButDeactivated
+		}
+
+		if err := b.installBiz(ctx, bizModel); err != nil {
+			return err, model.CodeModuleInstallFailed
+		}
+		return nil, model.CodeSuccess
+	})
 }
 
 func (b *BaseProvider) handleUnInstallOperation(ctx context.Context, bizIdentity string) error {
 	logger := log.G(ctx).WithField("bizIdentity", bizIdentity)
 	logger.Info("HandleUnInstallOperationStarted")
 
-	bizInfo := b.queryBiz(ctx, bizIdentity)
-
-	if bizInfo != nil {
-		// local installed, call uninstall
-		if err := b.unInstallBiz(ctx, &ark.BizModel{
-			BizName:    bizInfo.BizName,
-			BizVersion: bizInfo.BizVersion,
-		}); err != nil {
-			logger.WithError(err).Error("UnInstallBizFailed")
-			return err
-		}
+	podKey := b.runtimeInfoStore.GetRelatedPodKeyByBizIdentity(bizIdentity)
+	podLocal := b.runtimeInfoStore.GetPodByKey(podKey)
+	var labelMap map[string]string
+	if podLocal != nil {
+		labelMap = podLocal.Labels
+	}
+	if labelMap == nil {
+		labelMap = make(map[string]string)
 	}
 
-	logger.Info("HandleBizUninstallOperationFinished")
-	return nil
+	return tracker.G().FuncTrack(labelMap[model.PodTraceIDLabelKey], model.TrackSceneModuleDeployment, model.TrackEventModuleUnInstall, labelMap, func() (error, model.ErrorCode) {
+		bizInfo := b.queryBiz(ctx, bizIdentity)
+
+		if bizInfo != nil {
+			// local installed, call uninstall
+			if err := b.unInstallBiz(ctx, &ark.BizModel{
+				BizName:    bizInfo.BizName,
+				BizVersion: bizInfo.BizVersion,
+			}); err != nil {
+				logger.WithError(err).Error("UnInstallBizFailed")
+				return err, model.CodeModuleUnInstallFailed
+			}
+		}
+		return nil, model.CodeSuccess
+	})
 }
 
 // CreatePod directly install a biz bundle to base
@@ -268,7 +287,7 @@ func (b *BaseProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 	b.runtimeInfoStore.PutPod(pod.DeepCopy())
 
 	// start a go runtime, check all biz models delete successfully, then install new biz
-	go utils.CheckAndFinallyCall(func() bool {
+	go tracker.G().Eventually(pod.Labels[model.PodTraceIDLabelKey], model.TrackSceneModuleDeployment, model.TrackEventPodUpdate, pod.Labels, model.CodeModuleUninstallTimeout, func() bool {
 		bizInfos := b.queryAllBiz(context.Background())
 		existBizMap := make(map[string]bool)
 		for _, bizInfo := range bizInfos {
@@ -283,7 +302,13 @@ func (b *BaseProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 		}
 		return true
 	}, time.Minute, time.Second, func() {
-		// not in deletion, install new models
+		// install new models
+		for _, newModel := range newModels {
+			b.installOperationQueue.Enqueue(ctx, utils.ModelUtil.GetBizIdentityFromBizModel(newModel))
+			logger.WithField("bizName", newModel.BizName).WithField("bizVersion", newModel.BizVersion).Info("ItemEnqueued")
+		}
+	}, func() {
+		// install new models
 		for _, newModel := range newModels {
 			b.installOperationQueue.Enqueue(ctx, utils.ModelUtil.GetBizIdentityFromBizModel(newModel))
 			logger.WithField("bizName", newModel.BizName).WithField("bizVersion", newModel.BizVersion).Info("ItemEnqueued")
@@ -306,22 +331,13 @@ func (b *BaseProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 		logger.WithField("bizName", bizModel.BizName).WithField("bizVersion", bizModel.BizVersion).Info("ItemEnqueued")
 	}
 
+	if pod.DeletionGracePeriodSeconds != nil && *pod.DeletionGracePeriodSeconds == 0 {
+		// force delete, just return
+		return nil
+	}
+
 	// start a go runtime, check all biz models delete successfully
-	go utils.CheckAndFinallyCall(func() bool {
-		bizInfos := b.queryAllBiz(context.Background())
-		existBizMap := make(map[string]bool)
-		for _, bizInfo := range bizInfos {
-			bizIdentity := utils.ModelUtil.GetBizIdentityFromBizInfo(&bizInfo)
-			existBizMap[bizIdentity] = true
-		}
-		for _, bizModel := range bizModels {
-			exist := existBizMap[utils.ModelUtil.GetBizIdentityFromBizModel(bizModel)]
-			if exist {
-				return false
-			}
-		}
-		return true
-	}, time.Minute, time.Second, func() {
+	deletePod := func() {
 		b.runtimeInfoStore.DeletePod(podKey)
 
 		if b.k8sClient != nil {
@@ -335,7 +351,23 @@ func (b *BaseProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 				logger.WithError(err).Error("Pod has been deleted in k8s")
 			}
 		}
-	})
+	}
+
+	go tracker.G().Eventually(pod.Labels[model.PodTraceIDLabelKey], model.TrackSceneModuleDeployment, model.TrackEventPodDelete, pod.Labels, model.CodeModuleUninstallTimeout, func() bool {
+		bizInfos := b.queryAllBiz(context.Background())
+		existBizMap := make(map[string]bool)
+		for _, bizInfo := range bizInfos {
+			bizIdentity := utils.ModelUtil.GetBizIdentityFromBizInfo(&bizInfo)
+			existBizMap[bizIdentity] = true
+		}
+		for _, bizModel := range bizModels {
+			exist := existBizMap[utils.ModelUtil.GetBizIdentityFromBizModel(bizModel)]
+			if exist {
+				return false
+			}
+		}
+		return true
+	}, time.Minute, time.Second, deletePod, deletePod)
 
 	return nil
 }

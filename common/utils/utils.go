@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"os"
 	"time"
 )
 
@@ -22,7 +23,7 @@ func TimedTaskWithInterval(ctx context.Context, interval time.Duration, task fun
 	}
 }
 
-func CheckAndFinallyCall(checkFunc func() bool, timeout, interval time.Duration, finally func()) {
+func CheckAndFinallyCall(checkFunc func() bool, timeout, interval time.Duration, finally, timeoutCall func()) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	checkTicker := time.NewTicker(interval)
@@ -31,7 +32,7 @@ func CheckAndFinallyCall(checkFunc func() bool, timeout, interval time.Duration,
 		case <-ctx.Done():
 			// TODO timeout log
 			logrus.Info("Check and Finally call timeout")
-			finally()
+			timeoutCall()
 			return
 		default:
 		}
@@ -50,4 +51,12 @@ func ConvertByteNumToResourceQuantity(byteNum int64) resource.Quantity {
 	}
 	resourceStr = fmt.Sprintf("%dKi", byteNum)
 	return resource.MustParse(resourceStr)
+}
+
+func GetEnv(key, defaultValue string) string {
+	value, found := os.LookupEnv(key)
+	if found {
+		return value
+	}
+	return defaultValue
 }

@@ -46,7 +46,7 @@ func TestMqttTunnel_Register(t *testing.T) {
 	defer cancel()
 	mt := MqttTunnel{}
 
-	err := mt.Register(ctx, "test-client", "test", baseDiscoverCallback, healthDataCallback, bizDataCallback)
+	err := mt.Register(ctx, "test-client", "test", baseDiscoverCallback, healthDataCallback, bizDataCallback, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "mqtt_tunnel_provider", mt.Name())
 }
@@ -56,7 +56,7 @@ func TestMqttTunnel_BaseDiscover(t *testing.T) {
 	defer cancel()
 	mt := MqttTunnel{}
 
-	err := mt.Register(ctx, "test-client", "test", baseDiscoverCallback, healthDataCallback, bizDataCallback)
+	err := mt.Register(ctx, "test-client", "test", baseDiscoverCallback, healthDataCallback, bizDataCallback, nil, nil)
 	assert.NoError(t, err)
 
 	// mock base online
@@ -64,7 +64,7 @@ func TestMqttTunnel_BaseDiscover(t *testing.T) {
 
 	mt.OnBaseStart(ctx, id)
 
-	mt.baseDiscoveredCallback(id, model.HeartBeatData{}, &mt)
+	mt.onBaseDiscovered(id, model.HeartBeatData{}, &mt)
 
 	mt.OnBaseStop(ctx, id)
 
@@ -78,23 +78,23 @@ func TestMqttTunnel_FetchBaseInfo(t *testing.T) {
 	defer cancel()
 	mt := MqttTunnel{}
 
-	err := mt.Register(ctx, "test-client", "test", baseDiscoverCallback, healthDataCallback, bizDataCallback)
+	err := mt.Register(ctx, "test-client", "test", baseDiscoverCallback, healthDataCallback, bizDataCallback, nil, nil)
 	assert.NoError(t, err)
 
 	// mock base online
 	id := "test-base-fetch"
 
-	mt.baseDiscoveredCallback(id, model.HeartBeatData{}, &mt)
+	mt.onBaseDiscovered(id, model.HeartBeatData{}, &mt)
 
 	err = mt.FetchHealthData(ctx, id)
 	assert.NoError(t, err)
 
-	mt.healthDataArrivedCallback(id, ark.HealthData{})
+	mt.onHealthDataArrived(id, ark.HealthData{})
 
 	err = mt.QueryAllBizData(ctx, id)
 	assert.NoError(t, err)
 
-	mt.queryAllBizDataArrivedCallback(id, []ark.ArkBizInfo{})
+	mt.onQueryAllBizDataArrived(id, []ark.ArkBizInfo{})
 
 	assert.Eventually(t, func() bool {
 		return currBaseID == id && currBaseHealthFetched == id && currBaseBizFetched == id
@@ -106,13 +106,13 @@ func TestMqttTunnel_BaseBizOperation(t *testing.T) {
 	defer cancel()
 	mt := MqttTunnel{}
 
-	err := mt.Register(ctx, "test-client", "test", baseDiscoverCallback, healthDataCallback, bizDataCallback)
+	err := mt.Register(ctx, "test-client", "test", baseDiscoverCallback, healthDataCallback, bizDataCallback, nil, nil)
 	assert.NoError(t, err)
 
 	// mock base online
 	id := "test-base-biz-operation"
 
-	mt.baseDiscoveredCallback(id, model.HeartBeatData{}, &mt)
+	mt.onBaseDiscovered(id, model.HeartBeatData{}, &mt)
 
 	assert.Eventually(t, func() bool {
 		return currBaseID == id
@@ -126,7 +126,7 @@ func TestMqttTunnel_BaseBizOperation(t *testing.T) {
 	err = mt.InstallBiz(ctx, id, &bizModel)
 	assert.NoError(t, err)
 
-	mt.queryAllBizDataArrivedCallback(id, []ark.ArkBizInfo{
+	mt.onQueryAllBizDataArrived(id, []ark.ArkBizInfo{
 		{
 			BizName:    bizModel.BizName,
 			BizVersion: bizModel.BizVersion,
@@ -141,7 +141,7 @@ func TestMqttTunnel_BaseBizOperation(t *testing.T) {
 	err = mt.UninstallBiz(ctx, id, &bizModel)
 	assert.NoError(t, err)
 
-	mt.queryAllBizDataArrivedCallback(id, []ark.ArkBizInfo{})
+	mt.onQueryAllBizDataArrived(id, []ark.ArkBizInfo{})
 
 	assert.Eventually(t, func() bool {
 		return len(currBizInfoFetched) == 0
@@ -153,7 +153,7 @@ func TestMqttTunnel_MqttHeartCallback(t *testing.T) {
 	defer cancel()
 	mt := MqttTunnel{}
 
-	err := mt.Register(ctx, "test-client", "test", baseDiscoverCallback, healthDataCallback, bizDataCallback)
+	err := mt.Register(ctx, "test-client", "test", baseDiscoverCallback, healthDataCallback, bizDataCallback, nil, nil)
 	assert.NoError(t, err)
 
 	// mock base online
@@ -187,7 +187,7 @@ func TestMqttTunnel_MqttHealthCallback(t *testing.T) {
 	defer cancel()
 	mt := MqttTunnel{}
 
-	err := mt.Register(ctx, "test-client", "test", baseDiscoverCallback, healthDataCallback, bizDataCallback)
+	err := mt.Register(ctx, "test-client", "test", baseDiscoverCallback, healthDataCallback, bizDataCallback, nil, nil)
 	assert.NoError(t, err)
 
 	// mock base online
@@ -227,7 +227,7 @@ func TestMqttTunnel_MqttBizCallback(t *testing.T) {
 	defer cancel()
 	mt := MqttTunnel{}
 
-	err := mt.Register(ctx, "test-client", "test", baseDiscoverCallback, healthDataCallback, bizDataCallback)
+	err := mt.Register(ctx, "test-client", "test", baseDiscoverCallback, healthDataCallback, bizDataCallback, nil, nil)
 	assert.NoError(t, err)
 
 	// mock base online

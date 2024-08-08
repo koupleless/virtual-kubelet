@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"gotest.tools/assert"
+	"os"
 	"testing"
 	"time"
 )
@@ -43,11 +44,15 @@ func TestConvertByteNumToResourceQuantity(t *testing.T) {
 
 func TestCheckAndFinallyCall_timeout(t *testing.T) {
 	success := false
+	timeout := false
 	CheckAndFinallyCall(func() bool {
 		return success
 	}, time.Second, time.Millisecond*100, func() {
 		return
+	}, func() {
+		timeout = true
 	})
+	assert.Assert(t, timeout)
 }
 
 func TestCheckAndFinallyCall_success(t *testing.T) {
@@ -58,8 +63,19 @@ func TestCheckAndFinallyCall_success(t *testing.T) {
 	}, time.Second, time.Millisecond*100, func() {
 		called = true
 		return
+	}, func() {
+		return
 	})
 	success = true
 	time.Sleep(time.Millisecond * 200)
 	assert.Assert(t, called)
+}
+
+func TestGetEnv(t *testing.T) {
+	defaultValue := "TEST_ENV"
+	value := GetEnv("TEST_ENV", "none")
+	assert.Equal(t, value, "none")
+	os.Setenv("TEST_ENV", defaultValue)
+	value = GetEnv("TEST_ENV", "none")
+	assert.Equal(t, value, defaultValue)
 }

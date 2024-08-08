@@ -16,7 +16,7 @@ package main
 
 import (
 	"context"
-	"github.com/koupleless/virtual-kubelet/commands/root"
+	"github.com/koupleless/virtual-kubelet/cmd/module-controller/app"
 	"github.com/koupleless/virtual-kubelet/common/log"
 	logruslogger "github.com/koupleless/virtual-kubelet/common/log/logrus"
 	"github.com/koupleless/virtual-kubelet/common/trace"
@@ -47,11 +47,11 @@ func main() {
 	log.L = logruslogger.FromLogrus(logrus.NewEntry(logrus.StandardLogger()))
 	trace.T = opencensus.Adapter{}
 
-	var opts root.Opts
-	optsErr := root.SetDefaultOpts(&opts)
+	var opts app.Opts
+	optsErr := app.SetDefaultOpts(&opts)
 	opts.Version = strings.Join([]string{k8sVersion, "vk", buildVersion}, "-")
 
-	rootCmd := root.NewCommand(ctx, opts)
+	rootCmd := app.NewCommand(ctx, opts)
 	preRun := rootCmd.PreRunE
 
 	var logLevel string

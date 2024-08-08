@@ -100,7 +100,7 @@ func TestBaseNode_RunAndContextDone(t *testing.T) {
 	defer cancel()
 	mt := &mqtt_tunnel.MqttTunnel{}
 
-	err := mt.Register(ctx, "test-client", "test", nil, nil, nil)
+	err := mt.Register(ctx, "test-client", "test", nil, nil, nil, nil, nil)
 	assert.NoError(t, err)
 	kubeClient := fake.NewSimpleClientset()
 
@@ -134,7 +134,7 @@ func TestBaseNode_RunAndExit(t *testing.T) {
 	defer cancel()
 	mt := &mqtt_tunnel.MqttTunnel{}
 
-	err := mt.Register(ctx, "test-client", "test", nil, nil, nil)
+	err := mt.Register(ctx, "test-client", "test", nil, nil, nil, nil, nil)
 	assert.NoError(t, err)
 	kubeClient := fake.NewSimpleClientset()
 
@@ -170,7 +170,7 @@ func TestBaseNode_PodOperator(t *testing.T) {
 	defer cancel()
 	mt := &mqtt_tunnel.MqttTunnel{}
 
-	err := mt.Register(ctx, "test-client", "test", nil, nil, nil)
+	err := mt.Register(ctx, "test-client", "test", nil, nil, nil, nil, nil)
 	assert.NoError(t, err)
 	kubeClient := fake.NewSimpleClientset()
 

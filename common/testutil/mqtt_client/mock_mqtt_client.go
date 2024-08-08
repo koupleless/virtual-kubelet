@@ -14,15 +14,7 @@ var _ mqtt.Token = &MockToken{}
 
 var _ mqtt.Message = &MockMessage{}
 
-var msgQueue map[string]chan mqtt.Message
-
-var token chan interface{}
-
-func init() {
-	token = make(chan interface{}, 1)
-	token <- nil
-	msgQueue = make(map[string]chan mqtt.Message)
-}
+var msgQueue sync.Map
 
 type MockMqttClient struct {
 	sync.Mutex
@@ -108,11 +100,7 @@ func (m *MockMqttClient) IsConnectionOpen() bool {
 }
 
 func (m *MockMqttClient) Connect() mqtt.Token {
-	<-token
-	defer func() {
-		token <- nil
-	}()
-	msgQueue[m.opts.ClientID] = m.msgChan
+	msgQueue.Store(m.opts.ClientID, m.msgChan)
 	go func() {
 		msg := <-m.msgChan
 		// check subscription match
@@ -130,7 +118,7 @@ func (m *MockMqttClient) Disconnect(_ uint) {
 	defer m.Unlock()
 	m.opts.OnConnectionLost(m, nil)
 	m.subMap = make(map[string]mqtt.MessageHandler)
-	delete(msgQueue, m.opts.ClientID)
+	msgQueue.Delete(m.opts.ClientID)
 }
 
 func (m *MockMqttClient) Publish(topic string, _ byte, _ bool, payload interface{}) mqtt.Token {
@@ -140,10 +128,12 @@ func (m *MockMqttClient) Publish(topic string, _ byte, _ bool, payload interface
 		T: topic,
 		P: payload.([]byte),
 	}
-	for _, q := range msgQueue {
+	msgQueue.Range(func(_, value interface{}) bool {
+		q := value.(chan mqtt.Message)
 		// send to all client
 		q <- &message
-	}
+		return true
+	})
 	return &MockToken{done: make(chan struct{}), client: m, funcCall: func(client mqtt.Client) {}}
 }
 

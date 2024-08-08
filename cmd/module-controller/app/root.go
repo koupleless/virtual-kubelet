@@ -12,14 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package root
+package app
 
 import (
 	"context"
 	"errors"
 	"github.com/google/uuid"
 	"github.com/koupleless/virtual-kubelet/common/log"
+	"github.com/koupleless/virtual-kubelet/common/prometheus"
+	"github.com/koupleless/virtual-kubelet/common/tracker"
+	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/controller/base_register_controller"
+	"github.com/koupleless/virtual-kubelet/inspection"
 	"github.com/koupleless/virtual-kubelet/tunnel"
 	"github.com/koupleless/virtual-kubelet/tunnel/mqtt_tunnel"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet/nodeutil"
@@ -31,13 +35,9 @@ import (
 // This command is used to start the virtual-kubelet daemon
 func NewCommand(ctx context.Context, c Opts) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "run",
-		Short: "run provides a virtual kubelet interface for your kubernetes cluster.",
-		Long: `run implements the Kubelet interface with a pluggable
-backend implementation allowing users to create kubernetes nodes without running the kubelet.
-This allows users to schedule kubernetes workloads on nodes that aren't running Kubernetes.`,
+		Use: "run",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runRootCommand(ctx, c)
+			return runModuleControllerCommand(ctx, c)
 		},
 	}
 
@@ -45,7 +45,7 @@ This allows users to schedule kubernetes workloads on nodes that aren't running 
 	return cmd
 }
 
-func runRootCommand(ctx context.Context, c Opts) error {
+func runModuleControllerCommand(ctx context.Context, c Opts) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -57,14 +57,30 @@ func runRootCommand(ctx context.Context, c Opts) error {
 		"env":             c.Env,
 	}))
 
-	tunnels := make([]tunnel.Tunnel, 0)
-	if c.EnableMqttTunnel {
-		tunnels = append(tunnels, &mqtt_tunnel.MqttTunnel{})
-	}
-
 	clientSet, err := nodeutil.ClientsetFromEnv(c.KubeConfigPath)
 	if err != nil {
 		return err
+	}
+
+	if c.EnableTracker {
+		tracker.SetTracker(&tracker.DefaultTracker{})
+	}
+
+	if c.EnablePrometheus {
+		go prometheus.StartPrometheusListen(c.PrometheusPort)
+		log.G(ctx).Infof("Prometheus listening on port %d", c.PrometheusPort)
+	}
+
+	if c.EnableInspection {
+		for _, insp := range inspection.RegisteredInspection {
+			insp.Register(clientSet)
+			go utils.TimedTaskWithInterval(ctx, insp.GetIntervalMilliSec(), insp.Inspect)
+		}
+	}
+
+	tunnels := make([]tunnel.Tunnel, 0)
+	if c.EnableMqttTunnel {
+		tunnels = append(tunnels, &mqtt_tunnel.MqttTunnel{})
 	}
 
 	config := base_register_controller.BuildBaseRegisterControllerConfig{
@@ -89,7 +105,9 @@ func runRootCommand(ctx context.Context, c Opts) error {
 	go registerController.Run(ctx)
 
 	// waiting for register controller ready
-	<-registerController.Ready()
+	if err = registerController.WaitReady(ctx, time.Second*30); err != nil {
+		return err
+	}
 
 	log.G(ctx).Info("Module controller running")
 

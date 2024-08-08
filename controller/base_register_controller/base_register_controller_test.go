@@ -71,8 +71,11 @@ func TestBaseRegisterController_Run(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, controller)
 
+	// timeout test
+	assert.Error(t, controller.WaitReady(ctx, time.Second))
+
 	go controller.Run(ctx)
-	<-controller.Ready()
+	assert.NoError(t, controller.WaitReady(ctx, time.Second*5))
 
 	// mock base online
 	client, err := mqtt.NewMqttClient(&mqtt.ClientConfig{
@@ -172,7 +175,7 @@ func TestBaseRegisterController_CallbackShutdown(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, controller)
 
-	controller.baseDiscoveredCallback("test", model.HeartBeatData{
+	controller.onBaseDiscovered("test", model.HeartBeatData{
 		DeviceID: "test",
 		MasterBizInfo: ark.MasterBizInfo{
 			BizState: "DEACTIVATED",
@@ -197,6 +200,6 @@ func TestBaseRegisterController_CallbackBaseNotExist(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, controller)
 
-	controller.healthDataCallback("test", ark.HealthData{})
-	controller.bizDataCallback("test", []ark.ArkBizInfo{})
+	controller.onHealthDataArrived("test", ark.HealthData{})
+	controller.onBizDataArrived("test", []ark.ArkBizInfo{})
 }

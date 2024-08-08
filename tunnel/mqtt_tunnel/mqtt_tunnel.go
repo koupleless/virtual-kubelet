@@ -19,9 +19,11 @@ type MqttTunnel struct {
 	mqttClient *mqtt.Client
 	env        string
 
-	baseDiscoveredCallback         func(string, model.HeartBeatData, tunnel.Tunnel)
-	healthDataArrivedCallback      func(string, ark.HealthData)
-	queryAllBizDataArrivedCallback func(string, []ark.ArkBizInfo)
+	onBaseDiscovered              tunnel.OnBaseDiscovered
+	onHealthDataArrived           tunnel.OnHealthDataArrived
+	onQueryAllBizDataArrived      tunnel.OnQueryAllBizDataArrived
+	onInstallBizResponseArrived   tunnel.OnInstallBizResponseArrived
+	onUninstallBizResponseArrived tunnel.OnUnInstallBizResponseArrived
 }
 
 func (m *MqttTunnel) OnBaseStart(ctx context.Context, baseID string) {
@@ -50,12 +52,16 @@ func (m *MqttTunnel) Name() string {
 	return "mqtt_tunnel_provider"
 }
 
-func (m *MqttTunnel) Register(ctx context.Context, clientID, env string, baseDiscoveredCallback tunnel.BaseDiscoveredCallback, healthDataArrivedCallback tunnel.HealthDataArrivedCallback, queryAllBizDataArrivedCallback tunnel.QueryAllBizDataArrivedCallback) (err error) {
-	m.baseDiscoveredCallback = baseDiscoveredCallback
+func (m *MqttTunnel) Register(ctx context.Context, clientID, env string, onBaseDiscovered tunnel.OnBaseDiscovered, onHealthDataArrived tunnel.OnHealthDataArrived, onQueryAllBizDataArrived tunnel.OnQueryAllBizDataArrived, onInstallBizResponseArrived tunnel.OnInstallBizResponseArrived, onUnInstallBizResponseArrived tunnel.OnUnInstallBizResponseArrived) (err error) {
+	m.onBaseDiscovered = onBaseDiscovered
 
-	m.healthDataArrivedCallback = healthDataArrivedCallback
+	m.onHealthDataArrived = onHealthDataArrived
 
-	m.queryAllBizDataArrivedCallback = queryAllBizDataArrivedCallback
+	m.onQueryAllBizDataArrived = onQueryAllBizDataArrived
+
+	m.onInstallBizResponseArrived = onInstallBizResponseArrived
+
+	m.onUninstallBizResponseArrived = onUnInstallBizResponseArrived
 
 	c := &MqttConfig{}
 	c.init()
@@ -97,8 +103,8 @@ func (m *MqttTunnel) heartBeatMsgCallback(_ paho.Client, msg paho.Message) {
 	if expired(data.PublishTimestamp, 1000*10) {
 		return
 	}
-	if m.baseDiscoveredCallback != nil {
-		m.baseDiscoveredCallback(baseID, data.Data, m)
+	if m.onBaseDiscovered != nil {
+		m.onBaseDiscovered(baseID, data.Data, m)
 	}
 }
 
@@ -117,8 +123,8 @@ func (m *MqttTunnel) healthMsgCallback(_ paho.Client, msg paho.Message) {
 	if data.Data.Code != "SUCCESS" {
 		return
 	}
-	if m.healthDataArrivedCallback != nil {
-		m.healthDataArrivedCallback(baseID, data.Data.Data.HealthData)
+	if m.onHealthDataArrived != nil {
+		m.onHealthDataArrived(baseID, data.Data.Data.HealthData)
 	}
 }
 
@@ -138,8 +144,8 @@ func (m *MqttTunnel) bizMsgCallback(_ paho.Client, msg paho.Message) {
 	if data.Data.Code != "SUCCESS" {
 		return
 	}
-	if m.queryAllBizDataArrivedCallback != nil {
-		m.queryAllBizDataArrivedCallback(baseID, data.Data.Data)
+	if m.onQueryAllBizDataArrived != nil {
+		m.onQueryAllBizDataArrived(baseID, data.Data.Data)
 	}
 }
 

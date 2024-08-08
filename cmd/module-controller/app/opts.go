@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package root
+package app
 
 import (
+	"github.com/koupleless/virtual-kubelet/common/utils"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -25,13 +27,9 @@ const (
 	DefaultInformerResyncPeriod = 1 * time.Minute
 	DefaultPodSyncWorkers       = 4
 	DefaultENV                  = "dev"
+	DefaultPrometheusPort       = "9090"
 )
 
-// Opts stores all the options for configuring the root module-controller command.
-// It is used for setting flag values.
-//
-// You can set the default options by creating a new `Opts` struct and passing
-// it into `SetDefaultOpts`
 type Opts struct {
 	// Path to the kubeconfig to use to connect to the Kubernetes API server.
 	KubeConfigPath string
@@ -39,6 +37,14 @@ type Opts struct {
 	OperatingSystem string
 	// Env is the env of running
 	Env string
+	// EnableTracker is the flag of using default tracker
+	EnableTracker bool
+	// EnableInspection is the flag of using inspection
+	EnableInspection bool
+	// EnablePrometheus is the flag of using prometheus
+	EnablePrometheus bool
+	// PrometheusPort is the port of prometheus metric endpoint
+	PrometheusPort int
 
 	// Number of workers to use to handle pod notifications
 	PodSyncWorkers       int
@@ -69,8 +75,17 @@ func SetDefaultOpts(c *Opts) error {
 		c.KubeConfigPath = os.Getenv("KUBE_CONFIG_PATH")
 	}
 
+	if c.PrometheusPort == 0 {
+		portStr := utils.GetEnv("PROMETHEUS_PORT", DefaultPrometheusPort)
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			return err
+		}
+		c.PrometheusPort = port
+	}
+
 	if c.Env == "" {
-		c.Env = getEnv("ENV", DefaultENV)
+		c.Env = utils.GetEnv("ENV", DefaultENV)
 	}
 
 	return nil

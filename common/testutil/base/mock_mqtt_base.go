@@ -38,10 +38,9 @@ func NewBaseMock(baseID, baseName, baseVersion string, mqttClient *mqtt.Client) 
 			},
 			Cpu: ark.CpuInfo{},
 			MasterBizInfo: ark.MasterBizInfo{
-				BizName:        baseName,
-				BizState:       "ACTIVATED",
-				BizVersion:     baseVersion,
-				WebContextPath: "/",
+				BizName:    baseName,
+				BizState:   "ACTIVATED",
+				BizVersion: baseVersion,
 			},
 		},
 		exit: make(chan struct{}),

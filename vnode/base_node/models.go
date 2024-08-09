@@ -23,8 +23,11 @@ type BuildBaseNodeConfig struct {
 	// BaseID is the base id of base
 	BaseID string
 
-	// NodeIP is the base ip of base
+	// NodeIP is the ip of base
 	NodeIP string
+
+	// NodeHostname is the hostname of base
+	NodeHostname string
 
 	// TechStack is the base tech stack, default java
 	TechStack string

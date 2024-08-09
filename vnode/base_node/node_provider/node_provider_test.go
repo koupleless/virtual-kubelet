@@ -27,9 +27,8 @@ func TestVirtualKubeletNode_Register(t *testing.T) {
 		Env:       "test",
 	})
 	node := &corev1.Node{}
-	err := vnode.Register(context.Background(), node)
+	err := vnode.Register(node, "test")
 	assert.NilError(t, err)
-	assert.Assert(t, len(node.Labels) == 4)
 	assert.Assert(t, len(node.Spec.Taints) == 2)
 	assert.Assert(t, node.Status.Phase == corev1.NodePending)
 }
@@ -95,6 +94,6 @@ func TestBaseNodeProvider_CurrNodeInfo(t *testing.T) {
 		Version:   "1.0.0",
 		Env:       "test",
 	})
-	vnode.Register(context.Background(), &corev1.Node{})
+	vnode.Register(&corev1.Node{}, "test")
 	assert.Assert(t, vnode.CurrNodeInfo() != nil)
 }

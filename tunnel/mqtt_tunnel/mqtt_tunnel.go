@@ -48,7 +48,7 @@ func (m *MqttTunnel) OnBaseStop(ctx context.Context, baseID string) {
 	}
 }
 
-func (m *MqttTunnel) Name() string {
+func (m *MqttTunnel) Key() string {
 	return "mqtt_tunnel_provider"
 }
 

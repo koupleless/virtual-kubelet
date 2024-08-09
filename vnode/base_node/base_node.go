@@ -176,16 +176,17 @@ func NewBaseNode(config *BuildBaseNodeConfig) (kn *BaseNode, err error) {
 		utils.FormatBaseNodeName(config.BaseID),
 		func(cfg nodeutil.ProviderConfig) (nodeutil.Provider, virtual_kubelet.NodeProvider, error) {
 			nodeProvider = node_provider.NewVirtualKubeletNode(node_provider.BuildBaseNodeProviderConfig{
-				NodeIP:    config.NodeIP,
-				TechStack: config.TechStack,
-				Version:   config.BizVersion,
-				BizName:   config.BizName,
-				Env:       config.Env,
+				NodeIP:       config.NodeIP,
+				NodeHostname: config.NodeHostname,
+				TechStack:    config.TechStack,
+				Version:      config.BizVersion,
+				BizName:      config.BizName,
+				Env:          config.Env,
 			})
 			// initialize node spec on bootstrap
 			podProvider = pod_provider.NewBaseProvider(cfg.Node.Namespace, config.NodeIP, config.BaseID, config.KubeClient, config.Tunnel)
 
-			err = nodeProvider.Register(context.Background(), cfg.Node)
+			err = nodeProvider.Register(cfg.Node, config.Tunnel.Key())
 			if err != nil {
 				return nil, nil, err
 			}

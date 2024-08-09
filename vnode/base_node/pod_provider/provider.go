@@ -186,7 +186,7 @@ func (b *BaseProvider) handleInstallOperation(ctx context.Context, bizIdentity s
 		labelMap = make(map[string]string)
 	}
 
-	return tracker.G().FuncTrack(labelMap[model.PodTraceIDLabelKey], model.TrackSceneModuleDeployment, model.TrackEventModuleInstall, labelMap, func() (error, model.ErrorCode) {
+	return tracker.G().FuncTrack(labelMap[model.LabelKeyOfTraceID], model.TrackSceneModuleDeployment, model.TrackEventModuleInstall, labelMap, func() (error, model.ErrorCode) {
 		bizModel := b.runtimeInfoStore.GetBizModel(bizIdentity)
 		if bizModel == nil {
 			// for installation, this should never happen, no retry here
@@ -230,7 +230,7 @@ func (b *BaseProvider) handleUnInstallOperation(ctx context.Context, bizIdentity
 		labelMap = make(map[string]string)
 	}
 
-	return tracker.G().FuncTrack(labelMap[model.PodTraceIDLabelKey], model.TrackSceneModuleDeployment, model.TrackEventModuleUnInstall, labelMap, func() (error, model.ErrorCode) {
+	return tracker.G().FuncTrack(labelMap[model.LabelKeyOfTraceID], model.TrackSceneModuleDeployment, model.TrackEventModuleUnInstall, labelMap, func() (error, model.ErrorCode) {
 		bizInfo := b.queryBiz(ctx, bizIdentity)
 
 		if bizInfo != nil {
@@ -287,7 +287,7 @@ func (b *BaseProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 	b.runtimeInfoStore.PutPod(pod.DeepCopy())
 
 	// start a go runtime, check all biz models delete successfully, then install new biz
-	go tracker.G().Eventually(pod.Labels[model.PodTraceIDLabelKey], model.TrackSceneModuleDeployment, model.TrackEventPodUpdate, pod.Labels, model.CodeModuleUninstallTimeout, func() bool {
+	go tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneModuleDeployment, model.TrackEventPodUpdate, pod.Labels, model.CodeModuleUninstallTimeout, func() bool {
 		bizInfos := b.queryAllBiz(context.Background())
 		existBizMap := make(map[string]bool)
 		for _, bizInfo := range bizInfos {
@@ -331,7 +331,7 @@ func (b *BaseProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 		logger.WithField("bizName", bizModel.BizName).WithField("bizVersion", bizModel.BizVersion).Info("ItemEnqueued")
 	}
 
-	if pod.DeletionGracePeriodSeconds != nil && *pod.DeletionGracePeriodSeconds == 0 {
+	if pod.DeletionGracePeriodSeconds == nil || *pod.DeletionGracePeriodSeconds == 0 {
 		// force delete, just return
 		return nil
 	}
@@ -353,7 +353,7 @@ func (b *BaseProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 		}
 	}
 
-	go tracker.G().Eventually(pod.Labels[model.PodTraceIDLabelKey], model.TrackSceneModuleDeployment, model.TrackEventPodDelete, pod.Labels, model.CodeModuleUninstallTimeout, func() bool {
+	go tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneModuleDeployment, model.TrackEventPodDelete, pod.Labels, model.CodeModuleUninstallTimeout, func() bool {
 		bizInfos := b.queryAllBiz(context.Background())
 		existBizMap := make(map[string]bool)
 		for _, bizInfo := range bizInfos {
@@ -367,7 +367,7 @@ func (b *BaseProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 			}
 		}
 		return true
-	}, time.Minute, time.Second, deletePod, deletePod)
+	}, time.Second*25, time.Second, deletePod, deletePod)
 
 	return nil
 }

@@ -48,7 +48,7 @@ func TestMqttTunnel_Register(t *testing.T) {
 
 	err := mt.Register(ctx, "test-client", "test", baseDiscoverCallback, healthDataCallback, bizDataCallback, nil, nil)
 	assert.NoError(t, err)
-	assert.Equal(t, "mqtt_tunnel_provider", mt.Name())
+	assert.Equal(t, "mqtt_tunnel_provider", mt.Key())
 }
 
 func TestMqttTunnel_BaseDiscover(t *testing.T) {

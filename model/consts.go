@@ -44,12 +44,16 @@ const (
 )
 
 const (
-	PodTraceIDLabelKey                   = "trace.koupleless.io/id"
-	PodModuleControllerComponentLabelKey = "module-controller.koupleless.io/component"
+	LabelKeyOfTraceID                   = "trace.koupleless.io/id"
+	LabelKeyOfModuleControllerComponent = "module-controller.koupleless.io/component"
+	LabelKeyOfEnv                       = "module-controller.koupleless.io/env"
+	LabelKeyOfTunnel                    = "base.koupleless.io/tunnel"
 )
 
 const (
-	ModuleControllerComponentModule = "module"
+	ModuleControllerComponentModule           = "module"
+	ModuleControllerComponentModuleDeployment = "module-deployment"
+	ModuleControllerComponentVNode            = "vnode"
 )
 
 // ErrorCode first two char represent scene of Error, 00 represent Error of module-controller, 01 represent Error of user config

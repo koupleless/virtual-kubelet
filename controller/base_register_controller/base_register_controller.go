@@ -102,13 +102,16 @@ func (brc *BaseRegisterController) Run(ctx context.Context) {
 
 	// init all tunnels, and at least one t start successfully
 	anyTunnelStarted := false
+
+	startedTunnels := make([]tunnel.Tunnel, 0)
+
 	for _, t := range brc.tunnels {
 		err = t.Register(ctx, brc.config.ClientID, brc.config.Env, brc.onBaseDiscovered, brc.onHealthDataArrived, brc.onBizDataArrived, nil, nil)
 		if err != nil {
-			log.G(ctx).WithError(err).Error("failed to register tunnel:", t.Name())
+			log.G(ctx).WithError(err).Error("failed to register tunnel:", t.Key())
 			continue
 		}
-
+		startedTunnels = append(startedTunnels, t)
 		anyTunnelStarted = true
 	}
 
@@ -117,7 +120,9 @@ func (brc *BaseRegisterController) Run(ctx context.Context) {
 		return
 	}
 
-	requirement, _ := labels.NewRequirement(model.PodModuleControllerComponentLabelKey, selection.In, []string{model.ModuleControllerComponentModule})
+	brc.tunnels = startedTunnels
+
+	requirement, _ := labels.NewRequirement(model.LabelKeyOfModuleControllerComponent, selection.In, []string{model.ModuleControllerComponentModule})
 
 	podInformerFactory := informers.NewSharedInformerFactoryWithOptions(
 		brc.config.K8SConfig.KubeClient,
@@ -143,6 +148,9 @@ func (brc *BaseRegisterController) Run(ctx context.Context) {
 
 	log.G(ctx).Info("Pod cache in-sync")
 
+	// restart virtual kubelet for previous node
+	brc.discoverPreviousNode(ctx)
+
 	var eventHandler cache.ResourceEventHandler = cache.ResourceEventHandlerFuncs{
 		AddFunc:    brc.podAddHandler,
 		UpdateFunc: brc.podUpdateHandler,
@@ -162,6 +170,54 @@ func (brc *BaseRegisterController) Run(ctx context.Context) {
 	select {
 	case <-brc.done:
 	case <-ctx.Done():
+	}
+}
+
+func (brc *BaseRegisterController) discoverPreviousNode(ctx context.Context) {
+	componentRequirement, _ := labels.NewRequirement(model.LabelKeyOfModuleControllerComponent, selection.In, []string{model.ModuleControllerComponentVNode})
+	envRequirement, _ := labels.NewRequirement(model.LabelKeyOfEnv, selection.In, []string{brc.config.Env})
+
+	nodeList, err := brc.config.K8SConfig.KubeClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{
+		LabelSelector: labels.NewSelector().Add(*componentRequirement, *envRequirement).String(),
+	})
+	if err != nil {
+		log.G(ctx).WithError(err).Error("failed to list nodes")
+		return
+	}
+
+	tmpTunnelMap := make(map[string]tunnel.Tunnel)
+
+	for _, t := range brc.tunnels {
+		tmpTunnelMap[t.Key()] = t
+	}
+
+	for _, node := range nodeList.Items {
+		tunnelKey := node.Labels[model.LabelKeyOfTunnel]
+		t, ok := tmpTunnelMap[tunnelKey]
+		if !ok {
+			continue
+		}
+		// base online message
+		nodeIP := "127.0.0.1"
+		nodeHostname := ""
+		for _, addr := range node.Status.Addresses {
+			if addr.Type == corev1.NodeInternalIP {
+				nodeIP = addr.Address
+			} else if addr.Type == corev1.NodeHostName {
+				nodeHostname = addr.Address
+			}
+		}
+		go brc.startVirtualKubelet(utils.ExtractBaseIDFromNodeName(node.Name), model.HeartBeatData{
+			MasterBizInfo: ark.MasterBizInfo{
+				BizName:    node.Labels["base.koupleless.io/name"],
+				BizState:   "ACTIVATED",
+				BizVersion: node.Labels["base.koupleless.io/version"],
+			},
+			NetworkInfo: model.NetworkInfo{
+				LocalIP:       nodeIP,
+				LocalHostName: nodeHostname,
+			},
+		}, t)
 	}
 }
 
@@ -358,13 +414,14 @@ func (brc *BaseRegisterController) startVirtualKubelet(baseID string, initData m
 	}()
 
 	bn, err := base_node.NewBaseNode(&base_node.BuildBaseNodeConfig{
-		KubeClient:  brc.config.K8SConfig.KubeClient,
-		PodLister:   brc.podLister,
-		PodInformer: brc.podInformer,
-		Tunnel:      t,
-		BaseID:      baseID,
-		Env:         brc.config.Env,
-		NodeIP:      initData.NetworkInfo.LocalIP,
+		KubeClient:   brc.config.K8SConfig.KubeClient,
+		PodLister:    brc.podLister,
+		PodInformer:  brc.podInformer,
+		Tunnel:       t,
+		BaseID:       baseID,
+		Env:          brc.config.Env,
+		NodeIP:       initData.NetworkInfo.LocalIP,
+		NodeHostname: initData.NetworkInfo.LocalHostName,
 		// TODO support read from base heart beat data
 		TechStack:  "java",
 		BizName:    initData.MasterBizInfo.BizName,

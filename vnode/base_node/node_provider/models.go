@@ -4,6 +4,9 @@ type BuildBaseNodeProviderConfig struct {
 	// NodeIP is the ip of the node
 	NodeIP string `json:"nodeIP"`
 
+	// NodeHostname is the hostname of the node
+	NodeHostname string `json:"nodeHostname"`
+
 	// TechStack is the underlying tech stack of runtime
 	TechStack string `json:"techStack"`
 

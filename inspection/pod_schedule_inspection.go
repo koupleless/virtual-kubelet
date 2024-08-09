@@ -35,7 +35,7 @@ func (p *PodScheduleInspection) GetInterval() time.Duration {
 }
 
 func (p *PodScheduleInspection) Inspect(ctx context.Context) {
-	requirement, _ := labels.NewRequirement(model.PodModuleControllerComponentLabelKey, selection.In, []string{model.ModuleControllerComponentModule})
+	requirement, _ := labels.NewRequirement(model.LabelKeyOfModuleControllerComponent, selection.In, []string{model.ModuleControllerComponentModule})
 
 	// get all module pods with pending phase
 	modulePods, err := p.kubeClient.CoreV1().Pods("").List(ctx, metav1.ListOptions{
@@ -54,7 +54,7 @@ func (p *PodScheduleInspection) Inspect(ctx context.Context) {
 			if len(pod.OwnerReferences) != 0 && p.ownerReported(string(pod.OwnerReferences[0].UID), 10*60) {
 				continue
 			}
-			tracker.G().ErrorReport(pod.Labels[model.PodTraceIDLabelKey], model.TrackSceneModuleDeployment, model.TrackEventPodSchedule, pod.Status.Conditions[0].Message, pod.Labels, model.CodeModulePodScheduleFailed)
+			tracker.G().ErrorReport(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneModuleDeployment, model.TrackEventPodSchedule, pod.Status.Conditions[0].Message, pod.Labels, model.CodeModulePodScheduleFailed)
 		}
 	}
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/koupleless/arkctl/v1/service/ark"
 	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/common/utils"
+	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -27,14 +28,7 @@ import (
 	"time"
 )
 
-type NodeProvider interface {
-	virtual_kubelet.NodeProvider
-
-	// Register configure node on first attempt
-	Register(ctx context.Context, node *corev1.Node) error
-}
-
-var _ NodeProvider = &BaseNodeProvider{}
+var _ virtual_kubelet.NodeProvider = &BaseNodeProvider{}
 
 type BaseNodeProvider struct {
 	sync.Mutex
@@ -91,15 +85,19 @@ func NewVirtualKubeletNode(config BuildBaseNodeProviderConfig) *BaseNodeProvider
 	}
 }
 
-func (v *BaseNodeProvider) BuildVirtualNode(node *corev1.Node) {
+func (v *BaseNodeProvider) BuildVirtualNode(node *corev1.Node, tunnelKey string) {
 	config := *v.nodeConfig
 	if node.ObjectMeta.Labels == nil {
 		node.ObjectMeta.Labels = make(map[string]string)
 	}
+	// custom labels
 	node.Labels["base.koupleless.io/stack"] = config.TechStack
 	node.Labels["base.koupleless.io/version"] = config.Version
 	node.Labels["base.koupleless.io/name"] = config.BizName
-	node.Labels["base.koupleless.io/env"] = config.Env
+	// necessary labels
+	node.Labels[model.LabelKeyOfEnv] = config.Env
+	node.Labels[model.LabelKeyOfModuleControllerComponent] = model.ModuleControllerComponentVNode
+	node.Labels[model.LabelKeyOfTunnel] = tunnelKey
 	node.Spec.Taints = []corev1.Taint{
 		{
 			Key:    "schedule.koupleless.io/virtual-node",
@@ -119,6 +117,10 @@ func (v *BaseNodeProvider) BuildVirtualNode(node *corev1.Node) {
 				Type:    corev1.NodeInternalIP,
 				Address: config.NodeIP,
 			},
+			{
+				Type:    corev1.NodeHostName,
+				Address: config.NodeHostname,
+			},
 		},
 		Conditions: []corev1.NodeCondition{
 			{
@@ -135,8 +137,8 @@ func (v *BaseNodeProvider) BuildVirtualNode(node *corev1.Node) {
 	}
 }
 
-func (v *BaseNodeProvider) Register(_ context.Context, node *corev1.Node) error {
-	v.BuildVirtualNode(node)
+func (v *BaseNodeProvider) Register(node *corev1.Node, tunnelKey string) error {
+	v.BuildVirtualNode(node, tunnelKey)
 	v.Lock()
 	v.nodeInfo = node.DeepCopy()
 	v.Unlock()

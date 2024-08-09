@@ -22,7 +22,7 @@ func TestPodScheduleInspection_Inspect(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-pod",
 			Labels: map[string]string{
-				model.PodModuleControllerComponentLabelKey: model.ModuleControllerComponentModule,
+				model.LabelKeyOfModuleControllerComponent: model.ModuleControllerComponentModule,
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				{

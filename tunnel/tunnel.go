@@ -6,19 +6,19 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// OnNodeDiscovered base discover callback, will start a vnode
+// OnNodeDiscovered is the node discover callback, will start/stop a vnode depends on node state
 type OnNodeDiscovered func(string, model.NodeInfo, Tunnel)
 
-// OnNodeStatusDataArrived base health data callback, will update vnode status to k8s
+// OnNodeStatusDataArrived is the node health data callback, will update vnode status to k8s
 type OnNodeStatusDataArrived func(string, model.NodeStatusData)
 
-// OnQueryAllContainerStatusDataArrived biz data callback, will update vpod status to k8s
+// OnQueryAllContainerStatusDataArrived is the container status data callback, will update vpod status to k8s
 type OnQueryAllContainerStatusDataArrived func(string, []model.ContainerStatusData)
 
-// OnStartContainerResponseArrived biz install result callback, will update biz-vpod status to k8s
+// OnStartContainerResponseArrived is the container start command callback, will update container-vpod status to k8s
 type OnStartContainerResponseArrived func(string, model.ContainerOperationResponseData)
 
-// OnShutdownContainerResponseArrived biz uninstall result callback, will update biz-vpod status to k8s
+// OnShutdownContainerResponseArrived is the container stop callback, will update container-vpod status to k8s
 type OnShutdownContainerResponseArrived func(string, model.ContainerOperationResponseData)
 
 // QueryContainersBaseline func of query baseline, will return peer deployment baseline
@@ -28,15 +28,16 @@ type Tunnel interface {
 	// Key is the identity of Tunnel, will set to node label for special usage
 	Key() string
 
-	// Start is the func of Tunnel Start processing
+	// Start is the func of tunnel start, please call the callback functions after start
 	Start(ctx context.Context, clientID string, env string) error
 
+	// Ready is the func for check tunnel ready, should return true after tunnel start success
 	Ready() bool
 
-	// RegisterCallback is the init func of Tunnel, please complete resources init and callback register in this func
+	// RegisterCallback is the init func of Tunnel, please complete callback register in this func
 	RegisterCallback(OnNodeDiscovered, OnNodeStatusDataArrived, OnQueryAllContainerStatusDataArrived, OnStartContainerResponseArrived, OnShutdownContainerResponseArrived)
 
-	// RegisterQuery is the init func of Tunnel, please complete resources init and callback register in this func
+	// RegisterQuery is the init func of Tunnel, please complete query func register in this func
 	RegisterQuery(QueryContainersBaseline)
 
 	// OnNodeStart is the func call when a vnode start successfully, you can implement it on demand
@@ -46,16 +47,17 @@ type Tunnel interface {
 	OnNodeStop(ctx context.Context, nodeID string)
 
 	// FetchHealthData is the func call for vnode to fetch health data , you need to fetch health data and call OnNodeStatusDataArrived when data arrived
-	FetchHealthData(context.Context, string) error
+	FetchHealthData(ctx context.Context, nodeID string) error
 
-	// QueryAllBizData is the func call for vnode to fetch all biz data , you need to fetch all biz data and call OnQueryAllContainerStatusDataArrived when data arrived
+	// QueryAllContainerStatusData is the func call for vnode to fetch all containers status data , you need to fetch all containers status data and call OnQueryAllContainerStatusDataArrived when data arrived
 	QueryAllContainerStatusData(ctx context.Context, nodeID string) error
 
-	// InstallBiz is the func call for vnode to install a biz , you need to start to install biz and call OnStartContainerResponseArrived when install complete with a response
+	// StartContainer is the func calls for vnode to start a container , you need to start container and call OnStartContainerResponseArrived when start complete with a response
 	StartContainer(ctx context.Context, nodeID, podKey string, container *v1.Container) error
 
-	// UninstallBiz is the func call for vnode to uninstall a biz , you need to start to uninstall biz and call OnShutdownContainerResponseArrived when uninstall complete with a response
-	StopContainer(ctx context.Context, nodeID, podKey string, container *v1.Container) error
+	// ShutdownContainer is the func calls for vnode to shut down a container , you need to start to shut down container and call OnShutdownContainerResponseArrived when shut down process complete with a response
+	ShutdownContainer(ctx context.Context, nodeID, podKey string, container *v1.Container) error
 
+	// GetContainerUniqueKey is the func returns a unique key of a container in a pod, vnode will use this unique key to find target Container status
 	GetContainerUniqueKey(podKey string, container *v1.Container) string
 }

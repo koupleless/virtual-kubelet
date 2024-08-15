@@ -27,7 +27,7 @@ import (
 	"github.com/koupleless/virtual-kubelet/inspection"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/tunnel"
-	"github.com/koupleless/virtual-kubelet/tunnel/mqtt_tunnel"
+	"github.com/koupleless/virtual-kubelet/tunnel/koupleless_mqtt_tunnel"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet/nodeutil"
 	"github.com/spf13/cobra"
 	"time"
@@ -89,7 +89,7 @@ func runModuleControllerCommand(ctx context.Context, c Opts) error {
 
 	tunnels := make([]tunnel.Tunnel, 0)
 	if c.EnableMqttTunnel {
-		tunnels = append(tunnels, &mqtt_tunnel.MqttTunnel{})
+		tunnels = append(tunnels, &koupleless_mqtt_tunnel.MqttTunnel{})
 	}
 
 	moduleDeploymentControllerConfig := module_deployment_controller.BuildModuleDeploymentControllerConfig{

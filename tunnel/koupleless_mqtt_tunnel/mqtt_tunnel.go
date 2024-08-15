@@ -1,4 +1,4 @@
-package mqtt_tunnel
+package koupleless_mqtt_tunnel
 
 import (
 	"context"
@@ -243,7 +243,7 @@ func (m *MqttTunnel) StartContainer(_ context.Context, deviceID, podKey string, 
 	return m.mqttClient.Pub(formatArkletCommandTopic(m.env, deviceID, CommandInstallBiz), mqtt.Qos0, installBizRequestBytes)
 }
 
-func (m *MqttTunnel) StopContainer(_ context.Context, deviceID, podKey string, container *corev1.Container) error {
+func (m *MqttTunnel) ShutdownContainer(_ context.Context, deviceID, podKey string, container *corev1.Container) error {
 	unInstallBizRequestBytes, _ := json.Marshal(translateCoreV1ContainerToBizModel(container))
 	return m.mqttClient.Pub(formatArkletCommandTopic(m.env, deviceID, CommandUnInstallBiz), mqtt.Qos0, unInstallBizRequestBytes)
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/tunnel"
-	"github.com/koupleless/virtual-kubelet/tunnel/mqtt_tunnel"
+	"github.com/koupleless/virtual-kubelet/tunnel/koupleless_mqtt_tunnel"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -45,7 +45,7 @@ func TestNewBaseRegisterController(t *testing.T) {
 			InformerSyncPeriod: time.Minute,
 		},
 		Tunnels: []tunnel.Tunnel{
-			&mqtt_tunnel.MqttTunnel{},
+			&koupleless_mqtt_tunnel.MqttTunnel{},
 		},
 	})
 	assert.NoError(t, err)
@@ -65,7 +65,7 @@ func TestBaseRegisterController_Run(t *testing.T) {
 			InformerSyncPeriod: time.Minute,
 		},
 		Tunnels: []tunnel.Tunnel{
-			&mqtt_tunnel.MqttTunnel{},
+			&koupleless_mqtt_tunnel.MqttTunnel{},
 		},
 	})
 	assert.NoError(t, err)
@@ -170,7 +170,7 @@ func TestBaseRegisterController_CallbackShutdown(t *testing.T) {
 			InformerSyncPeriod: time.Minute,
 		},
 		Tunnels: []tunnel.Tunnel{
-			&mqtt_tunnel.MqttTunnel{},
+			&koupleless_mqtt_tunnel.MqttTunnel{},
 		},
 	})
 	assert.NoError(t, err)
@@ -194,7 +194,7 @@ func TestBaseRegisterController_CallbackBaseNotExist(t *testing.T) {
 			InformerSyncPeriod: time.Minute,
 		},
 		Tunnels: []tunnel.Tunnel{
-			&mqtt_tunnel.MqttTunnel{},
+			&koupleless_mqtt_tunnel.MqttTunnel{},
 		},
 	})
 	assert.NoError(t, err)

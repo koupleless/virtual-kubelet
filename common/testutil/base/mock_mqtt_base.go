@@ -7,7 +7,7 @@ import (
 	"github.com/koupleless/arkctl/v1/service/ark"
 	"github.com/koupleless/virtual-kubelet/common/mqtt"
 	"github.com/koupleless/virtual-kubelet/model"
-	"github.com/koupleless/virtual-kubelet/tunnel/mqtt_tunnel"
+	"github.com/koupleless/virtual-kubelet/tunnel/koupleless_mqtt_tunnel"
 	"github.com/sirupsen/logrus"
 	"strings"
 	"sync"
@@ -112,7 +112,7 @@ func (bm *MockMqttBase) commandCallback(_ paho.Client, msg paho.Message) {
 	logrus.Info("reach message from: ", topic)
 	fields := strings.Split(topic, "/")
 	switch fields[len(fields)-1] {
-	case mqtt_tunnel.CommandHealth:
+	case koupleless_mqtt_tunnel.CommandHealth:
 		response := ark.HealthResponse{
 			GenericArkResponseBase: ark.GenericArkResponseBase[ark.HealthInfo]{
 				Code: "SUCCESS",
@@ -128,7 +128,7 @@ func (bm *MockMqttBase) commandCallback(_ paho.Client, msg paho.Message) {
 		}
 		healthBytes, _ := json.Marshal(mqttResponse)
 		bm.mqttClient.Pub(fmt.Sprintf("koupleless_test/%s/base/health", bm.baseID), mqtt.Qos1, healthBytes)
-	case mqtt_tunnel.CommandQueryAllBiz:
+	case koupleless_mqtt_tunnel.CommandQueryAllBiz:
 		response := ark.QueryAllArkBizResponse{
 			GenericArkResponseBase: ark.GenericArkResponseBase[[]ark.ArkBizInfo]{
 				Code:    "SUCCESS",
@@ -143,7 +143,7 @@ func (bm *MockMqttBase) commandCallback(_ paho.Client, msg paho.Message) {
 		bizBytes, _ := json.Marshal(mqttResponse)
 
 		bm.mqttClient.Pub(fmt.Sprintf("koupleless_test/%s/base/biz", bm.baseID), mqtt.Qos1, bizBytes)
-	case mqtt_tunnel.CommandInstallBiz:
+	case koupleless_mqtt_tunnel.CommandInstallBiz:
 		var data ark.BizModel
 		err := json.Unmarshal(msg.Payload(), &data)
 		if err != nil {
@@ -196,7 +196,7 @@ func (bm *MockMqttBase) commandCallback(_ paho.Client, msg paho.Message) {
 		}
 		bizBytes, _ := json.Marshal(mqttResponse)
 		bm.mqttClient.Pub(fmt.Sprintf("koupleless_test/%s/base/biz", bm.baseID), mqtt.Qos1, bizBytes)
-	case mqtt_tunnel.CommandUnInstallBiz:
+	case koupleless_mqtt_tunnel.CommandUnInstallBiz:
 		var data ark.BizModel
 		err := json.Unmarshal(msg.Payload(), &data)
 		if err != nil {

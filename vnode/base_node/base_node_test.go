@@ -5,7 +5,7 @@ import (
 	"github.com/koupleless/arkctl/v1/service/ark"
 	"github.com/koupleless/virtual-kubelet/common/mqtt"
 	"github.com/koupleless/virtual-kubelet/common/testutil/mqtt_client"
-	"github.com/koupleless/virtual-kubelet/tunnel/mqtt_tunnel"
+	"github.com/koupleless/virtual-kubelet/tunnel/koupleless_mqtt_tunnel"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,14 +26,14 @@ func TestNewBaseNode_NoTunnel(t *testing.T) {
 
 func TestNewBaseNode_NoNodeID(t *testing.T) {
 	_, err := NewBaseNode(&BuildBaseNodeConfig{
-		Tunnel: &mqtt_tunnel.MqttTunnel{},
+		Tunnel: &koupleless_mqtt_tunnel.MqttTunnel{},
 	})
 	assert.NotNil(t, err)
 }
 
 func TestNewBaseNode_NoClient(t *testing.T) {
 	_, err := NewBaseNode(&BuildBaseNodeConfig{
-		Tunnel: &mqtt_tunnel.MqttTunnel{},
+		Tunnel: &koupleless_mqtt_tunnel.MqttTunnel{},
 		BaseID: "test-node",
 	})
 	assert.NotNil(t, err)
@@ -51,7 +51,7 @@ func TestNewBaseNode(t *testing.T) {
 		KubeClient:  kubeClient,
 		PodLister:   fakeLister,
 		PodInformer: fakeInformer,
-		Tunnel:      &mqtt_tunnel.MqttTunnel{},
+		Tunnel:      &koupleless_mqtt_tunnel.MqttTunnel{},
 		BaseID:      "test-node",
 		NodeIP:      "127.0.0.1",
 		TechStack:   "java",
@@ -77,7 +77,7 @@ func TestBaseNode_Data_flow(t *testing.T) {
 		KubeClient:  kubeClient,
 		PodLister:   fakeLister,
 		PodInformer: fakeInformer,
-		Tunnel:      &mqtt_tunnel.MqttTunnel{},
+		Tunnel:      &koupleless_mqtt_tunnel.MqttTunnel{},
 		BaseID:      "test-node",
 		NodeIP:      "127.0.0.1",
 		TechStack:   "java",
@@ -98,7 +98,7 @@ func TestBaseNode_Data_flow(t *testing.T) {
 func TestBaseNode_RunAndContextDone(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	mt := &mqtt_tunnel.MqttTunnel{}
+	mt := &koupleless_mqtt_tunnel.MqttTunnel{}
 
 	err := mt.Register(ctx, "test-client", "test", nil, nil, nil, nil, nil)
 	assert.NoError(t, err)
@@ -132,7 +132,7 @@ func TestBaseNode_RunAndContextDone(t *testing.T) {
 func TestBaseNode_RunAndExit(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	mt := &mqtt_tunnel.MqttTunnel{}
+	mt := &koupleless_mqtt_tunnel.MqttTunnel{}
 
 	err := mt.Register(ctx, "test-client", "test", nil, nil, nil, nil, nil)
 	assert.NoError(t, err)
@@ -168,7 +168,7 @@ func TestBaseNode_RunAndExit(t *testing.T) {
 func TestBaseNode_PodOperator(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	mt := &mqtt_tunnel.MqttTunnel{}
+	mt := &koupleless_mqtt_tunnel.MqttTunnel{}
 
 	err := mt.Register(ctx, "test-client", "test", nil, nil, nil, nil, nil)
 	assert.NoError(t, err)

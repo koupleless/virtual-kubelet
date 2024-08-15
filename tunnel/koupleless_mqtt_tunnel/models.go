@@ -1,4 +1,4 @@
-package mqtt_tunnel
+package koupleless_mqtt_tunnel
 
 import "github.com/koupleless/arkctl/v1/service/ark"
 

@@ -174,7 +174,7 @@ func (b *BaseProvider) startContainer(ctx context.Context, podKey string, contai
 }
 
 func (b *BaseProvider) stopContainer(ctx context.Context, podKey string, container *corev1.Container) error {
-	return b.tunnel.StopContainer(ctx, b.nodeID, podKey, container)
+	return b.tunnel.ShutdownContainer(ctx, b.nodeID, podKey, container)
 }
 
 func (b *BaseProvider) handleStartOperation(ctx context.Context, containerKey string) error {

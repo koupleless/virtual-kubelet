@@ -18,5 +18,5 @@ type Inspection interface {
 	GetInterval() time.Duration
 
 	// Inspect is the main check of inspections
-	Inspect(context.Context)
+	Inspect(context.Context, string)
 }

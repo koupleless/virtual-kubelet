@@ -1,9 +1,8 @@
 package base_register_controller
 
 import (
+	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/tunnel"
-	"k8s.io/client-go/kubernetes"
-	"time"
 )
 
 type BuildBaseRegisterControllerConfig struct {
@@ -11,16 +10,8 @@ type BuildBaseRegisterControllerConfig struct {
 	Env      string `json:"env"`
 
 	// K8SConfig is the config of k8s client
-	K8SConfig *K8SConfig
+	K8SConfig *model.K8SConfig
 
 	// Tunnels is the tunnel provider supported
 	Tunnels []tunnel.Tunnel
-}
-
-type K8SConfig struct {
-	// KubeClient
-	KubeClient kubernetes.Interface
-
-	// InformerSyncPeriod
-	InformerSyncPeriod time.Duration
 }

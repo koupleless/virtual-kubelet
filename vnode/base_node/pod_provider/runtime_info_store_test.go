@@ -66,7 +66,7 @@ func TestNewRuntimeInfoStore(t *testing.T) {
 }
 
 func TestRuntimeInfoStore_PutPod(t *testing.T) {
-	podKey := utils.ModelUtil.GetPodKey(defaultPod)
+	podKey := utils.GetPodKey(defaultPod)
 	runtimeInfoStore := NewRuntimeInfoStore()
 	runtimeInfoStore.PutPod(defaultPod)
 	assert.Assert(t, len(runtimeInfoStore.GetPods()) == 1)
@@ -81,12 +81,12 @@ func TestRuntimeInfoStore_PutPod(t *testing.T) {
 func TestRuntimeInfoStore_GetBizModel(t *testing.T) {
 	runtimeInfoStore := NewRuntimeInfoStore()
 	runtimeInfoStore.PutPod(defaultPod)
-	model := runtimeInfoStore.GetBizModel(runtimeInfoStore.getBizIdentity(&ark.BizModel{
+	model := runtimeInfoStore.GetContainer(runtimeInfoStore.getBizIdentity(&ark.BizModel{
 		BizName:    "test-container1",
 		BizVersion: "1.1.2",
 	}))
 	assert.Assert(t, model == nil)
-	model = runtimeInfoStore.GetBizModel(runtimeInfoStore.getBizIdentity(&ark.BizModel{
+	model = runtimeInfoStore.GetContainer(runtimeInfoStore.getBizIdentity(&ark.BizModel{
 		BizName:    "test-container1",
 		BizVersion: "1.1.1",
 	}))
@@ -96,8 +96,8 @@ func TestRuntimeInfoStore_GetBizModel(t *testing.T) {
 func TestRuntimeInfoStore_GetPodByKey(t *testing.T) {
 	runtimeInfoStore := NewRuntimeInfoStore()
 	runtimeInfoStore.PutPod(defaultPod)
-	podKey := utils.ModelUtil.GetPodKey(defaultPod)
-	podKey2 := utils.ModelUtil.GetPodKey(defaultPod2)
+	podKey := utils.GetPodKey(defaultPod)
+	podKey2 := utils.GetPodKey(defaultPod2)
 	pod := runtimeInfoStore.GetPodByKey(podKey)
 	pod2 := runtimeInfoStore.GetPodByKey(podKey2)
 	assert.Assert(t, pod != nil)
@@ -115,8 +115,8 @@ func TestRuntimeInfoStore_GetPods(t *testing.T) {
 func TestRuntimeInfoStore_GetRelatedBizModels(t *testing.T) {
 	runtimeInfoStore := NewRuntimeInfoStore()
 	runtimeInfoStore.PutPod(defaultPod)
-	podKey1 := utils.ModelUtil.GetPodKey(defaultPod)
-	podKey2 := utils.ModelUtil.GetPodKey(defaultPod2)
+	podKey1 := utils.GetPodKey(defaultPod)
+	podKey2 := utils.GetPodKey(defaultPod2)
 	bizModels1 := runtimeInfoStore.GetRelatedBizModels(podKey1)
 	bizModels2 := runtimeInfoStore.GetRelatedBizModels(podKey2)
 	assert.Assert(t, len(bizModels1) == 2)
@@ -125,7 +125,7 @@ func TestRuntimeInfoStore_GetRelatedBizModels(t *testing.T) {
 
 func TestRuntimeInfoStore_GetRelatedPodKeyByBizIdentity(t *testing.T) {
 	runtimeInfoStore := NewRuntimeInfoStore()
-	podKey := runtimeInfoStore.GetRelatedPodKeyByBizIdentity(utils.ModelUtil.GetBizIdentityFromBizModel(&ark.BizModel{
+	podKey := runtimeInfoStore.GetRelatedPodKeyByBizIdentity(utils.GetBizIdentityFromBizModel(&ark.BizModel{
 		BizName:    "test-container3",
 		BizVersion: "1.1.3",
 	}))

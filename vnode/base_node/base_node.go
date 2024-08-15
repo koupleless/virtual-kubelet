@@ -2,9 +2,9 @@ package base_node
 
 import (
 	"context"
-	"github.com/koupleless/arkctl/v1/service/ark"
 	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/common/utils"
+	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/tunnel"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet/nodeutil"
@@ -24,14 +24,12 @@ type BaseNode struct {
 	clientSet kubernetes.Interface
 	tunnel    tunnel.Tunnel
 
-	vnode       *node_provider.BaseNodeProvider
-	podProvider *pod_provider.BaseProvider
-	node        *nodeutil.Node
+	nodeProvider *node_provider.BaseNodeProvider
+	podProvider  *pod_provider.BaseProvider
+	node         *nodeutil.Node
 
-	done               chan struct{}
-	BaseHealthInfoChan chan ark.HealthData
-	BaseBizInfoChan    chan []ark.ArkBizInfo
-	exit               chan struct{}
+	done chan struct{}
+	exit chan struct{}
 
 	err error
 }
@@ -53,9 +51,7 @@ func (n *BaseNode) Run(ctx context.Context) {
 		cancel()
 	}()
 
-	go n.listenAndSync(ctx)
-
-	n.tunnel.OnBaseStart(ctx, n.nodeID)
+	n.tunnel.OnNodeStart(ctx, n.nodeID)
 
 	go utils.TimedTaskWithInterval(ctx, time.Second*9, func(ctx context.Context) {
 		err = n.tunnel.FetchHealthData(ctx, n.nodeID)
@@ -65,7 +61,7 @@ func (n *BaseNode) Run(ctx context.Context) {
 	})
 
 	go utils.TimedTaskWithInterval(ctx, time.Second*5, func(ctx context.Context) {
-		err = n.tunnel.QueryAllBizData(ctx, n.nodeID)
+		err = n.tunnel.QueryAllContainerStatusData(ctx, n.nodeID)
 		if err != nil {
 			log.G(ctx).WithError(err).Errorf("Failed to query biz info from %s", n.nodeID)
 		}
@@ -77,7 +73,7 @@ func (n *BaseNode) Run(ctx context.Context) {
 		err = errors.Wrap(ctx.Err(), "context canceled")
 	case <-n.exit:
 		// base exit, process node delete and pod evict
-		err = n.clientSet.CoreV1().Nodes().Delete(ctx, n.vnode.CurrNodeInfo().Name, metav1.DeleteOptions{})
+		err = n.clientSet.CoreV1().Nodes().Delete(ctx, n.nodeProvider.CurrNodeInfo().Name, metav1.DeleteOptions{})
 		if err != nil {
 			err = errors.Wrap(err, "error deleting base biz node")
 			return
@@ -97,7 +93,7 @@ func (n *BaseNode) Run(ctx context.Context) {
 				return
 			}
 		}
-		n.tunnel.OnBaseStop(ctx, n.nodeID)
+		n.tunnel.OnNodeStop(ctx, n.nodeID)
 	}
 }
 
@@ -105,19 +101,16 @@ func (n *BaseNode) WaitReady(ctx context.Context, timeout time.Duration) error {
 	return n.node.WaitReady(ctx, timeout)
 }
 
-func (n *BaseNode) listenAndSync(ctx context.Context) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case healthData := <-n.BaseHealthInfoChan:
-			go n.vnode.Notify(healthData)
-		case bizInfos := <-n.BaseBizInfoChan:
-			go n.podProvider.SyncBizInfo(bizInfos)
-		}
-	}
+func (n *BaseNode) SyncNodeStatus(data model.NodeStatusData) {
+	go n.nodeProvider.Notify(data)
+}
+
+func (n *BaseNode) SyncAllContainerInfo(infos []model.ContainerStatusData) {
+	go n.podProvider.SyncContainerInfo(context.Background(), infos)
+}
+
+func (n *BaseNode) SyncBizInfo(info model.ContainerStatusData) {
+	go n.podProvider.SyncSingleContainerInfo(context.Background(), info)
 }
 
 // Done returns a channel that will be closed when the controller has exited.
@@ -178,9 +171,8 @@ func NewBaseNode(config *BuildBaseNodeConfig) (kn *BaseNode, err error) {
 			nodeProvider = node_provider.NewVirtualKubeletNode(node_provider.BuildBaseNodeProviderConfig{
 				NodeIP:       config.NodeIP,
 				NodeHostname: config.NodeHostname,
-				TechStack:    config.TechStack,
-				Version:      config.BizVersion,
-				BizName:      config.BizName,
+				Version:      config.NodeVersion,
+				Name:         config.NodeName,
 				Env:          config.Env,
 			})
 			// initialize node spec on bootstrap
@@ -208,15 +200,13 @@ func NewBaseNode(config *BuildBaseNodeConfig) (kn *BaseNode, err error) {
 	}
 
 	return &BaseNode{
-		nodeID:             config.BaseID,
-		clientSet:          config.KubeClient,
-		vnode:              nodeProvider,
-		podProvider:        podProvider,
-		tunnel:             config.Tunnel,
-		node:               cm,
-		done:               make(chan struct{}),
-		BaseBizInfoChan:    make(chan []ark.ArkBizInfo),
-		BaseHealthInfoChan: make(chan ark.HealthData),
-		exit:               make(chan struct{}),
+		nodeID:       config.BaseID,
+		clientSet:    config.KubeClient,
+		nodeProvider: nodeProvider,
+		podProvider:  podProvider,
+		tunnel:       config.Tunnel,
+		node:         cm,
+		done:         make(chan struct{}),
+		exit:         make(chan struct{}),
 	}, nil
 }

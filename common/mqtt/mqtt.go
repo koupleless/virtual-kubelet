@@ -132,12 +132,15 @@ func NewMqttClient(cfg *ClientConfig) (*Client, error) {
 	opts.SetOnConnectHandler(cfg.OnConnectHandler)
 	opts.SetConnectionLostHandler(cfg.ConnectionLostHandler)
 	client := cfg.ClientInitFunc(opts)
-	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		return nil, token.Error()
-	}
 	return &Client{
 		client: client,
 	}, nil
+}
+
+func (c *Client) Connect() error {
+	token := c.client.Connect()
+	token.Wait()
+	return token.Error()
 }
 
 // PubWithTimeout publish a message to target topic with timeout config, return false if send failed or timeout

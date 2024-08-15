@@ -1,7 +1,6 @@
 package mqtt
 
 import (
-	"fmt"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/koupleless/virtual-kubelet/common/testutil/mqtt_client"
 	"gotest.tools/assert"
@@ -18,9 +17,11 @@ func TestNewMqttClient_Username(t *testing.T) {
 		Password:       "public",
 		ClientInitFunc: mqtt_client.NewMockMqttClient,
 	})
-	defer client.Disconnect()
 	assert.Assert(t, err == nil)
 	assert.Assert(t, client != nil)
+	defer client.Disconnect()
+	err = client.Connect()
+	assert.Assert(t, err == nil)
 }
 
 func TestNewMqttClient_CA(t *testing.T) {
@@ -31,9 +32,6 @@ func TestNewMqttClient_CA(t *testing.T) {
 		CAPath:         "../../samples/mqtt/sample-ca.crt",
 		ClientInitFunc: mqtt_client.NewMockMqttClient,
 	})
-	if err != nil {
-		fmt.Println(err.Error())
-	}
 	defer client.Disconnect()
 	assert.Assert(t, err == nil)
 	assert.Assert(t, client != nil)
@@ -64,8 +62,9 @@ func TestClient_Pub_Sub(t *testing.T) {
 	})
 	assert.Assert(t, err == nil)
 	assert.Assert(t, client != nil)
+	err = client.Connect()
+	assert.Assert(t, err == nil)
 	defer client.Disconnect()
-
 	recieved := make(chan struct{})
 
 	success := client.Sub("topic/test/virtual-kubelet", Qos1, func(client mqtt.Client, message mqtt.Message) {
@@ -94,6 +93,7 @@ func TestClient_Pub_Sub_Timeout(t *testing.T) {
 	})
 	assert.Assert(t, err == nil)
 	assert.Assert(t, client != nil)
+	client.Connect()
 	defer client.Disconnect()
 
 	msgList := make([]mqtt.Message, 0)

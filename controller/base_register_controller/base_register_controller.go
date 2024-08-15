@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/koupleless/arkctl/v1/service/ark"
 	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/common/trace"
 	"github.com/koupleless/virtual-kubelet/common/utils"
@@ -68,7 +67,7 @@ type BaseRegisterController struct {
 
 	err error
 
-	localStore *RuntimeInfoStore
+	runtimeInfoStore *RuntimeInfoStore
 }
 
 func NewBaseRegisterController(config *BuildBaseRegisterControllerConfig) (*BaseRegisterController, error) {
@@ -81,11 +80,11 @@ func NewBaseRegisterController(config *BuildBaseRegisterControllerConfig) (*Base
 	}
 
 	return &BaseRegisterController{
-		config:     config,
-		tunnels:    config.Tunnels,
-		done:       make(chan struct{}),
-		ready:      make(chan struct{}),
-		localStore: NewRuntimeInfoStore(),
+		config:           config,
+		tunnels:          config.Tunnels,
+		done:             make(chan struct{}),
+		ready:            make(chan struct{}),
+		runtimeInfoStore: NewRuntimeInfoStore(),
 	}, nil
 }
 
@@ -100,29 +99,12 @@ func (brc *BaseRegisterController) Run(ctx context.Context) {
 		close(brc.done)
 	}()
 
-	// init all tunnels, and at least one t start successfully
-	anyTunnelStarted := false
-
-	startedTunnels := make([]tunnel.Tunnel, 0)
-
+	// init all tunnels
 	for _, t := range brc.tunnels {
-		err = t.Register(ctx, brc.config.ClientID, brc.config.Env, brc.onBaseDiscovered, brc.onHealthDataArrived, brc.onBizDataArrived, nil, nil)
-		if err != nil {
-			log.G(ctx).WithError(err).Error("failed to register tunnel:", t.Key())
-			continue
-		}
-		startedTunnels = append(startedTunnels, t)
-		anyTunnelStarted = true
+		t.RegisterCallback(brc.onNodeDiscovered, brc.onNodeStatusDataArrived, brc.onQueryAllContainerStatusDataArrived, brc.onInstallResponseArrived, brc.onUninstallResponseArrived)
 	}
 
-	if !anyTunnelStarted {
-		err = errors.New("no tunnel has been started")
-		return
-	}
-
-	brc.tunnels = startedTunnels
-
-	requirement, _ := labels.NewRequirement(model.LabelKeyOfModuleControllerComponent, selection.In, []string{model.ModuleControllerComponentModule})
+	requirement, _ := labels.NewRequirement(model.LabelKeyOfScheduleAnythingComponent, selection.In, []string{model.ComponentVPod})
 
 	podInformerFactory := informers.NewSharedInformerFactoryWithOptions(
 		brc.config.K8SConfig.KubeClient,
@@ -146,7 +128,20 @@ func (brc *BaseRegisterController) Run(ctx context.Context) {
 	brc.podLister = podLister
 	brc.podInformer = podInformer
 
-	log.G(ctx).Info("Pod cache in-sync")
+	// wait for all tunnel to be ready
+	utils.CheckAndFinallyCall(func() bool {
+		for _, t := range brc.tunnels {
+			if !t.Ready() {
+				return false
+			}
+		}
+		return true
+	}, time.Minute, time.Second, func() {
+		log.G(ctx).Info("all tunnels are ready")
+	}, func() {
+		log.G(ctx).Error("waiting for all tunnels to be ready timeout")
+		cancel()
+	})
 
 	// restart virtual kubelet for previous node
 	brc.discoverPreviousNode(ctx)
@@ -174,7 +169,7 @@ func (brc *BaseRegisterController) Run(ctx context.Context) {
 }
 
 func (brc *BaseRegisterController) discoverPreviousNode(ctx context.Context) {
-	componentRequirement, _ := labels.NewRequirement(model.LabelKeyOfModuleControllerComponent, selection.In, []string{model.ModuleControllerComponentVNode})
+	componentRequirement, _ := labels.NewRequirement(model.LabelKeyOfScheduleAnythingComponent, selection.In, []string{model.ComponentVNode})
 	envRequirement, _ := labels.NewRequirement(model.LabelKeyOfEnv, selection.In, []string{brc.config.Env})
 
 	nodeList, err := brc.config.K8SConfig.KubeClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{
@@ -192,14 +187,14 @@ func (brc *BaseRegisterController) discoverPreviousNode(ctx context.Context) {
 	}
 
 	for _, node := range nodeList.Items {
-		tunnelKey := node.Labels[model.LabelKeyOfTunnel]
+		tunnelKey := node.Labels[model.LabelKeyOfVnodeTunnel]
 		t, ok := tmpTunnelMap[tunnelKey]
 		if !ok {
 			continue
 		}
 		// base online message
 		nodeIP := "127.0.0.1"
-		nodeHostname := ""
+		nodeHostname := node.Name
 		for _, addr := range node.Status.Addresses {
 			if addr.Type == corev1.NodeInternalIP {
 				nodeIP = addr.Address
@@ -207,22 +202,22 @@ func (brc *BaseRegisterController) discoverPreviousNode(ctx context.Context) {
 				nodeHostname = addr.Address
 			}
 		}
-		go brc.startVirtualKubelet(utils.ExtractBaseIDFromNodeName(node.Name), model.HeartBeatData{
-			MasterBizInfo: ark.MasterBizInfo{
-				BizName:    node.Labels["base.koupleless.io/name"],
-				BizState:   "ACTIVATED",
-				BizVersion: node.Labels["base.koupleless.io/version"],
+		go brc.startVirtualKubelet(utils.ExtractBaseIDFromNodeName(node.Name), model.NodeInfo{
+			Metadata: model.NodeMetadata{
+				Name:    node.Labels[model.LabelKeyOfVNodeName],
+				Status:  model.NodeStatusActivated,
+				Version: node.Labels[model.LabelKeyOfVNodeVersion],
 			},
 			NetworkInfo: model.NetworkInfo{
-				LocalIP:       nodeIP,
-				LocalHostName: nodeHostname,
+				NodeIP:   nodeIP,
+				HostName: nodeHostname,
 			},
 		}, t)
 	}
 }
 
-func (brc *BaseRegisterController) onBaseDiscovered(baseID string, data model.HeartBeatData, t tunnel.Tunnel) {
-	if data.MasterBizInfo.BizState == "ACTIVATED" {
+func (brc *BaseRegisterController) onNodeDiscovered(baseID string, data model.NodeInfo, t tunnel.Tunnel) {
+	if data.Metadata.Status == model.NodeStatusActivated {
 		// base online message
 		go brc.startVirtualKubelet(baseID, data, t)
 	} else {
@@ -231,29 +226,42 @@ func (brc *BaseRegisterController) onBaseDiscovered(baseID string, data model.He
 	}
 }
 
-func (brc *BaseRegisterController) onHealthDataArrived(baseID string, data ark.HealthData) {
-	javaBaseNode := brc.localStore.GetBaseNode(baseID)
+func (brc *BaseRegisterController) onNodeStatusDataArrived(baseID string, data model.NodeStatusData) {
+	javaBaseNode := brc.runtimeInfoStore.GetBaseNode(baseID)
 	if javaBaseNode == nil {
 		return
 	}
-	brc.localStore.BaseMsgArrived(baseID)
+	brc.runtimeInfoStore.BaseMsgArrived(baseID)
 
-	select {
-	case javaBaseNode.BaseHealthInfoChan <- data:
-	default:
-	}
+	javaBaseNode.SyncNodeStatus(data)
 }
 
-func (brc *BaseRegisterController) onBizDataArrived(baseID string, data []ark.ArkBizInfo) {
-	javaBaseNode := brc.localStore.GetBaseNode(baseID)
+func (brc *BaseRegisterController) onQueryAllContainerStatusDataArrived(baseID string, data []model.ContainerStatusData) {
+	javaBaseNode := brc.runtimeInfoStore.GetBaseNode(baseID)
 	if javaBaseNode == nil {
 		return
 	}
-	brc.localStore.BaseMsgArrived(baseID)
-	select {
-	case javaBaseNode.BaseBizInfoChan <- data:
-	default:
+	brc.runtimeInfoStore.BaseMsgArrived(baseID)
+
+	javaBaseNode.SyncAllContainerInfo(data)
+}
+
+func (brc *BaseRegisterController) onInstallResponseArrived(baseID string, data model.ContainerOperationResponseData) {
+	javaBaseNode := brc.runtimeInfoStore.GetBaseNode(baseID)
+	if javaBaseNode == nil {
+		return
 	}
+	brc.runtimeInfoStore.BaseMsgArrived(baseID)
+	// TODO
+}
+
+func (brc *BaseRegisterController) onUninstallResponseArrived(baseID string, data model.ContainerOperationResponseData) {
+	javaBaseNode := brc.runtimeInfoStore.GetBaseNode(baseID)
+	if javaBaseNode == nil {
+		return
+	}
+	brc.runtimeInfoStore.BaseMsgArrived(baseID)
+	// TODO
 }
 
 func (brc *BaseRegisterController) podAddHandler(pod interface{}) {
@@ -269,7 +277,7 @@ func (brc *BaseRegisterController) podAddHandler(pod interface{}) {
 	podScheduleDelay.Add(float64(time.Now().Sub(podFromKubernetes.CreationTimestamp.Time).Milliseconds()))
 	nodeName := podFromKubernetes.Spec.NodeName
 	// check node name in local storage
-	kn := brc.localStore.GetBaseNodeByNodeName(nodeName)
+	kn := brc.runtimeInfoStore.GetBaseNodeByNodeName(nodeName)
 	if kn == nil {
 		// node not exist, invalid add req
 		return
@@ -298,7 +306,7 @@ func (brc *BaseRegisterController) podUpdateHandler(oldObj, newObj interface{}) 
 
 	nodeName := newPod.Spec.NodeName
 	// check node name in local storage
-	kn := brc.localStore.GetBaseNodeByNodeName(nodeName)
+	kn := brc.runtimeInfoStore.GetBaseNodeByNodeName(nodeName)
 	if kn == nil {
 		// node not exist, invalid add req
 		return
@@ -342,7 +350,7 @@ func (brc *BaseRegisterController) podDeleteHandler(pod interface{}) {
 
 		nodeName := podFromKubernetes.Spec.NodeName
 		// check node name in local storage
-		kn := brc.localStore.GetBaseNodeByNodeName(nodeName)
+		kn := brc.runtimeInfoStore.GetBaseNodeByNodeName(nodeName)
 		if kn == nil {
 			// node not exist, invalid add req
 			return
@@ -357,7 +365,7 @@ func (brc *BaseRegisterController) podDeleteHandler(pod interface{}) {
 }
 
 func (brc *BaseRegisterController) checkAndDeleteOfflineBase(_ context.Context) {
-	offlineBase := brc.localStore.GetOfflineBases(1000 * 20)
+	offlineBase := brc.runtimeInfoStore.GetOfflineBases(1000 * 20)
 	for _, baseID := range offlineBase {
 		brc.shutdownVirtualKubelet(baseID)
 	}
@@ -386,17 +394,17 @@ func (brc *BaseRegisterController) Err() error {
 	return brc.err
 }
 
-func (brc *BaseRegisterController) startVirtualKubelet(baseID string, initData model.HeartBeatData, t tunnel.Tunnel) {
+func (brc *BaseRegisterController) startVirtualKubelet(baseID string, initData model.NodeInfo, t tunnel.Tunnel) {
 	var err error
 	// first apply for local lock
 	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), "baseID", baseID))
 	defer cancel()
-	if initData.NetworkInfo.LocalIP == "" {
-		initData.NetworkInfo.LocalIP = "127.0.0.1"
+	if initData.NetworkInfo.NodeIP == "" {
+		initData.NetworkInfo.NodeIP = "127.0.0.1"
 	}
 
 	// TODO apply for distributed lock in future, to support sharding, after getting lock, create node
-	err = brc.localStore.PutBaseIDNX(baseID)
+	err = brc.runtimeInfoStore.PutBaseIDNX(baseID)
 	if err != nil {
 		// already exist, return
 		return
@@ -405,7 +413,7 @@ func (brc *BaseRegisterController) startVirtualKubelet(baseID string, initData m
 	defer func() {
 		vkNum.Dec()
 		// delete from local storage
-		brc.localStore.DeleteBaseNode(baseID)
+		brc.runtimeInfoStore.DeleteBaseNode(baseID)
 		if err != nil {
 			logrus.Infof("koupleless node exit: %s, err: %v", baseID, err)
 		} else {
@@ -420,31 +428,29 @@ func (brc *BaseRegisterController) startVirtualKubelet(baseID string, initData m
 		Tunnel:       t,
 		BaseID:       baseID,
 		Env:          brc.config.Env,
-		NodeIP:       initData.NetworkInfo.LocalIP,
-		NodeHostname: initData.NetworkInfo.LocalHostName,
-		// TODO support read from base heart beat data
-		TechStack:  "java",
-		BizName:    initData.MasterBizInfo.BizName,
-		BizVersion: initData.MasterBizInfo.BizVersion,
+		NodeIP:       initData.NetworkInfo.NodeIP,
+		NodeHostname: initData.NetworkInfo.HostName,
+		NodeName:     initData.Metadata.Name,
+		NodeVersion:  initData.Metadata.Version,
 	})
 	if err != nil {
-		err = errpkg.Wrap(err, "Error creating Koupleless node")
+		err = errpkg.Wrap(err, "Error creating base vnode")
 		return
 	}
 
 	go bn.Run(ctx)
 
 	if err = bn.WaitReady(ctx, time.Minute); err != nil {
-		err = errpkg.Wrap(err, "Error waiting Koupleless node ready")
+		err = errpkg.Wrap(err, "Error waiting base vnode ready")
 		return
 	}
 
-	brc.localStore.PutBaseNode(baseID, bn)
+	brc.runtimeInfoStore.PutBaseNode(baseID, bn)
 
-	logrus.Infof("koupleless node running: %s", baseID)
+	logrus.Infof("vnode running: %s", baseID)
 
 	// record first msg arrived time
-	brc.localStore.BaseMsgArrived(baseID)
+	brc.runtimeInfoStore.BaseMsgArrived(baseID)
 
 	select {
 	case <-bn.Done():
@@ -455,7 +461,7 @@ func (brc *BaseRegisterController) startVirtualKubelet(baseID string, initData m
 }
 
 func (brc *BaseRegisterController) shutdownVirtualKubelet(baseID string) {
-	baseNode := brc.localStore.GetBaseNode(baseID)
+	baseNode := brc.runtimeInfoStore.GetBaseNode(baseID)
 	if baseNode == nil {
 		// exited
 		return

@@ -55,8 +55,8 @@ func TestNewBaseNode(t *testing.T) {
 		BaseID:      "test-node",
 		NodeIP:      "127.0.0.1",
 		TechStack:   "java",
-		BizName:     "testMaster",
-		BizVersion:  "1.0.0",
+		NodeName:    "testMaster",
+		NodeVersion: "1.0.0",
 	})
 	assert.NotNil(t, baseNode)
 	assert.Nil(t, err)
@@ -81,8 +81,8 @@ func TestBaseNode_Data_flow(t *testing.T) {
 		BaseID:      "test-node",
 		NodeIP:      "127.0.0.1",
 		TechStack:   "java",
-		BizName:     "testMaster",
-		BizVersion:  "1.0.0",
+		NodeName:    "testMaster",
+		NodeVersion: "1.0.0",
 	})
 	assert.NotNil(t, baseNode)
 	assert.Nil(t, err)
@@ -117,8 +117,8 @@ func TestBaseNode_RunAndContextDone(t *testing.T) {
 		BaseID:      "test-node",
 		NodeIP:      "127.0.0.1",
 		TechStack:   "java",
-		BizName:     "testMaster",
-		BizVersion:  "1.0.0",
+		NodeName:    "testMaster",
+		NodeVersion: "1.0.0",
 	})
 	assert.NotNil(t, baseNode)
 	assert.Nil(t, err)
@@ -151,8 +151,8 @@ func TestBaseNode_RunAndExit(t *testing.T) {
 		BaseID:      "test-node",
 		NodeIP:      "127.0.0.1",
 		TechStack:   "java",
-		BizName:     "testMaster",
-		BizVersion:  "1.0.0",
+		NodeName:    "testMaster",
+		NodeVersion: "1.0.0",
 	})
 	assert.NotNil(t, baseNode)
 	assert.Nil(t, err)
@@ -187,8 +187,8 @@ func TestBaseNode_PodOperator(t *testing.T) {
 		BaseID:      "test-node",
 		NodeIP:      "127.0.0.1",
 		TechStack:   "java",
-		BizName:     "testMaster",
-		BizVersion:  "1.0.0",
+		NodeName:    "testMaster",
+		NodeVersion: "1.0.0",
 	})
 	assert.NotNil(t, baseNode)
 	assert.Nil(t, err)

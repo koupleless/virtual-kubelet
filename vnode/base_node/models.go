@@ -29,14 +29,11 @@ type BuildBaseNodeConfig struct {
 	// NodeHostname is the hostname of base
 	NodeHostname string
 
-	// TechStack is the base tech stack, default java
-	TechStack string
+	// NodeName is the base master biz name
+	NodeName string
 
-	// BizName is the base master biz name
-	BizName string
-
-	// BizVersion is the base master biz version
-	BizVersion string
+	// NodeVersion is the base master biz version
+	NodeVersion string
 
 	// Env is the runtime env of biz
 	Env string

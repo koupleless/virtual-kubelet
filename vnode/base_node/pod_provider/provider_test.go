@@ -73,7 +73,7 @@ func TestBaseProvider_Lifecycle(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, podStatus.Phase, corev1.PodPending)
 
-	provider.SyncBizInfo([]ark.ArkBizInfo{
+	provider.SyncContainerInfo([]ark.ArkBizInfo{
 		{
 			BizName:    "test-container",
 			BizState:   "ACTIVATED",
@@ -85,7 +85,7 @@ func TestBaseProvider_Lifecycle(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, podStatus.Phase, corev1.PodRunning)
 
-	provider.SyncBizInfo([]ark.ArkBizInfo{
+	provider.SyncContainerInfo([]ark.ArkBizInfo{
 		{
 			BizName:    "test-container",
 			BizState:   "DEACTIVATED",
@@ -112,7 +112,7 @@ func TestBaseProvider_Lifecycle(t *testing.T) {
 	assert.Equal(t, podCopy.Spec.Containers[0].Name, podLocal.Spec.Containers[0].Name)
 
 	assert.NoError(t, provider.DeletePod(ctx, podCopy))
-	provider.SyncBizInfo([]ark.ArkBizInfo{})
+	provider.SyncContainerInfo([]ark.ArkBizInfo{})
 	assert.Eventually(t, func() bool {
 		podLocal, err = provider.GetPod(ctx, pod.Namespace, pod.Name)
 		assert.NoError(t, err)
@@ -134,7 +134,7 @@ func TestBaseProvider_Lifecycle(t *testing.T) {
 	}
 	provider.runtimeInfoStore.PutPod(pod)
 
-	provider.SyncBizInfo([]ark.ArkBizInfo{
+	provider.SyncContainerInfo([]ark.ArkBizInfo{
 		{
 			BizName:    "test-container",
 			BizState:   "ACTIVATED",
@@ -163,7 +163,7 @@ func TestBaseProvider_BizInstallCheck(t *testing.T) {
 
 	provider := NewBaseProvider("default", "127.0.0.1", "test_node", fake.NewSimpleClientset(), nil)
 	identity := "test-biz:0.0.1"
-	err := provider.handleInstallOperation(ctx, identity)
+	err := provider.handleStartOperation(ctx, identity)
 	assert.NoError(t, err)
 
 	provider.runtimeInfoStore.PutPod(&corev1.Pod{
@@ -187,7 +187,7 @@ func TestBaseProvider_BizInstallCheck(t *testing.T) {
 		Status: corev1.PodStatus{},
 	})
 
-	provider.SyncBizInfo([]ark.ArkBizInfo{
+	provider.SyncContainerInfo([]ark.ArkBizInfo{
 		{
 			BizName:    "test-biz",
 			BizState:   "ACTIVATED",
@@ -195,10 +195,10 @@ func TestBaseProvider_BizInstallCheck(t *testing.T) {
 		},
 	})
 
-	err = provider.handleInstallOperation(ctx, identity)
+	err = provider.handleStartOperation(ctx, identity)
 	assert.NoError(t, err)
 
-	provider.SyncBizInfo([]ark.ArkBizInfo{
+	provider.SyncContainerInfo([]ark.ArkBizInfo{
 		{
 			BizName:    "test-biz",
 			BizState:   "RESOLVED",
@@ -206,10 +206,10 @@ func TestBaseProvider_BizInstallCheck(t *testing.T) {
 		},
 	})
 
-	err = provider.handleInstallOperation(ctx, identity)
+	err = provider.handleStartOperation(ctx, identity)
 	assert.NoError(t, err)
 
-	provider.SyncBizInfo([]ark.ArkBizInfo{
+	provider.SyncContainerInfo([]ark.ArkBizInfo{
 		{
 			BizName:    "test-biz",
 			BizState:   "DEACTIVATED",
@@ -217,6 +217,6 @@ func TestBaseProvider_BizInstallCheck(t *testing.T) {
 		},
 	})
 
-	err = provider.handleInstallOperation(ctx, identity)
+	err = provider.handleStartOperation(ctx, identity)
 	assert.Error(t, err)
 }

@@ -12,7 +12,7 @@ func TestNewVirtualKubeletNode(t *testing.T) {
 	vnode := NewVirtualKubeletNode(BuildBaseNodeProviderConfig{
 		NodeIP:    "127.0.0.1",
 		TechStack: "java",
-		BizName:   "test",
+		Name:      "test",
 		Version:   "1.0.0",
 	})
 	assert.Assert(t, vnode != nil)
@@ -22,7 +22,7 @@ func TestVirtualKubeletNode_Register(t *testing.T) {
 	vnode := NewVirtualKubeletNode(BuildBaseNodeProviderConfig{
 		NodeIP:    "127.0.0.1",
 		TechStack: "java",
-		BizName:   "test",
+		Name:      "test",
 		Version:   "1.0.0",
 		Env:       "test",
 	})
@@ -37,7 +37,7 @@ func TestVirtualKubeletNode_Ping(t *testing.T) {
 	vnode := NewVirtualKubeletNode(BuildBaseNodeProviderConfig{
 		NodeIP:    "127.0.0.1",
 		TechStack: "java",
-		BizName:   "test",
+		Name:      "test",
 		Version:   "1.0.0",
 	})
 	err := vnode.Ping(context.Background())
@@ -48,7 +48,7 @@ func TestVirtualKubeletNode_NotifyNodeStatus(t *testing.T) {
 	vnode := NewVirtualKubeletNode(BuildBaseNodeProviderConfig{
 		NodeIP:    "127.0.0.1",
 		TechStack: "java",
-		BizName:   "test",
+		Name:      "test",
 		Version:   "1.0.0",
 	})
 	vnode.nodeInfo = &corev1.Node{
@@ -75,7 +75,7 @@ func TestVirtualKubeletNode_NotifyNodeStatusWithoutInit(t *testing.T) {
 	vnode := NewVirtualKubeletNode(BuildBaseNodeProviderConfig{
 		NodeIP:    "127.0.0.1",
 		TechStack: "java",
-		BizName:   "test",
+		Name:      "test",
 		Version:   "1.0.0",
 	})
 	nodeList := make([]*corev1.Node, 0)
@@ -90,7 +90,7 @@ func TestBaseNodeProvider_CurrNodeInfo(t *testing.T) {
 	vnode := NewVirtualKubeletNode(BuildBaseNodeProviderConfig{
 		NodeIP:    "127.0.0.1",
 		TechStack: "java",
-		BizName:   "test",
+		Name:      "test",
 		Version:   "1.0.0",
 		Env:       "test",
 	})

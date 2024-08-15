@@ -7,11 +7,8 @@ type BuildBaseNodeProviderConfig struct {
 	// NodeHostname is the hostname of the node
 	NodeHostname string `json:"nodeHostname"`
 
-	// TechStack is the underlying tech stack of runtime
-	TechStack string `json:"techStack"`
-
-	// BizName is the master biz name of runtime
-	BizName string `json:"bizName"`
+	// Name is the master biz name of runtime
+	Name string `json:"name"`
 
 	// Version is the version of ths underlying runtime
 	Version string `json:"version"`

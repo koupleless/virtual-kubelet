@@ -23,7 +23,9 @@ import (
 	"github.com/koupleless/virtual-kubelet/common/tracker"
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/controller/base_register_controller"
+	"github.com/koupleless/virtual-kubelet/controller/module_deployment_controller"
 	"github.com/koupleless/virtual-kubelet/inspection"
+	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/tunnel"
 	"github.com/koupleless/virtual-kubelet/tunnel/mqtt_tunnel"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet/nodeutil"
@@ -79,7 +81,9 @@ func runModuleControllerCommand(ctx context.Context, c Opts) error {
 	if c.EnableInspection {
 		for _, insp := range inspection.RegisteredInspection {
 			insp.Register(clientSet)
-			go utils.TimedTaskWithInterval(ctx, insp.GetInterval(), insp.Inspect)
+			go utils.TimedTaskWithInterval(ctx, insp.GetInterval(), func(ctx context.Context) {
+				insp.Inspect(ctx, c.Env)
+			})
 		}
 	}
 
@@ -88,10 +92,35 @@ func runModuleControllerCommand(ctx context.Context, c Opts) error {
 		tunnels = append(tunnels, &mqtt_tunnel.MqttTunnel{})
 	}
 
+	moduleDeploymentControllerConfig := module_deployment_controller.BuildModuleDeploymentControllerConfig{
+		Env: c.Env,
+		K8SConfig: &model.K8SConfig{
+			KubeClient:         clientSet,
+			InformerSyncPeriod: time.Minute,
+		},
+		Tunnels: tunnels,
+	}
+
+	deploymentController, err := module_deployment_controller.NewModuleDeploymentController(&moduleDeploymentControllerConfig)
+	if err != nil {
+		return err
+	}
+
+	if deploymentController == nil {
+		return errors.New("deployment controller is nil")
+	}
+
+	go deploymentController.Run(ctx)
+
+	// waiting for register controller ready
+	if err = deploymentController.WaitReady(ctx, time.Second*30); err != nil {
+		return err
+	}
+
 	config := base_register_controller.BuildBaseRegisterControllerConfig{
 		ClientID: clientID,
 		Env:      c.Env,
-		K8SConfig: &base_register_controller.K8SConfig{
+		K8SConfig: &model.K8SConfig{
 			KubeClient:         clientSet,
 			InformerSyncPeriod: time.Minute,
 		},
@@ -108,6 +137,15 @@ func runModuleControllerCommand(ctx context.Context, c Opts) error {
 	}
 
 	go registerController.Run(ctx)
+
+	for _, t := range tunnels {
+		err = t.Start(ctx, clientID, c.Env)
+		if err != nil {
+			log.G(ctx).WithError(err).Error("failed to start tunnel", t.Key())
+		} else {
+			log.G(ctx).Info("Tunnel started: ", t.Key())
+		}
+	}
 
 	// waiting for register controller ready
 	if err = registerController.WaitReady(ctx, time.Second*30); err != nil {

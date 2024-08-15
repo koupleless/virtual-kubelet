@@ -1,7 +1,6 @@
 package mqtt_tunnel
 
 import (
-	"github.com/koupleless/virtual-kubelet/model"
 	"gotest.tools/assert"
 	"testing"
 	"time"
@@ -23,6 +22,6 @@ func TestExpired(t *testing.T) {
 }
 
 func TestFormatArkletCommandTopic(t *testing.T) {
-	topic := formatArkletCommandTopic("test", "test", model.CommandHealth)
+	topic := formatArkletCommandTopic("test", "test", CommandHealth)
 	assert.Assert(t, topic == "koupleless_test/test/health")
 }

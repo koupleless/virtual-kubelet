@@ -40,7 +40,7 @@ func TestNewBaseRegisterController(t *testing.T) {
 
 	controller, err := NewBaseRegisterController(&BuildBaseRegisterControllerConfig{
 		ClientID: "test-client",
-		K8SConfig: &K8SConfig{
+		K8SConfig: &model.K8SConfig{
 			KubeClient:         kubeClient,
 			InformerSyncPeriod: time.Minute,
 		},
@@ -60,7 +60,7 @@ func TestBaseRegisterController_Run(t *testing.T) {
 	controller, err := NewBaseRegisterController(&BuildBaseRegisterControllerConfig{
 		ClientID: "test-client",
 		Env:      "test",
-		K8SConfig: &K8SConfig{
+		K8SConfig: &model.K8SConfig{
 			KubeClient:         kubeClient,
 			InformerSyncPeriod: time.Minute,
 		},
@@ -89,6 +89,7 @@ func TestBaseRegisterController_Run(t *testing.T) {
 	if err != nil {
 		fmt.Println(err.Error())
 	}
+	client.Connect()
 	defer client.Disconnect()
 
 	// mock base online
@@ -141,7 +142,7 @@ func TestBaseRegisterController_Run(t *testing.T) {
 	go mockBase.Run()
 
 	assert.Eventually(t, func() bool {
-		return len(controller.localStore.baseIDToBaseNode) == 1
+		return len(controller.runtimeInfoStore.baseIDToBaseNode) == 1
 	}, time.Second*5, time.Millisecond*200)
 
 	controller.podAddHandler(srcPod)
@@ -151,7 +152,7 @@ func TestBaseRegisterController_Run(t *testing.T) {
 	controller.podDeleteHandler(podCopy)
 
 	mockBase.Exit()
-	controller.localStore.baseLatestMsgTime["test-offline"] = 0
+	controller.runtimeInfoStore.baseLatestMsgTime["test-offline"] = 0
 	controller.checkAndDeleteOfflineBase(ctx)
 
 	cancel()
@@ -164,7 +165,7 @@ func TestBaseRegisterController_CallbackShutdown(t *testing.T) {
 	controller, err := NewBaseRegisterController(&BuildBaseRegisterControllerConfig{
 		ClientID: "test-client",
 		Env:      "test",
-		K8SConfig: &K8SConfig{
+		K8SConfig: &model.K8SConfig{
 			KubeClient:         kubeClient,
 			InformerSyncPeriod: time.Minute,
 		},
@@ -175,8 +176,7 @@ func TestBaseRegisterController_CallbackShutdown(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, controller)
 
-	controller.onBaseDiscovered("test", model.HeartBeatData{
-		DeviceID: "test",
+	controller.onNodeDiscovered("test", model.NodeInfo{
 		MasterBizInfo: ark.MasterBizInfo{
 			BizState: "DEACTIVATED",
 		},
@@ -189,7 +189,7 @@ func TestBaseRegisterController_CallbackBaseNotExist(t *testing.T) {
 	controller, err := NewBaseRegisterController(&BuildBaseRegisterControllerConfig{
 		ClientID: "test-client",
 		Env:      "test",
-		K8SConfig: &K8SConfig{
+		K8SConfig: &model.K8SConfig{
 			KubeClient:         kubeClient,
 			InformerSyncPeriod: time.Minute,
 		},
@@ -200,6 +200,6 @@ func TestBaseRegisterController_CallbackBaseNotExist(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, controller)
 
-	controller.onHealthDataArrived("test", ark.HealthData{})
-	controller.onBizDataArrived("test", []ark.ArkBizInfo{})
+	controller.onNodeStatusDataArrived("test", ark.HealthData{})
+	controller.onQueryAllContainerStatusDataArrived("test", []ark.ArkBizInfo{})
 }

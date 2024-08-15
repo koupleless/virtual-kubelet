@@ -25,7 +25,7 @@ var currBaseBizFetched string
 
 var currBizInfoFetched []ark.ArkBizInfo
 
-func baseDiscoverCallback(baseID string, data model.HeartBeatData, t tunnel.Tunnel) {
+func baseDiscoverCallback(baseID string, data model.NodeInfo, t tunnel.Tunnel) {
 	logrus.Info("Discovered base id:", baseID)
 	currBaseID = baseID
 }
@@ -62,11 +62,11 @@ func TestMqttTunnel_BaseDiscover(t *testing.T) {
 	// mock base online
 	id := "test-base-discover"
 
-	mt.OnBaseStart(ctx, id)
+	mt.OnNodeStart(ctx, id)
 
-	mt.onBaseDiscovered(id, model.HeartBeatData{}, &mt)
+	mt.onBaseDiscovered(id, model.NodeInfo{}, &mt)
 
-	mt.OnBaseStop(ctx, id)
+	mt.OnNodeStop(ctx, id)
 
 	assert.Eventually(t, func() bool {
 		return currBaseID == id
@@ -84,14 +84,14 @@ func TestMqttTunnel_FetchBaseInfo(t *testing.T) {
 	// mock base online
 	id := "test-base-fetch"
 
-	mt.onBaseDiscovered(id, model.HeartBeatData{}, &mt)
+	mt.onBaseDiscovered(id, model.NodeInfo{}, &mt)
 
 	err = mt.FetchHealthData(ctx, id)
 	assert.NoError(t, err)
 
 	mt.onHealthDataArrived(id, ark.HealthData{})
 
-	err = mt.QueryAllBizData(ctx, id)
+	err = mt.QueryAllContainerStatusData(ctx, id)
 	assert.NoError(t, err)
 
 	mt.onQueryAllBizDataArrived(id, []ark.ArkBizInfo{})
@@ -112,7 +112,7 @@ func TestMqttTunnel_BaseBizOperation(t *testing.T) {
 	// mock base online
 	id := "test-base-biz-operation"
 
-	mt.onBaseDiscovered(id, model.HeartBeatData{}, &mt)
+	mt.onBaseDiscovered(id, model.NodeInfo{}, &mt)
 
 	assert.Eventually(t, func() bool {
 		return currBaseID == id
@@ -123,7 +123,7 @@ func TestMqttTunnel_BaseBizOperation(t *testing.T) {
 		BizVersion: "0.0.1",
 		BizUrl:     "test-url",
 	}
-	err = mt.InstallBiz(ctx, id, &bizModel)
+	err = mt.StartContainer(ctx, id, &bizModel)
 	assert.NoError(t, err)
 
 	mt.onQueryAllBizDataArrived(id, []ark.ArkBizInfo{

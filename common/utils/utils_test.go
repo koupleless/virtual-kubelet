@@ -45,7 +45,7 @@ func TestConvertByteNumToResourceQuantity(t *testing.T) {
 func TestCheckAndFinallyCall_timeout(t *testing.T) {
 	success := false
 	timeout := false
-	CheckAndFinallyCall(func() bool {
+	CheckAndFinallyCall(context.Background(), func() bool {
 		return success
 	}, time.Second, time.Millisecond*100, func() {
 		return
@@ -58,7 +58,7 @@ func TestCheckAndFinallyCall_timeout(t *testing.T) {
 func TestCheckAndFinallyCall_success(t *testing.T) {
 	success := false
 	called := false
-	go CheckAndFinallyCall(func() bool {
+	go CheckAndFinallyCall(context.Background(), func() bool {
 		return success
 	}, time.Second, time.Millisecond*100, func() {
 		called = true

@@ -22,7 +22,8 @@ func TestPodScheduleInspection_Inspect(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-pod",
 			Labels: map[string]string{
-				model.LabelKeyOfModuleControllerComponent: model.ModuleControllerComponentModule,
+				model.LabelKeyOfScheduleAnythingComponent: model.ComponentVPod,
+				model.LabelKeyOfEnv:                       "test",
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				{
@@ -50,8 +51,8 @@ func TestPodScheduleInspection_Inspect(t *testing.T) {
 		},
 	})
 	inspection.Register(clientset)
-	inspection.Inspect(context.Background())
-	inspection.Inspect(context.Background())
+	inspection.Inspect(context.Background(), "test")
+	inspection.Inspect(context.Background(), "test")
 }
 
 func TestPodScheduleInspection_GetIntervalMilliSec(t *testing.T) {

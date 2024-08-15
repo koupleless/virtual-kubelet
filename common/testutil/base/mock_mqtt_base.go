@@ -7,6 +7,7 @@ import (
 	"github.com/koupleless/arkctl/v1/service/ark"
 	"github.com/koupleless/virtual-kubelet/common/mqtt"
 	"github.com/koupleless/virtual-kubelet/model"
+	"github.com/koupleless/virtual-kubelet/tunnel/mqtt_tunnel"
 	"github.com/sirupsen/logrus"
 	"strings"
 	"sync"
@@ -66,9 +67,9 @@ func (bm *MockMqttBase) Run() {
 		ticker := time.NewTicker(time.Minute * 2)
 		mqttResponse := map[string]interface{}{
 			"publishTimestamp": time.Now().UnixMilli(),
-			"data": model.HeartBeatData{
+			"data": model.NodeInfo{
 				MasterBizInfo: bm.healthData.MasterBizInfo,
-				NetworkInfo:   model.NetworkInfo{LocalIP: "127.0.0.1", LocalHostName: "test_base"},
+				NetworkInfo:   model.NetworkInfo{NodeIP: "127.0.0.1", LocalHostName: "test_base"},
 			},
 		}
 		heartInfoBytes, _ := json.Marshal(mqttResponse)
@@ -81,9 +82,9 @@ func (bm *MockMqttBase) Run() {
 			case <-ticker.C:
 				mqttResponse = map[string]interface{}{
 					"publishTimestamp": time.Now().UnixMilli(),
-					"data": model.HeartBeatData{
+					"data": model.NodeInfo{
 						MasterBizInfo: bm.healthData.MasterBizInfo,
-						NetworkInfo:   model.NetworkInfo{LocalIP: "127.0.0.1", LocalHostName: "test_base"},
+						NetworkInfo:   model.NetworkInfo{NodeIP: "127.0.0.1", LocalHostName: "test_base"},
 					},
 				}
 				heartInfoBytes, _ = json.Marshal(mqttResponse)
@@ -96,9 +97,9 @@ func (bm *MockMqttBase) Run() {
 	bm.healthData.MasterBizInfo.BizState = "DEACTIVATED"
 	mqttResponse := map[string]interface{}{
 		"publishTimestamp": time.Now().UnixMilli(),
-		"data": model.HeartBeatData{
+		"data": model.NodeInfo{
 			MasterBizInfo: bm.healthData.MasterBizInfo,
-			NetworkInfo:   model.NetworkInfo{LocalIP: "127.0.0.1", LocalHostName: "test_base"},
+			NetworkInfo:   model.NetworkInfo{NodeIP: "127.0.0.1", LocalHostName: "test_base"},
 		},
 	}
 	heartInfoBytes, _ := json.Marshal(mqttResponse)
@@ -111,7 +112,7 @@ func (bm *MockMqttBase) commandCallback(_ paho.Client, msg paho.Message) {
 	logrus.Info("reach message from: ", topic)
 	fields := strings.Split(topic, "/")
 	switch fields[len(fields)-1] {
-	case model.CommandHealth:
+	case mqtt_tunnel.CommandHealth:
 		response := ark.HealthResponse{
 			GenericArkResponseBase: ark.GenericArkResponseBase[ark.HealthInfo]{
 				Code: "SUCCESS",
@@ -127,7 +128,7 @@ func (bm *MockMqttBase) commandCallback(_ paho.Client, msg paho.Message) {
 		}
 		healthBytes, _ := json.Marshal(mqttResponse)
 		bm.mqttClient.Pub(fmt.Sprintf("koupleless_test/%s/base/health", bm.baseID), mqtt.Qos1, healthBytes)
-	case model.CommandQueryAllBiz:
+	case mqtt_tunnel.CommandQueryAllBiz:
 		response := ark.QueryAllArkBizResponse{
 			GenericArkResponseBase: ark.GenericArkResponseBase[[]ark.ArkBizInfo]{
 				Code:    "SUCCESS",
@@ -142,7 +143,7 @@ func (bm *MockMqttBase) commandCallback(_ paho.Client, msg paho.Message) {
 		bizBytes, _ := json.Marshal(mqttResponse)
 
 		bm.mqttClient.Pub(fmt.Sprintf("koupleless_test/%s/base/biz", bm.baseID), mqtt.Qos1, bizBytes)
-	case model.CommandInstallBiz:
+	case mqtt_tunnel.CommandInstallBiz:
 		var data ark.BizModel
 		err := json.Unmarshal(msg.Payload(), &data)
 		if err != nil {
@@ -195,7 +196,7 @@ func (bm *MockMqttBase) commandCallback(_ paho.Client, msg paho.Message) {
 		}
 		bizBytes, _ := json.Marshal(mqttResponse)
 		bm.mqttClient.Pub(fmt.Sprintf("koupleless_test/%s/base/biz", bm.baseID), mqtt.Qos1, bizBytes)
-	case model.CommandUnInstallBiz:
+	case mqtt_tunnel.CommandUnInstallBiz:
 		var data ark.BizModel
 		err := json.Unmarshal(msg.Payload(), &data)
 		if err != nil {

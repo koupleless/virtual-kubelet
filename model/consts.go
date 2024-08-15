@@ -15,45 +15,43 @@
 package model
 
 const (
-	CommandHealth       = "health"
-	CommandQueryAllBiz  = "queryAllBiz"
-	CommandInstallBiz   = "installBiz"
-	CommandUnInstallBiz = "uninstallBiz"
+	VNodePrefix = "vnode"
 )
 
 const (
-	BaseHeartBeatTopic = "koupleless_%s/+/base/heart"
-	BaseHealthTopic    = "koupleless_%s/%s/base/health"
-	BaseBizTopic       = "koupleless_%s/%s/base/biz"
+	TrackSceneVPodDeploy = "module_deploy"
 )
 
 const (
-	BaseNodePrefix = "base-node"
-)
-
-const (
-	TrackSceneModuleDeployment = "module_deployment"
-)
-
-const (
-	TrackEventModuleInstall   = "ModuleInstall"
-	TrackEventModuleUnInstall = "PodUnInstall"
-	TrackEventPodDelete       = "PodDelete"
-	TrackEventPodUpdate       = "PodUpdate"
-	TrackEventPodSchedule     = "PodSchedule"
+	TrackEventContainerInstall                = "ModuleInstall"
+	TrackEventContainerUnInstall              = "PodUnInstall"
+	TrackEventVPodDelete                      = "PodDelete"
+	TrackEventVPodUpdate                      = "PodUpdate"
+	TrackEventVPodSchedule                    = "PodSchedule"
+	TrackEventVPodPeerDeploymentReplicaModify = "ModulePeerDeploymentReplicaModify"
 )
 
 const (
 	LabelKeyOfTraceID                   = "trace.koupleless.io/id"
-	LabelKeyOfModuleControllerComponent = "module-controller.koupleless.io/component"
+	LabelKeyOfScheduleAnythingComponent = "module-controller.koupleless.io/component"
 	LabelKeyOfEnv                       = "module-controller.koupleless.io/env"
-	LabelKeyOfTunnel                    = "base.koupleless.io/tunnel"
+	LabelKeyOfVnodeTunnel               = "base.koupleless.io/tunnel"
+	LabelKeyOfVPodDeploymentStrategy    = "module-controller.koupleless.io/strategy"
+	LabelKeyOfVNodeName                 = "base.koupleless.io/name"
+	LabelKeyOfVNodeVersion              = "base.koupleless.io/version"
+	LabelKeyOfSkipReplicasControl       = "module-controller.koupleless.io/replicas-control"
 )
 
 const (
-	ModuleControllerComponentModule           = "module"
-	ModuleControllerComponentModuleDeployment = "module-deployment"
-	ModuleControllerComponentVNode            = "vnode"
+	ComponentVPod           = "module"
+	ComponentVPodDeployment = "module-deployment"
+	ComponentVNode          = "vnode"
+)
+
+type VPodDeploymentStrategy string
+
+const (
+	VPodDeploymentStrategyPeer VPodDeploymentStrategy = "peer"
 )
 
 // ErrorCode first two char represent scene of Error, 00 represent Error of module-controller, 01 represent Error of user config
@@ -62,9 +60,10 @@ type ErrorCode string
 const (
 	CodeSuccess                       ErrorCode = "00000"
 	CodeTimeout                       ErrorCode = "00001"
-	CodeModuleUninstallTimeout        ErrorCode = "00002"
-	CodeModuleInstalledButDeactivated ErrorCode = "01001"
-	CodeModuleInstallFailed           ErrorCode = "01002"
-	CodeModuleUnInstallFailed         ErrorCode = "01003"
-	CodeModulePodScheduleFailed       ErrorCode = "01004"
+	CodeContainerUninstallTimeout     ErrorCode = "00002"
+	CodeKubernetesOperationFailed     ErrorCode = "00003"
+	CodeContainerInstalledButNotReady ErrorCode = "01001"
+	CodeContainerInstallFailed        ErrorCode = "01002"
+	CodeContainerStopFailed           ErrorCode = "01003"
+	CodeVPodScheduleFailed            ErrorCode = "01004"
 )

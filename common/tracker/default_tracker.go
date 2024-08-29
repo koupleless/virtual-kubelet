@@ -2,6 +2,7 @@ package tracker
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/koupleless/virtual-kubelet/common/utils"
@@ -144,10 +145,11 @@ func (t *DefaultTracker) Eventually(traceID, scene, event string, labels map[str
 		Labels:  labels,
 	}
 	checkTimeout := false
-	utils.CheckAndFinallyCall(checkFunc, timeout, interval, func() {
+	utils.CheckAndFinallyCall(context.Background(), checkFunc, timeout, interval, func() {
 		checkPassed()
 	}, func() {
 		timeoutCall()
+		data.Code = timeoutErrorCode
 		checkTimeout = true
 	})
 	data.TimeUsed = time.Now().Sub(startTime).Milliseconds()

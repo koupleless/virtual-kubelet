@@ -17,8 +17,10 @@ package virtual_kubelet
 import (
 	"context"
 	"fmt"
-	v1 "k8s.io/client-go/informers/core/v1"
-	lister "k8s.io/client-go/listers/core/v1"
+	"github.com/koupleless/virtual-kubelet/common/utils"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sync"
 	"time"
 
@@ -31,8 +33,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/wait"
-	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
-	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 )
@@ -101,9 +101,8 @@ type PodController struct {
 	// recorder is an event recorder for recording Event resources to the Kubernetes API.
 	recorder record.EventRecorder
 
-	client   corev1client.PodsGetter
-	lister   lister.PodLister
-	informer v1.PodInformer
+	client client.Client
+	cache  cache.Cache
 
 	syncPodsFromKubernetes *queue.Queue
 
@@ -145,12 +144,8 @@ type knownPod struct {
 
 // PodControllerConfig is used to configure a new PodController.
 type PodControllerConfig struct {
-	// PodClient is used to perform actions on the k8s API, such as updating pod status
-	// This field is required
-	PodClient corev1client.PodsGetter
-
-	PodLister   lister.PodLister
-	PodInformer v1.PodInformer
+	Client client.Client
+	Cache  cache.Cache
 
 	EventRecorder record.EventRecorder
 
@@ -170,13 +165,6 @@ type PodControllerConfig struct {
 	SyncPodStatusFromProviderRateLimiter workqueue.RateLimiter
 	// SyncPodStatusFromProviderShouldRetryFunc allows for a custom retry policy for the SyncPodStatusFromProvider queue
 	SyncPodStatusFromProviderShouldRetryFunc queue.ShouldRetryFunc
-
-	// Add custom filtering for pod informer event handlers
-	// Use this for cases where the pod informer handles more than pods assigned to this node
-	//
-	// For example, if the pod informer is not filtering based on pod.Spec.NodeName, you should
-	// set that filter here so the pod controller does not handle events for pods assigned to other nodes.
-	PodEventFilterFunc PodEventFilterFunc
 }
 
 // NewPodController creates a new pod controller with the provided config.
@@ -187,14 +175,11 @@ func NewPodController(cfg PodControllerConfig) (*PodController, error) {
 	if cfg.Provider == nil {
 		return nil, errdefs.InvalidInput("missing provider")
 	}
-	if cfg.PodClient == nil {
+	if cfg.Client == nil {
 		return nil, errdefs.InvalidInput("missing client")
 	}
-	if cfg.PodLister == nil {
-		return nil, errdefs.InvalidInput("missing lister")
-	}
-	if cfg.PodInformer == nil {
-		return nil, errdefs.InvalidInput("missing informer")
+	if cfg.Cache == nil {
+		return nil, errdefs.InvalidInput("missing cache")
 	}
 	if cfg.SyncPodsFromKubernetesRateLimiter == nil {
 		cfg.SyncPodsFromKubernetesRateLimiter = workqueue.DefaultControllerRateLimiter()
@@ -207,9 +192,8 @@ func NewPodController(cfg PodControllerConfig) (*PodController, error) {
 	}
 
 	pc := &PodController{
-		client:   cfg.PodClient,
-		lister:   cfg.PodLister,
-		informer: cfg.PodInformer,
+		client:   cfg.Client,
+		cache:    cfg.Cache,
 		provider: cfg.Provider,
 		ready:    make(chan struct{}),
 		done:     make(chan struct{}),
@@ -253,11 +237,6 @@ func (pc *PodController) Run(ctx context.Context, podSyncWorkers int) (retErr er
 
 	if p, ok := pc.provider.(asyncProvider); ok {
 		provider = p
-	} else {
-		wrapped := &syncProviderWrapper{PodLifecycleHandler: pc.provider, l: pc.lister}
-		runProvider = wrapped.run
-		provider = wrapped
-		log.G(ctx).Debug("Wrapped non-async provider with async")
 	}
 	pc.provider = provider
 
@@ -372,7 +351,7 @@ func (pc *PodController) syncPodFromKubernetesHandler(ctx context.Context, key s
 	log.G(ctx).WithField("key", key).Debug("sync handled")
 
 	// Convert the namespace/name string into a distinct namespace and name.
-	namespace, name, err := cache.SplitMetaNamespaceKey(key)
+	namespace, name, err := utils.SplitMetaNamespaceKey(key)
 	if err != nil {
 		// Log the error as a warning, but do not requeue the key as it is invalid.
 		log.G(ctx).Warn(pkgerrors.Wrapf(err, "invalid resource key: %q", key))
@@ -380,7 +359,11 @@ func (pc *PodController) syncPodFromKubernetesHandler(ctx context.Context, key s
 	}
 
 	// Get the Pod resource with this namespace/name.
-	pod, err := pc.lister.Pods(namespace).Get(name)
+	pod := &corev1.Pod{}
+	err = pc.cache.Get(ctx, types.NamespacedName{
+		Namespace: namespace,
+		Name:      name,
+	}, pod, &client.GetOptions{})
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			// We've failed to fetch the pod from the lister, but the error is not a 404.
@@ -408,6 +391,9 @@ func (pc *PodController) syncPodFromKubernetesHandler(ctx context.Context, key s
 			err = pkgerrors.Wrapf(err, "failed to delete pod %q in the provider", loggablePodNameFromCoordinates(namespace, name))
 			span.SetStatus(err)
 		}
+
+		pc.DeletePod(key)
+
 		return err
 
 	}
@@ -505,7 +491,12 @@ func (pc *PodController) deleteDanglingPods(ctx context.Context, threadiness int
 	// Iterate over the pods known to the provider, marking for deletion those that don't exist in Kubernetes.
 	// Take on this opportunity to populate the list of key that correspond to pods known to the provider.
 	for _, pp := range pps {
-		if _, err := pc.lister.Pods(pp.Namespace).Get(pp.Name); err != nil {
+		pod := &corev1.Pod{}
+		err = pc.cache.Get(ctx, types.NamespacedName{
+			Namespace: pp.Namespace,
+			Name:      pp.Name,
+		}, pod, &client.GetOptions{})
+		if err != nil {
 			if errors.IsNotFound(err) {
 				// The current pod does not exist in Kubernetes, so we mark it for deletion.
 				ptd = append(ptd, pp)
@@ -557,11 +548,7 @@ func (pc *PodController) deleteDanglingPods(ctx context.Context, threadiness int
 // If the key cannot be computed, "(unknown)" is returned.
 // This method is meant to be used for logging purposes only.
 func loggablePodName(pod *corev1.Pod) string {
-	k, err := cache.MetaNamespaceKeyFunc(pod)
-	if err != nil {
-		return "(unknown)"
-	}
-	return k
+	return utils.GetPodKey(pod)
 }
 
 // loggablePodNameFromCoordinates returns the "namespace/name" key for the pod identified by the specified namespace and name (coordinates).

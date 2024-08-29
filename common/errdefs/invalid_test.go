@@ -36,8 +36,8 @@ func TestIsInvalidInput(t *testing.T) {
 		},
 		{
 			name:          "AsInvalidInput",
-			err:           AsInvalidInput(errors.New("this is a test")),
-			xMsg:          "this is a test",
+			err:           AsInvalidInput(errors.New("this is a suite")),
+			xMsg:          "this is a suite",
 			xInvalidInput: true,
 		},
 		{
@@ -75,7 +75,7 @@ func TestIsInvalidInput(t *testing.T) {
 }
 
 func TestInvalidInputCause(t *testing.T) {
-	err := errors.New("test")
+	err := errors.New("suite")
 	e := &invalidInputError{err}
 	assert.Check(t, cmp.Equal(e.Cause(), err))
 	assert.Check(t, IsInvalidInput(errors.Wrap(e, "some details")))

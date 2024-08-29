@@ -19,6 +19,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"time"
 
 	"github.com/koupleless/virtual-kubelet/common/log"
@@ -28,7 +30,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
-	coordclientset "k8s.io/client-go/kubernetes/typed/coordination/v1"
 	"k8s.io/utils/clock"
 	"k8s.io/utils/ptr"
 )
@@ -59,7 +60,7 @@ const (
 // leaseController is a v1 lease controller and responsible for maintaining a server-side lease as long as the node
 // is healthy
 type leaseController struct {
-	leaseClient          coordclientset.LeaseInterface
+	leaseClient          client.Client
 	leaseDurationSeconds int32
 	renewInterval        time.Duration
 	clock                clock.Clock
@@ -72,7 +73,7 @@ type leaseController struct {
 // renew leases
 func newLeaseControllerWithRenewInterval(
 	clock clock.Clock,
-	client coordclientset.LeaseInterface,
+	client client.Client,
 	leaseDurationSeconds int32,
 	renewInterval time.Duration,
 	nodeController *NodeController) (*leaseController, error) {
@@ -201,7 +202,11 @@ func (c *leaseController) ensureLease(ctx context.Context, node *corev1.Node) (*
 	ctx, span := trace.StartSpan(ctx, "lease.ensureLease")
 	defer span.End()
 
-	lease, err := c.leaseClient.Get(ctx, node.Name, metav1.GetOptions{})
+	lease := &coordinationv1.Lease{}
+	err := c.leaseClient.Get(ctx, types.NamespacedName{
+		Namespace: corev1.NamespaceNodeLease,
+		Name:      node.Name,
+	}, lease, &client.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		// lease does not exist, create it.
 		leaseToCreate := c.newLease(ctx, node, nil)
@@ -211,7 +216,7 @@ func (c *leaseController) ensureLease(ctx context.Context, node *corev1.Node) (*
 			// not create it this time - we will retry in the next iteration.
 			return nil, false, nil
 		}
-		lease, err := c.leaseClient.Create(ctx, leaseToCreate, metav1.CreateOptions{})
+		err := c.leaseClient.Create(ctx, leaseToCreate, &client.CreateOptions{})
 		if err != nil {
 			span.SetStatus(err)
 			return nil, false, err
@@ -236,7 +241,8 @@ func (c *leaseController) retryUpdateLease(ctx context.Context, node *corev1.Nod
 	defer span.End()
 
 	for i := 0; i < maxUpdateRetries; i++ {
-		lease, err := c.leaseClient.Update(ctx, c.newLease(ctx, node, base), metav1.UpdateOptions{})
+		lease := c.newLease(ctx, node, base)
+		err := c.leaseClient.Update(ctx, lease, &client.UpdateOptions{})
 		if err == nil {
 			log.G(ctx).WithField("retries", i).Debug("Successfully updated lease")
 			c.latestLease = lease

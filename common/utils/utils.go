@@ -28,22 +28,22 @@ func TimedTaskWithInterval(ctx context.Context, interval time.Duration, task fun
 	}
 }
 
-func CheckAndFinallyCall(checkFunc func() bool, timeout, interval time.Duration, finally, timeoutCall func()) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
+func CheckAndFinallyCall(ctx context.Context, checkFunc func() bool, timeout, interval time.Duration, finally, timeoutCall func()) {
 	checkTicker := time.NewTicker(interval)
-	for range checkTicker.C {
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	for {
 		select {
 		case <-ctx.Done():
-			// TODO timeout log
 			logrus.Info("Check and Finally call timeout")
 			timeoutCall()
 			return
-		default:
-		}
-		if checkFunc() {
-			finally()
-			return
+		case <-checkTicker.C:
+			if checkFunc() {
+				finally()
+				return
+			}
 		}
 	}
 }
@@ -74,6 +74,10 @@ func GetPodKeyFromContainerKey(containerKey string) string {
 	return strings.Join(strings.Split(containerKey, "/")[:2], "/")
 }
 
+func GetContainerNameFromContainerKey(containerKey string) string {
+	return strings.Join(strings.Split(containerKey, "/")[2:], "/")
+}
+
 func GetContainerKey(podKey, containerName string) string {
 	return podKey + "/" + containerName
 }
@@ -98,13 +102,12 @@ func PodsEqual(pod1, pod2 *corev1.Pod) bool {
 		cmp.Equal(pod1.ObjectMeta.Annotations, pod2.Annotations)
 }
 
-func FormatBaseNodeName(baseID string) string {
-	return fmt.Sprintf("%s.%s", model.VNodePrefix, baseID)
+func FormatNodeName(nodeID string) string {
+	return fmt.Sprintf("%s.%s", model.VNodePrefix, nodeID)
 }
 
-func ExtractBaseIDFromNodeName(nodeName string) string {
-	splits := strings.Split(nodeName, ".")
-	return splits[len(splits)-1]
+func ExtractNodeIDFromNodeName(nodeName string) string {
+	return strings.Join(strings.Split(nodeName, ".")[1:], ".")
 }
 
 func TranslateContainerStatusFromTunnelToContainerStatus(container corev1.Container, data *model.ContainerStatusData) corev1.ContainerStatus {
@@ -132,8 +135,8 @@ func TranslateContainerStatusFromTunnelToContainerStatus(container corev1.Contai
 	if data.State == model.ContainerStateResolved {
 		// starting
 		ret.State.Waiting = &corev1.ContainerStateWaiting{
-			Reason:  "ContainerResolved",
-			Message: "Container is starting but not activated",
+			Reason:  data.Reason,
+			Message: data.Message,
 		}
 		return ret
 	}
@@ -157,4 +160,18 @@ func TranslateContainerStatusFromTunnelToContainerStatus(container corev1.Contai
 		}
 	}
 	return ret
+}
+
+func SplitMetaNamespaceKey(key string) (namespace, name string, err error) {
+	parts := strings.Split(key, "/")
+	switch len(parts) {
+	case 1:
+		// name only, no namespace
+		return "", parts[0], nil
+	case 2:
+		// namespace and name
+		return parts[0], parts[1], nil
+	}
+
+	return "", "", fmt.Errorf("unexpected key format: %q", key)
 }

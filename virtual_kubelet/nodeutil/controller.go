@@ -5,20 +5,18 @@ import (
 	"crypto/tls"
 	"fmt"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet"
-	informer "k8s.io/client-go/informers/core/v1"
-	lister "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/kubernetes/scheme"
 	"net/http"
 	"path"
 	"runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"time"
 
 	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
-	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/record"
 )
 
@@ -30,21 +28,17 @@ type Node struct {
 	nc *virtual_kubelet.NodeController
 	pc *virtual_kubelet.PodController
 
-	readyCb func(context.Context) error
-
 	ready chan struct{}
 	done  chan struct{}
 	err   error
 
-	client kubernetes.Interface
+	client client.Client
 
 	listenAddr string
 	h          http.Handler
 	tlsConfig  *tls.Config
 
 	workers int
-
-	eb record.EventBroadcaster
 }
 
 // NodeController returns the configured node controller.
@@ -66,13 +60,6 @@ func (n *Node) Run(ctx context.Context) (retErr error) {
 		n.err = retErr
 		close(n.done)
 	}()
-
-	if n.eb != nil {
-		n.eb.StartLogging(log.G(ctx).Infof)
-		n.eb.StartRecordingToSink(&corev1client.EventSinkImpl{Interface: n.client.CoreV1().Events(v1.NamespaceAll)})
-		defer n.eb.Shutdown()
-		log.G(ctx).Debug("Started event broadcaster")
-	}
 
 	go n.pc.Run(ctx, n.workers) //nolint:errcheck
 
@@ -109,11 +96,6 @@ func (n *Node) Run(ctx context.Context) (retErr error) {
 
 	log.G(ctx).Debug("node controller ready")
 
-	if n.readyCb != nil {
-		if err := n.readyCb(ctx); err != nil {
-			return err
-		}
-	}
 	close(n.ready)
 
 	select {
@@ -174,14 +156,11 @@ type NodeOpt func(c *NodeConfig) error
 // NodeConfig is used to hold configuration items for a Node.
 // It gets used in conjection with NodeOpt in NewNodeFromClient
 type NodeConfig struct {
-	// Set the client to use, otherwise a client will be created from ClientsetFromEnv
-	Client kubernetes.Interface
+	// Set the runtime client to use
+	Client client.Client
 
-	// Set the PodLister to use
-	PodLister lister.PodLister
-
-	// Set the PodInformer to use
-	PodInformer informer.PodInformer
+	// Set the cache to use
+	Cache cache.Cache
 
 	// Set the node spec to register with Kubernetes
 	NodeSpec v1.Node
@@ -199,25 +178,17 @@ type NodeConfig struct {
 }
 
 // WithClient return a NodeOpt that sets the client that will be used to create/manage the node.
-func WithClient(c kubernetes.Interface) NodeOpt {
+func WithClient(c client.Client) NodeOpt {
 	return func(cfg *NodeConfig) error {
 		cfg.Client = c
 		return nil
 	}
 }
 
-// WithPodLister return a NodeOpt that sets the pod lister that will be used to create/manage the pod.
-func WithPodLister(pl lister.PodLister) NodeOpt {
+// WithCache return a NodeOpt that sets the cache to fetch local resources.
+func WithCache(cache cache.Cache) NodeOpt {
 	return func(cfg *NodeConfig) error {
-		cfg.PodLister = pl
-		return nil
-	}
-}
-
-// WithPodInformer return a NodeOpt that sets the pod informer that will be used to create/manage the pod.
-func WithPodInformer(pi informer.PodInformer) NodeOpt {
-	return func(cfg *NodeConfig) error {
-		cfg.PodInformer = pi
+		cfg.Cache = cache
 		return nil
 	}
 }
@@ -272,20 +243,8 @@ func NewNode(name string, newProvider NewProviderFunc, opts ...NodeOpt) (*Node, 
 		return nil, errors.Wrap(err, "error creating provider")
 	}
 
-	var readyCb func(context.Context) error
-	if np == nil {
-		nnp := virtual_kubelet.NewNaiveNodeProvider()
-		np = nnp
-
-		readyCb = func(ctx context.Context) error {
-			setNodeReady(&cfg.NodeSpec)
-			err := nnp.UpdateStatus(ctx, &cfg.NodeSpec)
-			return errors.Wrap(err, "error marking node as ready")
-		}
-	}
-
 	nodeControllerOpts := []virtual_kubelet.NodeControllerOpt{
-		virtual_kubelet.WithNodeEnableLeaseV1(NodeLeaseV1Client(cfg.Client), virtual_kubelet.DefaultLeaseDuration),
+		virtual_kubelet.WithNodeEnableLeaseV1(cfg.Client, virtual_kubelet.DefaultLeaseDuration),
 	}
 
 	if cfg.NodeStatusUpdateErrorHandler != nil {
@@ -295,7 +254,7 @@ func NewNode(name string, newProvider NewProviderFunc, opts ...NodeOpt) (*Node, 
 	nc, err := virtual_kubelet.NewNodeController(
 		np,
 		&cfg.NodeSpec,
-		cfg.Client.CoreV1().Nodes(),
+		cfg.Client,
 		nodeControllerOpts...,
 	)
 	if err != nil {
@@ -309,10 +268,9 @@ func NewNode(name string, newProvider NewProviderFunc, opts ...NodeOpt) (*Node, 
 	}
 
 	pc, err := virtual_kubelet.NewPodController(virtual_kubelet.PodControllerConfig{
-		PodClient:     cfg.Client.CoreV1(),
-		PodLister:     cfg.PodLister,
-		PodInformer:   cfg.PodInformer,
 		EventRecorder: cfg.EventRecorder,
+		Client:        cfg.Client,
+		Cache:         cfg.Cache,
 		Provider:      p,
 	})
 	if err != nil {
@@ -322,28 +280,9 @@ func NewNode(name string, newProvider NewProviderFunc, opts ...NodeOpt) (*Node, 
 	return &Node{
 		nc:      nc,
 		pc:      pc,
-		readyCb: readyCb,
 		ready:   make(chan struct{}),
 		done:    make(chan struct{}),
-		eb:      eb,
 		client:  cfg.Client,
 		workers: cfg.NumWorkers,
 	}, nil
-}
-
-func setNodeReady(n *v1.Node) {
-	n.Status.Phase = v1.NodeRunning
-	for i, c := range n.Status.Conditions {
-		if c.Type != "Ready" {
-			continue
-		}
-
-		c.Message = "Kubelet is ready"
-		c.Reason = "KubeletReady"
-		c.Status = v1.ConditionTrue
-		c.LastHeartbeatTime = metav1.Now()
-		c.LastTransitionTime = metav1.Now()
-		n.Status.Conditions[i] = c
-		return
-	}
 }

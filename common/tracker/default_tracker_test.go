@@ -1,7 +1,6 @@
 package tracker
 
 import (
-	"context"
 	"errors"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/stretchr/testify/assert"
@@ -114,7 +113,7 @@ func TestDefaultTracker_EventuallyTimeout(t *testing.T) {
 
 	timeout := false
 	checkPass := false
-	tracker.Eventually(context.Background(), "test_trace", "test_scene", "test_event", map[string]string{}, model.CodeTimeout, func() bool {
+	tracker.Eventually("test_trace", "test_scene", "test_event", map[string]string{}, model.CodeTimeout, func() bool {
 		return false
 	}, time.Second, time.Millisecond*100, func() {
 		checkPass = true
@@ -136,7 +135,7 @@ func TestDefaultTracker_EventuallyNoTimeout(t *testing.T) {
 
 	timeout := false
 	checkPass := false
-	tracker.Eventually(context.Background(), "test_trace", "test_scene", "test_event", map[string]string{}, model.CodeTimeout, func() bool {
+	tracker.Eventually("test_trace", "test_scene", "test_event", map[string]string{}, model.CodeTimeout, func() bool {
 		return true
 	}, time.Second, time.Millisecond*100, func() {
 		checkPass = true

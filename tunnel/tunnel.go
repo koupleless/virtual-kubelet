@@ -21,9 +21,6 @@ type OnStartContainerResponseArrived func(string, model.ContainerOperationRespon
 // OnShutdownContainerResponseArrived is the container stop callback, will update container-vpod status to k8s
 type OnShutdownContainerResponseArrived func(string, model.ContainerOperationResponseData)
 
-// QueryContainersBaseline func of query baseline, will return peer deployment baseline
-type QueryContainersBaseline func(info model.QueryBaselineRequest) []*v1.Container
-
 type Tunnel interface {
 	// Key is the identity of Tunnel, will set to node label for special usage
 	Key() string
@@ -36,9 +33,6 @@ type Tunnel interface {
 
 	// RegisterCallback is the init func of Tunnel, please complete callback register in this func
 	RegisterCallback(OnNodeDiscovered, OnNodeStatusDataArrived, OnQueryAllContainerStatusDataArrived, OnStartContainerResponseArrived, OnShutdownContainerResponseArrived)
-
-	// RegisterQuery is the init func of Tunnel, please complete query func register in this func
-	RegisterQuery(QueryContainersBaseline)
 
 	// OnNodeStart is the func call when a vnode start successfully, you can implement it on demand
 	OnNodeStart(ctx context.Context, nodeID string)

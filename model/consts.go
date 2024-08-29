@@ -23,35 +23,28 @@ const (
 )
 
 const (
-	TrackEventContainerInstall                = "ModuleInstall"
-	TrackEventContainerUnInstall              = "PodUnInstall"
-	TrackEventVPodDelete                      = "PodDelete"
-	TrackEventVPodUpdate                      = "PodUpdate"
-	TrackEventVPodSchedule                    = "PodSchedule"
-	TrackEventVPodPeerDeploymentReplicaModify = "ModulePeerDeploymentReplicaModify"
+	TrackEventContainerStart     = "ContainerStart"
+	TrackEventContainerUnInstall = "PodUnInstall"
+	TrackEventVPodDelete         = "PodDelete"
+	TrackEventVPodUpdate         = "PodUpdate"
 )
 
 const (
-	LabelKeyOfTraceID                   = "trace.koupleless.io/id"
-	LabelKeyOfScheduleAnythingComponent = "module-controller.koupleless.io/component"
-	LabelKeyOfEnv                       = "module-controller.koupleless.io/env"
-	LabelKeyOfVnodeTunnel               = "base.koupleless.io/tunnel"
-	LabelKeyOfVPodDeploymentStrategy    = "module-controller.koupleless.io/strategy"
-	LabelKeyOfVNodeName                 = "base.koupleless.io/name"
-	LabelKeyOfVNodeVersion              = "base.koupleless.io/version"
-	LabelKeyOfSkipReplicasControl       = "module-controller.koupleless.io/replicas-control"
+	LabelKeyOfTraceID      = "trace.koupleless.io/id"
+	LabelKeyOfComponent    = "virtual-kubelet.koupleless.io/component"
+	LabelKeyOfEnv          = "virtual-kubelet.koupleless.io/env"
+	LabelKeyOfVnodeTunnel  = "vnode.koupleless.io/tunnel"
+	LabelKeyOfVNodeName    = "vnode.koupleless.io/name"
+	LabelKeyOfVNodeVersion = "vnode.koupleless.io/version"
 )
 
 const (
-	ComponentVPod           = "module"
-	ComponentVPodDeployment = "module-deployment"
-	ComponentVNode          = "vnode"
+	TaintKeyOfVnode = "schedule.koupleless.io/virtual-node"
+	TaintKeyOfEnv   = "schedule.koupleless.io/node-env"
 )
 
-type VPodDeploymentStrategy string
-
 const (
-	VPodDeploymentStrategyPeer VPodDeploymentStrategy = "peer"
+	ComponentVNode = "vnode"
 )
 
 // ErrorCode first two char represent scene of Error, 00 represent Error of module-controller, 01 represent Error of user config
@@ -61,9 +54,7 @@ const (
 	CodeSuccess                       ErrorCode = "00000"
 	CodeTimeout                       ErrorCode = "00001"
 	CodeContainerUninstallTimeout     ErrorCode = "00002"
-	CodeKubernetesOperationFailed     ErrorCode = "00003"
 	CodeContainerInstalledButNotReady ErrorCode = "01001"
 	CodeContainerInstallFailed        ErrorCode = "01002"
 	CodeContainerStopFailed           ErrorCode = "01003"
-	CodeVPodScheduleFailed            ErrorCode = "01004"
 )

@@ -325,6 +325,9 @@ func (b *BaseProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 	logger.Info("DeletePodStarted")
 
 	localPod := b.runtimeInfoStore.GetPodByKey(podKey).DeepCopy()
+	if localPod == nil {
+		localPod = pod.DeepCopy()
+	}
 	for _, container := range localPod.Spec.Containers {
 		// sending to delete
 		containerKey := utils.GetContainerKey(podKey, container.Name)

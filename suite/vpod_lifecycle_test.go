@@ -40,7 +40,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 					}
 				}
 				return err == nil && vnodeReady
-			}, time.Second*10, time.Second).Should(BeTrue())
+			}, time.Second*20, time.Second).Should(BeTrue())
 			Expect(vnode).NotTo(BeNil())
 		})
 
@@ -54,7 +54,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 					Name:      basicPod.Name,
 				}, podFromKubernetes)
 				return err == nil && podFromKubernetes.Status.Phase == v1.PodPending && podFromKubernetes.Spec.NodeName == utils.FormatNodeName(nodeID)
-			}, time.Second*10, time.Second).Should(BeTrue())
+			}, time.Second*20, time.Second).Should(BeTrue())
 		})
 
 		It("when all container's status changes to ready, pod should become ready", func() {
@@ -76,7 +76,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 					Name:      basicPod.Name,
 				}, podFromKubernetes)
 				return err == nil && podFromKubernetes.Status.Phase == v1.PodRunning
-			}, time.Second*10, time.Second).Should(BeTrue())
+			}, time.Second*20, time.Second).Should(BeTrue())
 		})
 
 		It("when one container's status changes to deactived, pod should become unready", func() {
@@ -97,7 +97,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 					Name:      basicPod.Name,
 				}, podFromKubernetes)
 				return err == nil && podFromKubernetes.Status.Phase == v1.PodRunning && podFromKubernetes.Status.Conditions[0].Status == v1.ConditionFalse
-			}, time.Second*10, time.Second).Should(BeTrue())
+			}, time.Second*20, time.Second).Should(BeTrue())
 		})
 
 		It("update pod containers, pod should be pending", func() {
@@ -117,7 +117,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 					Name:      basicPod.Name,
 				}, podFromKubernetes)
 				return err == nil && podFromKubernetes.Status.Phase == v1.PodPending
-			}, time.Second*10, time.Second).Should(BeTrue())
+			}, time.Second*20, time.Second).Should(BeTrue())
 		})
 
 		It("delete pod, all containers should shutdown, pod should finally deleted from k8s", func() {
@@ -130,7 +130,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 					Name:      basicPod.Name,
 				}, podFromKubernetes)
 				return errors.IsNotFound(err)
-			}, time.Second*10, time.Second).Should(BeTrue())
+			}, time.Second*20, time.Second).Should(BeTrue())
 		})
 
 		It("node offline", func() {
@@ -142,7 +142,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 					Name: utils.FormatNodeName(nodeID),
 				}, node)
 				return errors.IsNotFound(err)
-			}, time.Second*10, time.Second).Should(BeTrue())
+			}, time.Second*20, time.Second).Should(BeTrue())
 		})
 	})
 

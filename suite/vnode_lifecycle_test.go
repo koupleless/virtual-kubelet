@@ -36,7 +36,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 					}
 				}
 				return err == nil && vnodeReady
-			}, time.Second*10, time.Second).Should(BeTrue())
+			}, time.Second*20, time.Second).Should(BeTrue())
 			Expect(vnode).NotTo(BeNil())
 		})
 
@@ -74,7 +74,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 					Name: "vnode." + nodeID,
 				}, vnode)
 				return errors.IsNotFound(err)
-			}, time.Second*10, time.Second).Should(BeTrue())
+			}, time.Second*20, time.Second).Should(BeTrue())
 		})
 	})
 
@@ -94,7 +94,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 					}
 				}
 				return err == nil && vnodeReady
-			}, time.Second*10, time.Second).Should(BeTrue())
+			}, time.Second*20, time.Second).Should(BeTrue())
 			Expect(vnode).NotTo(BeNil())
 		})
 

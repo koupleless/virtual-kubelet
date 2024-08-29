@@ -153,7 +153,7 @@ func TestBaseRegisterController_Run(t *testing.T) {
 
 	mockBase.Exit()
 	controller.runtimeInfoStore.baseLatestMsgTime["test-offline"] = 0
-	controller.checkAndDeleteOfflineBase(ctx)
+	controller.checkAndSetOfflineBaseUnready(ctx)
 
 	cancel()
 	<-controller.Done()

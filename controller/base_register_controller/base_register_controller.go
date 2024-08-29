@@ -157,7 +157,7 @@ func (brc *BaseRegisterController) Run(ctx context.Context) {
 		return
 	}
 
-	go utils.TimedTaskWithInterval(ctx, time.Second, brc.checkAndDeleteOfflineBase)
+	go utils.TimedTaskWithInterval(ctx, time.Second, brc.checkAndSetOfflineBaseUnready)
 
 	close(brc.ready)
 	log.G(ctx).Info("Base register controller ready")
@@ -364,10 +364,19 @@ func (brc *BaseRegisterController) podDeleteHandler(pod interface{}) {
 	}
 }
 
-func (brc *BaseRegisterController) checkAndDeleteOfflineBase(_ context.Context) {
+func (brc *BaseRegisterController) checkAndSetOfflineBaseUnready(_ context.Context) {
 	offlineBase := brc.runtimeInfoStore.GetOfflineBases(1000 * 20)
 	for _, baseID := range offlineBase {
-		brc.shutdownVirtualKubelet(baseID)
+		brc.onNodeStatusDataArrived(baseID, model.NodeStatusData{
+			CustomConditions: []corev1.NodeCondition{
+				{
+					Type:    corev1.NodeReady,
+					Status:  corev1.ConditionFalse,
+					Reason:  "HeartBeatTimeout",
+					Message: "node health check timed out, please check",
+				},
+			},
+		})
 	}
 }
 

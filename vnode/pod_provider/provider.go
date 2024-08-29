@@ -46,8 +46,8 @@ type VPodProvider struct {
 
 	tunnel tunnel.Tunnel
 
-	startOperationQueue *queue.Queue
-	stopOperationQueue  *queue.Queue
+	startOperationQueue    *queue.Queue
+	shutdownOperationQueue *queue.Queue
 
 	port int
 
@@ -70,7 +70,7 @@ func NewVPodProvider(namespace, localIP, nodeID string, client client.Client, t 
 
 	provider.startOperationQueue = queue.New(
 		workqueue.DefaultControllerRateLimiter(),
-		"bizInstallOperationQueue",
+		"containerStartOperationQueue",
 		provider.handleStartOperation,
 		func(ctx context.Context, key string, timesTried int, originallyAdded time.Time, err error) (*time.Duration, error) {
 			duration := time.Millisecond * 100
@@ -78,10 +78,10 @@ func NewVPodProvider(namespace, localIP, nodeID string, client client.Client, t 
 		},
 	)
 
-	provider.stopOperationQueue = queue.New(
+	provider.shutdownOperationQueue = queue.New(
 		workqueue.DefaultControllerRateLimiter(),
-		"bizUninstallOperationQueue",
-		provider.handleStopOperation,
+		"containerShutdownOperationQueue",
+		provider.handleShutdownOperation,
 		func(ctx context.Context, key string, timesTried int, originallyAdded time.Time, err error) (*time.Duration, error) {
 			duration := time.Millisecond * 100
 			return &duration, nil
@@ -93,7 +93,7 @@ func NewVPodProvider(namespace, localIP, nodeID string, client client.Client, t 
 
 func (b *VPodProvider) Run(ctx context.Context) {
 	go b.startOperationQueue.Run(ctx, 1)
-	go b.stopOperationQueue.Run(ctx, 1)
+	go b.shutdownOperationQueue.Run(ctx, 1)
 	go utils.TimedTaskWithInterval(ctx, time.Minute, b.syncAllPodStatus)
 }
 
@@ -194,7 +194,7 @@ func (b *VPodProvider) handleStartOperation(ctx context.Context, containerKey st
 	return tracker.G().FuncTrack(labelMap[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventContainerStart, labelMap, func() (error, model.ErrorCode) {
 		container := b.runtimeInfoStore.GetContainer(containerKey)
 		if container == nil {
-			// for installation, this should never happen, no retry here
+			// this should never happen, no retry here
 			return nil, model.CodeSuccess
 		}
 		containerStatus := b.queryContainerStatus(ctx, podKey, container)
@@ -211,17 +211,17 @@ func (b *VPodProvider) handleStartOperation(ctx context.Context, containerKey st
 		}
 
 		if containerStatus != nil && containerStatus.State == model.ContainerStateDeactivated {
-			return errors.New("ContainerStartedButNotActivated"), model.CodeContainerInstalledButNotReady
+			return errors.New("ContainerStartedButNotActivated"), model.CodeContainerStartedButNotReady
 		}
 
 		if err := b.startContainer(ctx, podKey, container); err != nil {
-			return err, model.CodeContainerInstallFailed
+			return err, model.CodeContainerStartFailed
 		}
 		return nil, model.CodeSuccess
 	})
 }
 
-func (b *VPodProvider) handleStopOperation(ctx context.Context, containerKey string) error {
+func (b *VPodProvider) handleShutdownOperation(ctx context.Context, containerKey string) error {
 	logger := log.G(ctx).WithField("containerKey", containerKey)
 	logger.Info("HandleStopContainerOperationStarted")
 
@@ -235,12 +235,11 @@ func (b *VPodProvider) handleStopOperation(ctx context.Context, containerKey str
 		labelMap = make(map[string]string)
 	}
 
-	return tracker.G().FuncTrack(labelMap[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventContainerUnInstall, labelMap, func() (error, model.ErrorCode) {
+	return tracker.G().FuncTrack(labelMap[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventContainerShutdown, labelMap, func() (error, model.ErrorCode) {
 		container := b.runtimeInfoStore.GetContainer(containerKey)
 
 		if container != nil {
 			defer b.runtimeInfoStore.DeleteContainer(containerKey)
-			// local installed, call uninstall
 			if err := b.stopContainer(ctx, podKey, container); err != nil {
 				logger.WithError(err).Error("StopContainerFailed")
 				return err, model.CodeContainerStopFailed
@@ -250,7 +249,6 @@ func (b *VPodProvider) handleStopOperation(ctx context.Context, containerKey str
 	})
 }
 
-// CreatePod directly install a biz bundle to base
 func (b *VPodProvider) CreatePod(ctx context.Context, pod *corev1.Pod) error {
 	logger := log.G(ctx).WithField("podKey", utils.GetPodKey(pod))
 	logger.Info("CreatePodStarted")
@@ -268,7 +266,6 @@ func (b *VPodProvider) CreatePod(ctx context.Context, pod *corev1.Pod) error {
 	return nil
 }
 
-// UpdatePod install directly
 func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 	podKey := utils.GetPodKey(pod)
 	logger := log.G(ctx).WithField("podKey", podKey)
@@ -289,23 +286,22 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 		for _, container := range oldPod.Spec.Containers {
 			// sending to stop
 			containerKey := utils.GetContainerKey(oldPopKey, container.Name)
-			b.stopOperationQueue.Enqueue(ctx, containerKey)
+			b.shutdownOperationQueue.Enqueue(ctx, containerKey)
 			logger.WithField("podKey", podKey).WithField("containerName", container.Name).Info("ItemEnqueued")
 		}
 	}
 
 	b.runtimeInfoStore.PutPod(pod.DeepCopy())
 
-	// start a go runtime, check all biz models delete successfully, then install new biz
+	// start a go runtime, check old containers shutdown successfully, then start new containers
 	startNewContainer := func() {
-		// install new models
 		for _, container := range newPod.Spec.Containers {
 			containerKey := utils.GetContainerKey(podKey, container.Name)
 			b.startOperationQueue.Enqueue(ctx, containerKey)
 			logger.WithField("podKey", podKey).WithField("containerName", container.Name).Info("ItemEnqueued")
 		}
 	}
-	go tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodUpdate, pod.Labels, model.CodeContainerUninstallTimeout, func() bool {
+	go tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodUpdate, pod.Labels, model.CodeContainerStartTimeout, func() bool {
 		for _, oldContainer := range oldPod.Spec.Containers {
 			oldPodKey := utils.GetPodKey(oldPod)
 			if b.queryContainerStatus(ctx, oldPodKey, &oldContainer) != nil {
@@ -318,7 +314,6 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 	return nil
 }
 
-// DeletePod directly uninstall biz  from base
 func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 	podKey := utils.GetPodKey(pod)
 	logger := log.G(ctx).WithField("podKey", podKey)
@@ -328,7 +323,7 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 	for _, container := range localPod.Spec.Containers {
 		// sending to delete
 		containerKey := utils.GetContainerKey(podKey, container.Name)
-		b.stopOperationQueue.Enqueue(ctx, containerKey)
+		b.shutdownOperationQueue.Enqueue(ctx, containerKey)
 		logger.WithField("podKey", podKey).WithField("containerName", container.Name).Info("ItemEnqueued")
 	}
 
@@ -337,14 +332,13 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 		return nil
 	}
 
-	// start a go runtime, check all biz models delete successfully
+	// check all containers shutdown successfully
 	deletePod := func() {
 		b.runtimeInfoStore.DeletePod(podKey)
 
 		if b.client != nil {
 			// delete pod with no grace period, mock kubelet
 			err := b.client.Delete(ctx, pod, &client.DeleteOptions{
-				// grace period for base pod controller deleting target finalizer
 				GracePeriodSeconds: ptr.To[int64](0),
 			})
 			if err != nil {
@@ -354,7 +348,7 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 		}
 	}
 
-	go tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodDelete, pod.Labels, model.CodeContainerUninstallTimeout, func() bool {
+	go tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodDelete, pod.Labels, model.CodeContainerStartTimeout, func() bool {
 		for _, oldContainer := range localPod.Spec.Containers {
 			oldPodKey := utils.GetPodKey(localPod)
 			if b.queryContainerStatus(ctx, oldPodKey, &oldContainer) != nil {

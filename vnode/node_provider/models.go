@@ -9,13 +9,13 @@ type BuildVNodeProviderConfig struct {
 	// NodeHostname is the hostname of the node
 	NodeHostname string `json:"nodeHostname"`
 
-	// Name is the master biz name of runtime
+	// Name is the node name, will be sent to utils.FormatNodeName to construct vnode name, and Name will be set to label
 	Name string `json:"name"`
 
-	// Version is the version of ths underlying runtime
+	// Name is the node version, will be set to label
 	Version string `json:"version"`
 
-	// ENV is the env of base runtime
+	// ENV is the env of node, will be set to label
 	Env string `json:"env"`
 
 	// CustomTaints is the taints set by tunnel

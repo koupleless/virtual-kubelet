@@ -14,25 +14,25 @@ type BuildVNodeConfig struct {
 	// KubeCache is the cache of kube resources
 	KubeCache cache.Cache
 
-	// Tunnel is the tunnel of pod management
+	// Tunnel is the tunnel of container and node management
 	Tunnel tunnel.Tunnel
 
-	// NodeID is the base id of base
+	// NodeID is the unique id of node, should be unique key of system
 	NodeID string
 
-	// NodeIP is the ip of base
+	// NodeIP is the ip of node
 	NodeIP string
 
-	// NodeHostname is the hostname of base
+	// NodeHostname is the hostname of node
 	NodeHostname string
 
-	// NodeName is the base master biz name
+	// NodeName is the name of node, will set to node's label
 	NodeName string
 
-	// NodeVersion is the base master biz version
+	// NodeVersion is the version of node, will set to node's label
 	NodeVersion string
 
-	// Env is the runtime env of biz
+	// Env is the runtime env of virtual-kubelet, will set to node created by virtual kubelet
 	Env string
 
 	// CustomTaints is the taint set by tunnel

@@ -19,14 +19,14 @@ const (
 )
 
 const (
-	TrackSceneVPodDeploy = "module_deploy"
+	TrackSceneVPodDeploy = "vpod_deploy"
 )
 
 const (
-	TrackEventContainerStart     = "ContainerStart"
-	TrackEventContainerUnInstall = "PodUnInstall"
-	TrackEventVPodDelete         = "PodDelete"
-	TrackEventVPodUpdate         = "PodUpdate"
+	TrackEventContainerStart    = "ContainerStart"
+	TrackEventContainerShutdown = "ContainerShutdown"
+	TrackEventVPodDelete        = "PodDelete"
+	TrackEventVPodUpdate        = "PodUpdate"
 )
 
 const (
@@ -47,14 +47,13 @@ const (
 	ComponentVNode = "vnode"
 )
 
-// ErrorCode first two char represent scene of Error, 00 represent Error of module-controller, 01 represent Error of user config
 type ErrorCode string
 
 const (
-	CodeSuccess                       ErrorCode = "00000"
-	CodeTimeout                       ErrorCode = "00001"
-	CodeContainerUninstallTimeout     ErrorCode = "00002"
-	CodeContainerInstalledButNotReady ErrorCode = "01001"
-	CodeContainerInstallFailed        ErrorCode = "01002"
-	CodeContainerStopFailed           ErrorCode = "01003"
+	CodeSuccess                     ErrorCode = "00000"
+	CodeTimeout                     ErrorCode = "00001"
+	CodeContainerStartTimeout       ErrorCode = "00002"
+	CodeContainerStartedButNotReady ErrorCode = "01001"
+	CodeContainerStartFailed        ErrorCode = "01002"
+	CodeContainerStopFailed         ErrorCode = "01003"
 )

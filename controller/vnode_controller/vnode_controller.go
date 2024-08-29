@@ -193,7 +193,6 @@ func (brc *VNodeController) discoverPreviousNode(ctx context.Context) {
 		if !ok {
 			continue
 		}
-		// base online message
 		nodeIP := "127.0.0.1"
 		nodeHostname := node.Name
 		for _, addr := range node.Status.Addresses {
@@ -219,10 +218,8 @@ func (brc *VNodeController) discoverPreviousNode(ctx context.Context) {
 
 func (brc *VNodeController) onNodeDiscovered(nodeID string, data model.NodeInfo, t tunnel.Tunnel) {
 	if data.Metadata.Status == model.NodeStatusActivated {
-		// base online message
 		go brc.startVNode(nodeID, data, t)
 	} else {
-		// base offline message
 		brc.shutdownVNode(nodeID)
 	}
 }

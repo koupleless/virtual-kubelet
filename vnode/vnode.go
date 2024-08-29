@@ -159,7 +159,7 @@ func (n *VNode) DeletePod(key string) {
 	n.node.PodController().DeletePod(key)
 }
 
-func NewVNode(config *BuildVNodeConfig) (kn *VNode, err error) {
+func NewVNode(config *model.BuildVNodeConfig) (kn *VNode, err error) {
 	if config.Tunnel == nil {
 		return nil, errors.New("tunnel provider be nil")
 	}
@@ -172,7 +172,7 @@ func NewVNode(config *BuildVNodeConfig) (kn *VNode, err error) {
 	cm, err := nodeutil.NewNode(
 		utils.FormatNodeName(config.NodeID),
 		func(cfg nodeutil.ProviderConfig) (nodeutil.Provider, virtual_kubelet.NodeProvider, error) {
-			nodeProvider = node_provider.NewVirtualKubeletNode(node_provider.BuildVNodeProviderConfig{
+			nodeProvider = node_provider.NewVirtualKubeletNode(model.BuildVNodeProviderConfig{
 				NodeIP:       config.NodeIP,
 				NodeHostname: config.NodeHostname,
 				Version:      config.NodeVersion,

@@ -70,7 +70,7 @@ func (brc *VNodeController) Reconcile(ctx context.Context, request reconcile.Req
 	return reconcile.Result{}, nil
 }
 
-func NewVNodeController(config *BuildVNodeControllerConfig) (*VNodeController, error) {
+func NewVNodeController(config *model.BuildVNodeControllerConfig) (*VNodeController, error) {
 	if config == nil {
 		return nil, errors.New("config must not be nil")
 	}
@@ -337,7 +337,7 @@ func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t
 		return
 	}
 
-	vn, err := vnode.NewVNode(&vnode.BuildVNodeConfig{
+	vn, err := vnode.NewVNode(&model.BuildVNodeConfig{
 		Client:       brc.client,
 		KubeCache:    brc.cache,
 		Tunnel:       t,

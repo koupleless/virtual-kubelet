@@ -71,7 +71,7 @@ var _ = BeforeSuite(func() {
 
 	ctx := context.Background()
 
-	vnodeController, err := vnode_controller.NewVNodeController(&vnode_controller.BuildVNodeControllerConfig{
+	vnodeController, err := vnode_controller.NewVNodeController(&model.BuildVNodeControllerConfig{
 		ClientID:     clientID,
 		Env:          env,
 		VPodIdentity: vPodIdentity,

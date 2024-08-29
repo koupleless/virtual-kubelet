@@ -30,7 +30,7 @@ var _ virtual_kubelet.NodeProvider = &VNodeProvider{}
 type VNodeProvider struct {
 	sync.Mutex
 
-	nodeConfig *BuildVNodeProviderConfig
+	nodeConfig *model.BuildVNodeProviderConfig
 
 	nodeInfo *corev1.Node
 
@@ -78,7 +78,7 @@ func (v *VNodeProvider) CurrNodeInfo() *corev1.Node {
 	return v.constructVNode()
 }
 
-func NewVirtualKubeletNode(config BuildVNodeProviderConfig) *VNodeProvider {
+func NewVirtualKubeletNode(config model.BuildVNodeProviderConfig) *VNodeProvider {
 	return &VNodeProvider{
 		nodeConfig: &config,
 	}

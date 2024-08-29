@@ -57,3 +57,26 @@ const (
 	CodeContainerStartFailed        ErrorCode = "01002"
 	CodeContainerStopFailed         ErrorCode = "01003"
 )
+
+// NodeStatus is the node curr status
+type NodeStatus string
+
+const (
+	// NodeStatusActivated node activated, will start vnode if not being started
+	NodeStatusActivated NodeStatus = "ACTIVATED"
+
+	// NodeStatusDeactivated node deactivated, will shut down vnode if started
+	NodeStatusDeactivated NodeStatus = "DEACTIVATED"
+)
+
+// ContainerState is the state of a container, will set to pod state and show on k8s
+type ContainerState string
+
+const (
+	ContainerStateActivated   = "ACTIVATED"
+	ContainerStateResolved    = "RESOLVED"
+	ContainerStateDeactivated = "DEACTIVATED"
+)
+
+// PodKeyAll present container status will share to all pods
+const PodKeyAll = "all"

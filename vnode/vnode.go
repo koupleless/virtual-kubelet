@@ -2,6 +2,7 @@ package vnode
 
 import (
 	"context"
+	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/tunnel"
@@ -47,6 +48,7 @@ func (n *VNode) Run(ctx context.Context) {
 	n.podProvider.Run(ctx)
 	go func() {
 		err = n.node.Run(ctx)
+		log.G(ctx).WithError(err).Error("virtual kubelet exit")
 		cancel()
 	}()
 

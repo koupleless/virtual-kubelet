@@ -53,7 +53,7 @@ func (v *BaseNodeProvider) constructVNode() *corev1.Node {
 			},
 		},
 	}
-	for _, condition := range vnodeCopy.Status.Conditions {
+	for _, condition := range v.latestNodeStatusData.CustomConditions {
 		if condition.Type == corev1.NodeReady {
 			conditions[0].Status = condition.Status
 		} else {

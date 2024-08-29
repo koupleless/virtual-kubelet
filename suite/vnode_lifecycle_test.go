@@ -24,6 +24,16 @@ var _ = Describe("VNode Lifecycle Test", func() {
 	Context("node online and deactive finally", func() {
 		It("node should become a ready vnode eventually", func() {
 			tl.PutNode(nodeID, nodeInfo)
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name: "vnode." + nodeID,
+				}, vnode)
+				return err == nil
+			}, time.Second*5, time.Second).Should(BeTrue())
+
+			tl.OnNodeStatusDataArrived(nodeID, nodeInfo.NodeStatusData)
+
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name: "vnode." + nodeID,
@@ -82,6 +92,16 @@ var _ = Describe("VNode Lifecycle Test", func() {
 		It("node should become a ready vnode eventually", func() {
 			nodeInfo.Metadata.Status = model.NodeStatusActivated
 			tl.PutNode(nodeID, nodeInfo)
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name: "vnode." + nodeID,
+				}, vnode)
+				return err == nil
+			}, time.Second*5, time.Second).Should(BeTrue())
+
+			tl.OnNodeStatusDataArrived(nodeID, nodeInfo.NodeStatusData)
+
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name: "vnode." + nodeID,

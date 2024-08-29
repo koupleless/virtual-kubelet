@@ -318,8 +318,8 @@ func (brc *VNodeController) checkAndModifyOfflineNode(_ context.Context) {
 				{
 					Type:    corev1.NodeReady,
 					Status:  corev1.ConditionFalse,
-					Reason:  "HeartBeatTimeout",
-					Message: "node offline, please check",
+					Reason:  "NodeOffline",
+					Message: "It has been more than 20 seconds since the message from Node was received, please check",
 				},
 			},
 		})

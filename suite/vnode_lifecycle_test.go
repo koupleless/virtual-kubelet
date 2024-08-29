@@ -15,7 +15,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 
 	ctx := context.Background()
 
-	nodeID := "suite-node"
+	nodeID := "suite-node-node-lifecycle"
 	nodeVersion := "1.0.0"
 	vnode := &v1.Node{}
 

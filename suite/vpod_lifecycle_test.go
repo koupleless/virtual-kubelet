@@ -15,7 +15,7 @@ import (
 var _ = Describe("VPod Lifecycle Test", func() {
 	ctx := context.Background()
 
-	nodeID := "suite-node"
+	nodeID := "suite-node-pod-lifecycle"
 	nodeVersion := "1.0.0"
 	vnode := &v1.Node{}
 
@@ -27,6 +27,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 
 	Context("pod publish and status sync", func() {
 		It("node should be ready", func() {
+			nodeInfo.NodeInfo.Metadata.Status = model.NodeStatusActivated
 			tl.PutNode(nodeID, nodeInfo)
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{

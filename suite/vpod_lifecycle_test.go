@@ -25,7 +25,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 	nodeInfo := prepareNode(nodeID, nodeVersion)
 	basicPod := prepareBasicPod(podName, podNamespace, utils.FormatNodeName(nodeID))
 
-	Context("pod publish and status sync", func() {
+	Context("pod publish and status sync", Ordered, func() {
 		It("node should be ready", func() {
 			nodeInfo.NodeInfo.Metadata.Status = model.NodeStatusActivated
 			tl.PutNode(nodeID, nodeInfo)

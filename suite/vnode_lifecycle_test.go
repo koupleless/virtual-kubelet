@@ -24,7 +24,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 
 	name := utils.FormatNodeName(nodeID)
 
-	Context("node online and deactive finally", func() {
+	Context("node online and deactive finally", Ordered, func() {
 		It("node should become a ready vnode eventually", func() {
 			nodeInfo.NodeInfo.Metadata.Status = model.NodeStatusActivated
 			tl.PutNode(nodeID, nodeInfo)
@@ -44,9 +44,9 @@ var _ = Describe("VNode Lifecycle Test", func() {
 			}, time.Second*20, time.Second).Should(BeTrue())
 		})
 
-		//It("node should not start again with the same name", func() {
-		//	tl.PutNode(nodeID, nodeInfo)
-		//})
+		It("node should not start again with the same name", func() {
+			tl.PutNode(nodeID, nodeInfo)
+		})
 
 		It("node should contains custom information after status sync", func() {
 			Expect(vnode.Labels[model.LabelKeyOfVNodeName]).To(Equal(nodeID))

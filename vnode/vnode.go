@@ -2,7 +2,6 @@ package vnode
 
 import (
 	"context"
-	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/tunnel"
@@ -38,9 +37,7 @@ func (n *VNode) Run(ctx context.Context) {
 	var err error
 
 	// process vkNode run and bpc run, catching error
-	ctx, cancel := context.WithCancel(ctx)
 	defer func() {
-		cancel()
 		n.err = err
 		close(n.done)
 	}()
@@ -48,8 +45,6 @@ func (n *VNode) Run(ctx context.Context) {
 	n.podProvider.Run(ctx)
 	go func() {
 		err = n.node.Run(ctx)
-		log.G(ctx).WithError(err).Error("virtual kubelet exit")
-		cancel()
 	}()
 
 	select {
@@ -82,10 +77,11 @@ func (n *VNode) Run(ctx context.Context) {
 	}
 }
 
-func (n *VNode) WaitReady(ctx context.Context, timeout time.Duration) error {
+func (n *VNode) WaitReady(timeout time.Duration) error {
+	ctx := context.Background()
 	if timeout > 0 {
 		var cancel func()
-		ctx, cancel = context.WithTimeout(ctx, timeout)
+		ctx, cancel = context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 	}
 

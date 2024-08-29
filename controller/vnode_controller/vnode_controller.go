@@ -358,7 +358,7 @@ func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t
 
 	go vn.Run(ctx)
 
-	if err = vn.WaitReady(ctx, time.Minute); err != nil {
+	if err = vn.WaitReady(time.Minute); err != nil {
 		err = errpkg.Wrap(err, "Error waiting vnode ready")
 		return
 	}

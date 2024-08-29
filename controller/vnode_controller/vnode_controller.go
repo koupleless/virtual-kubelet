@@ -163,7 +163,7 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 
 	log.G(ctx).Info("register controller ready")
 
-	go utils.TimedTaskWithInterval(ctx, time.Second, brc.checkAndDeleteOfflineNode)
+	go utils.TimedTaskWithInterval(ctx, time.Second, brc.checkAndModifyOfflineNode)
 
 	return nil
 }
@@ -310,10 +310,19 @@ func (brc *VNodeController) podDeleteHandler(ctx context.Context, podFromKuberne
 	vn.DeletePodsFromKubernetesForget(ctx, key)
 }
 
-func (brc *VNodeController) checkAndDeleteOfflineNode(_ context.Context) {
-	offlineBase := brc.runtimeInfoStore.GetOfflineNodes(1000 * 20)
-	for _, nodeID := range offlineBase {
-		brc.shutdownVNode(nodeID)
+func (brc *VNodeController) checkAndModifyOfflineNode(_ context.Context) {
+	offlineNodes := brc.runtimeInfoStore.GetOfflineNodes(1000 * 20)
+	for _, nodeID := range offlineNodes {
+		brc.onNodeStatusDataArrived(nodeID, model.NodeStatusData{
+			CustomConditions: []corev1.NodeCondition{
+				{
+					Type:    corev1.NodeReady,
+					Status:  corev1.ConditionFalse,
+					Reason:  "HeartBeatTimeout",
+					Message: "node offline, please check",
+				},
+			},
+		})
 	}
 }
 
@@ -393,6 +402,15 @@ func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t
 }
 
 func (brc *VNodeController) shutdownVNode(nodeID string) {
+	vNode := brc.runtimeInfoStore.GetVNode(nodeID)
+	if vNode == nil {
+		// exited
+		return
+	}
+	vNode.Shutdown()
+}
+
+func (brc *VNodeController) setVNodeUnready(nodeID string) {
 	vNode := brc.runtimeInfoStore.GetVNode(nodeID)
 	if vNode == nil {
 		// exited

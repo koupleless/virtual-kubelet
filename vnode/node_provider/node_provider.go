@@ -52,7 +52,14 @@ func (v *VNodeProvider) constructVNode() *corev1.Node {
 			},
 		},
 	}
-	vnodeCopy.Status.Conditions = append(conditions, v.latestNodeStatusData.CustomConditions...)
+	for _, customCondition := range v.latestNodeStatusData.CustomConditions {
+		if customCondition.Type == corev1.NodeReady {
+			conditions[0].Status = customCondition.Status
+		} else {
+			conditions = append(conditions, customCondition)
+		}
+	}
+	vnodeCopy.Status.Conditions = conditions
 	vnodeCopy.Annotations = v.latestNodeStatusData.CustomAnnotations
 	for key, value := range v.latestNodeStatusData.CustomLabels {
 		vnodeCopy.Labels[key] = value

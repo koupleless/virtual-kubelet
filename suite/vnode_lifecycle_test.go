@@ -109,6 +109,23 @@ var _ = Describe("VNode Lifecycle Test", func() {
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name: name,
 				}, vnode)
+				notReady := false
+				for _, cond := range vnode.Status.Conditions {
+					if cond.Type == v1.NodeReady && cond.Status == v1.ConditionFalse {
+						notReady = true
+					}
+				}
+				return err == nil && notReady
+			}, time.Second*30, time.Second).Should(BeTrue())
+		})
+
+		It("node offline with deactive message and finally exit", func() {
+			nodeInfo.NodeInfo.Metadata.Status = model.NodeStatusDeactivated
+			tl.PutNode(nodeID, nodeInfo)
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name: name,
+				}, vnode)
 				return errors.IsNotFound(err)
 			}, time.Second*30, time.Second).Should(BeTrue())
 		})

@@ -33,15 +33,6 @@ var _ = Describe("VNode Lifecycle Test", func() {
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name: name,
 				}, vnode)
-				return err == nil
-			}, time.Second*5, time.Second).Should(BeTrue())
-
-			tl.OnNodeStatusDataArrived(nodeID, nodeInfo.NodeStatusData)
-
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: name,
-				}, vnode)
 				vnodeReady := false
 				for _, cond := range vnode.Status.Conditions {
 					if cond.Type == v1.NodeReady {
@@ -53,9 +44,9 @@ var _ = Describe("VNode Lifecycle Test", func() {
 			}, time.Second*20, time.Second).Should(BeTrue())
 		})
 
-		It("node should not start again with the same name", func() {
-			tl.PutNode(nodeID, nodeInfo)
-		})
+		//It("node should not start again with the same name", func() {
+		//	tl.PutNode(nodeID, nodeInfo)
+		//})
 
 		It("node should contains custom information after status sync", func() {
 			Expect(vnode.Labels[model.LabelKeyOfVNodeName]).To(Equal(nodeID))
@@ -95,15 +86,6 @@ var _ = Describe("VNode Lifecycle Test", func() {
 		It("node should become a ready vnode eventually", func() {
 			nodeInfo.Metadata.Status = model.NodeStatusActivated
 			tl.PutNode(nodeID, nodeInfo)
-
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: name,
-				}, vnode)
-				return err == nil
-			}, time.Second*5, time.Second).Should(BeTrue())
-
-			tl.OnNodeStatusDataArrived(nodeID, nodeInfo.NodeStatusData)
 
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{

@@ -30,14 +30,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 			nodeInfo.NodeInfo.Metadata.Status = model.NodeStatusActivated
 			tl.PutNode(nodeID, nodeInfo)
 			name := utils.FormatNodeName(nodeID)
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: name,
-				}, vnode)
-				return err == nil
-			}, time.Second*5, time.Second).Should(BeTrue())
 
-			tl.OnNodeStatusDataArrived(nodeID, nodeInfo.NodeStatusData)
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name: name,

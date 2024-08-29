@@ -163,8 +163,7 @@ func (b *BaseProvider) queryAllContainerStatus(_ context.Context) []*model.Conta
 	return b.runtimeInfoStore.GetLatestContainerInfos()
 }
 
-func (b *BaseProvider) queryContainerStatus(_ context.Context, podKey, containerName string) *model.ContainerStatusData {
-	container := b.runtimeInfoStore.GetContainer(utils.GetContainerKey(podKey, containerName))
+func (b *BaseProvider) queryContainerStatus(_ context.Context, podKey string, container *corev1.Container) *model.ContainerStatusData {
 	containerUniqueKey := b.tunnel.GetContainerUniqueKey(podKey, container)
 	return b.runtimeInfoStore.GetLatestContainerInfoByContainerKey(containerUniqueKey)
 }
@@ -197,7 +196,7 @@ func (b *BaseProvider) handleStartOperation(ctx context.Context, containerKey st
 			// for installation, this should never happen, no retry here
 			return nil, model.CodeSuccess
 		}
-		containerStatus := b.queryContainerStatus(ctx, podKey, container.Name)
+		containerStatus := b.queryContainerStatus(ctx, podKey, container)
 
 		if containerStatus != nil && containerStatus.State == model.ContainerStateActivated {
 			logger.Info("ContainerAlreadyActivated")
@@ -308,7 +307,7 @@ func (b *BaseProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 	go tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodUpdate, pod.Labels, model.CodeContainerUninstallTimeout, func() bool {
 		for _, oldContainer := range oldPod.Spec.Containers {
 			oldPodKey := utils.GetPodKey(oldPod)
-			if b.queryContainerStatus(ctx, oldPodKey, oldContainer.Name) != nil {
+			if b.queryContainerStatus(ctx, oldPodKey, &oldContainer) != nil {
 				return false
 			}
 		}
@@ -360,7 +359,7 @@ func (b *BaseProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 	go tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodDelete, pod.Labels, model.CodeContainerUninstallTimeout, func() bool {
 		for _, oldContainer := range localPod.Spec.Containers {
 			oldPodKey := utils.GetPodKey(localPod)
-			if b.queryContainerStatus(ctx, oldPodKey, oldContainer.Name) != nil {
+			if b.queryContainerStatus(ctx, oldPodKey, &oldContainer) != nil {
 				return false
 			}
 		}
@@ -407,7 +406,7 @@ func (b *BaseProvider) GetPodStatus(ctx context.Context, namespace, name string)
 
 	podStatus.ContainerStatuses = make([]corev1.ContainerStatus, 0)
 	for _, container := range pod.Spec.Containers {
-		containerStatusFromTunnel := b.queryContainerStatus(ctx, podKey, container.Name)
+		containerStatusFromTunnel := b.queryContainerStatus(ctx, podKey, &container)
 		containerStatus := utils.TranslateContainerStatusFromTunnelToContainerStatus(container, containerStatusFromTunnel)
 
 		if !containerStatus.Ready {

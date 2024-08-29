@@ -70,12 +70,12 @@ func (brc *VNodeController) Reconcile(ctx context.Context, request reconcile.Req
 	return reconcile.Result{}, nil
 }
 
-func NewVNodeController(config *model.BuildVNodeControllerConfig) (*VNodeController, error) {
+func NewVNodeController(config *model.BuildVNodeControllerConfig, tunnels []tunnel.Tunnel) (*VNodeController, error) {
 	if config == nil {
 		return nil, errors.New("config must not be nil")
 	}
 
-	if len(config.Tunnels) == 0 {
+	if len(tunnels) == 0 {
 		return nil, errors.New("config must have at least one tunnel provider")
 	}
 
@@ -87,7 +87,7 @@ func NewVNodeController(config *model.BuildVNodeControllerConfig) (*VNodeControl
 		clientID:         config.ClientID,
 		env:              config.Env,
 		vPodIdentity:     config.VPodIdentity,
-		tunnels:          config.Tunnels,
+		tunnels:          tunnels,
 		runtimeInfoStore: NewRuntimeInfoStore(),
 	}, nil
 }
@@ -340,7 +340,6 @@ func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t
 	vn, err := vnode.NewVNode(&model.BuildVNodeConfig{
 		Client:       brc.client,
 		KubeCache:    brc.cache,
-		Tunnel:       t,
 		NodeID:       nodeID,
 		Env:          brc.env,
 		NodeIP:       initData.NetworkInfo.NodeIP,
@@ -348,7 +347,7 @@ func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t
 		NodeName:     initData.Metadata.Name,
 		NodeVersion:  initData.Metadata.Version,
 		CustomTaints: initData.CustomTaints,
-	})
+	}, t)
 	if err != nil {
 		err = errpkg.Wrap(err, "Error creating vnode")
 		return

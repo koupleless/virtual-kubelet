@@ -3,13 +3,12 @@ package tunnel
 import (
 	"context"
 	"github.com/koupleless/virtual-kubelet/model"
-	"github.com/koupleless/virtual-kubelet/tunnel"
 	corev1 "k8s.io/api/core/v1"
 	"sync"
 	"time"
 )
 
-var _ tunnel.Tunnel = &MockTunnel{}
+var _ Tunnel = &MockTunnel{}
 
 type Node struct {
 	model.NodeInfo
@@ -18,10 +17,10 @@ type Node struct {
 
 type MockTunnel struct {
 	sync.Mutex
-	tunnel.OnNodeDiscovered
-	tunnel.OnNodeStatusDataArrived
-	tunnel.OnSingleContainerStatusChanged
-	tunnel.OnQueryAllContainerStatusDataArrived
+	OnNodeDiscovered
+	OnNodeStatusDataArrived
+	OnSingleContainerStatusChanged
+	OnQueryAllContainerStatusDataArrived
 
 	containerStorage map[string]map[string]model.ContainerStatusData
 	nodeStorage      map[string]Node
@@ -70,10 +69,10 @@ func (m *MockTunnel) Ready() bool {
 }
 
 func (m *MockTunnel) RegisterCallback(
-	discovered tunnel.OnNodeDiscovered,
-	onNodeStatusDataArrived tunnel.OnNodeStatusDataArrived,
-	onQueryAllContainerStatusDataArrived tunnel.OnQueryAllContainerStatusDataArrived,
-	onSingleContainerStatusChanged tunnel.OnSingleContainerStatusChanged) {
+	discovered OnNodeDiscovered,
+	onNodeStatusDataArrived OnNodeStatusDataArrived,
+	onQueryAllContainerStatusDataArrived OnQueryAllContainerStatusDataArrived,
+	onSingleContainerStatusChanged OnSingleContainerStatusChanged) {
 	m.OnNodeStatusDataArrived = onNodeStatusDataArrived
 	m.OnNodeDiscovered = discovered
 	m.OnQueryAllContainerStatusDataArrived = onQueryAllContainerStatusDataArrived

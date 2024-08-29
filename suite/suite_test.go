@@ -3,7 +3,6 @@ package suite
 import (
 	"context"
 	"github.com/koupleless/virtual-kubelet/common/log"
-	mockTunnel "github.com/koupleless/virtual-kubelet/common/testutils/tunnel"
 	"github.com/koupleless/virtual-kubelet/controller/vnode_controller"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/tunnel"
@@ -29,7 +28,7 @@ import (
 var cfg *rest.Config
 var testEnv *envtest.Environment
 var k8sClient client.Client
-var tl mockTunnel.MockTunnel
+var tl tunnel.MockTunnel
 
 const (
 	clientID     = "suite-suite"
@@ -75,8 +74,7 @@ var _ = BeforeSuite(func() {
 		ClientID:     clientID,
 		Env:          env,
 		VPodIdentity: vPodIdentity,
-		Tunnels:      tunnels,
-	})
+	}, tunnels)
 
 	err = vnodeController.SetupWithManager(ctx, k8sManager)
 
@@ -104,8 +102,8 @@ var _ = AfterSuite(func() {
 	By("tearing down the suite environment")
 })
 
-func prepareNode(name, version string) mockTunnel.Node {
-	return mockTunnel.Node{
+func prepareNode(name, version string) tunnel.Node {
+	return tunnel.Node{
 		NodeInfo: model.NodeInfo{
 			Metadata: model.NodeMetadata{
 				Name:    name,

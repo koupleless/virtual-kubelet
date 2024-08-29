@@ -159,8 +159,8 @@ func (n *VNode) DeletePod(key string) {
 	n.node.PodController().DeletePod(key)
 }
 
-func NewVNode(config *model.BuildVNodeConfig) (kn *VNode, err error) {
-	if config.Tunnel == nil {
+func NewVNode(config *model.BuildVNodeConfig, t tunnel.Tunnel) (kn *VNode, err error) {
+	if t == nil {
 		return nil, errors.New("tunnel provider be nil")
 	}
 
@@ -181,9 +181,9 @@ func NewVNode(config *model.BuildVNodeConfig) (kn *VNode, err error) {
 				CustomTaints: config.CustomTaints,
 			})
 			// initialize node spec on bootstrap
-			podProvider = pod_provider.NewVPodProvider(cfg.Node.Namespace, config.NodeIP, config.NodeID, config.Client, config.Tunnel)
+			podProvider = pod_provider.NewVPodProvider(cfg.Node.Namespace, config.NodeIP, config.NodeID, config.Client, t)
 
-			err = nodeProvider.Register(cfg.Node, config.Tunnel.Key())
+			err = nodeProvider.Register(cfg.Node, t.Key())
 			if err != nil {
 				return nil, nil, err
 			}
@@ -208,7 +208,7 @@ func NewVNode(config *model.BuildVNodeConfig) (kn *VNode, err error) {
 		client:       config.Client,
 		nodeProvider: nodeProvider,
 		podProvider:  podProvider,
-		tunnel:       config.Tunnel,
+		tunnel:       t,
 		node:         cm,
 		done:         make(chan struct{}),
 		exit:         make(chan struct{}),

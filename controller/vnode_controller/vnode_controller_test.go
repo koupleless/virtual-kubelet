@@ -1,7 +1,6 @@
 package vnode_controller
 
 import (
-	mockTunnel "github.com/koupleless/virtual-kubelet/common/testutils/tunnel"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/tunnel"
 	"github.com/stretchr/testify/assert"
@@ -9,32 +8,27 @@ import (
 )
 
 func TestNewVNodeController_NoConfig(t *testing.T) {
-	_, err := NewVNodeController(nil)
+	_, err := NewVNodeController(nil, nil)
 	assert.NotNil(t, err)
 }
 
 func TestNewVNodeController_ConfigNoTunnels(t *testing.T) {
-	_, err := NewVNodeController(&model.BuildVNodeControllerConfig{
-		Tunnels: nil,
-	})
+	_, err := NewVNodeController(&model.BuildVNodeControllerConfig{}, nil)
 	assert.NotNil(t, err)
 }
 
 func TestNewVNodeController_ConfigNoIdentity(t *testing.T) {
-	_, err := NewVNodeController(&model.BuildVNodeControllerConfig{
-		Tunnels: []tunnel.Tunnel{
-			&mockTunnel.MockTunnel{},
-		},
+	_, err := NewVNodeController(&model.BuildVNodeControllerConfig{}, []tunnel.Tunnel{
+		&tunnel.MockTunnel{},
 	})
 	assert.NotNil(t, err)
 }
 
 func TestNewVNodeController_Success(t *testing.T) {
 	_, err := NewVNodeController(&model.BuildVNodeControllerConfig{
-		Tunnels: []tunnel.Tunnel{
-			&mockTunnel.MockTunnel{},
-		},
 		VPodIdentity: "suite",
+	}, []tunnel.Tunnel{
+		&tunnel.MockTunnel{},
 	})
 	assert.Nil(t, err)
 }

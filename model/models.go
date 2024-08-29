@@ -1,7 +1,6 @@
 package model
 
 import (
-	"github.com/koupleless/virtual-kubelet/tunnel"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/client-go/kubernetes"
@@ -104,9 +103,6 @@ type BuildVNodeConfig struct {
 	// KubeCache is the cache of kube resources
 	KubeCache cache.Cache
 
-	// Tunnel is the tunnel of container and node management
-	Tunnel tunnel.Tunnel
-
 	// NodeID is the unique id of node, should be unique key of system
 	NodeID string
 
@@ -136,7 +132,4 @@ type BuildVNodeControllerConfig struct {
 
 	// VPodIdentity is the vpod special value of model.LabelKeyOfComponent
 	VPodIdentity string
-
-	// Tunnels is the tunnel provider supported
-	Tunnels []tunnel.Tunnel
 }

@@ -323,7 +323,7 @@ func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t
 	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), "nodeID", nodeID))
 	defer func() {
 		if err != nil {
-			log.G(ctx).WithError(err).Errorf("failed to start node %s", nodeID)
+			logrus.WithError(err).Errorf("failed to start node %s", nodeID)
 		}
 		cancel()
 	}()

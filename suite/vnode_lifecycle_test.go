@@ -24,7 +24,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 
 	name := utils.FormatNodeName(nodeID)
 
-	Context("node online and deactive finally", Ordered, func() {
+	Context("node online and deactive finally", func() {
 		It("node should become a ready vnode eventually", func() {
 			nodeInfo.NodeInfo.Metadata.Status = model.NodeStatusActivated
 			tl.PutNode(nodeID, nodeInfo)

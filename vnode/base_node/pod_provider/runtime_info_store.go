@@ -118,6 +118,18 @@ func (r *RuntimeInfoStore) PutContainerInfo(containerInfo model.ContainerStatusD
 	r.latestContainerInfosFromNode[containerInfo.Key] = &containerInfo
 }
 
+func (r *RuntimeInfoStore) PutAllContainerInfo(containerInfos []model.ContainerStatusData) {
+	r.Lock()
+	defer r.Unlock()
+
+	latestContainerInfosFromNode := make(map[string]*model.ContainerStatusData)
+	for _, containerInfo := range containerInfos {
+		latestContainerInfosFromNode[containerInfo.Key] = &containerInfo
+	}
+
+	r.latestContainerInfosFromNode = latestContainerInfosFromNode
+}
+
 func (r *RuntimeInfoStore) GetLatestContainerInfos() []*model.ContainerStatusData {
 	r.Lock()
 	defer r.Unlock()

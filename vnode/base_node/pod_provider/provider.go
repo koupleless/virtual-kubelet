@@ -148,9 +148,7 @@ func (b *BaseProvider) updatePodStatusToKubernetes(ctx context.Context, pod *cor
 }
 
 func (b *BaseProvider) SyncContainerInfo(ctx context.Context, containerInfos []model.ContainerStatusData) {
-	for _, containerInfo := range containerInfos {
-		b.runtimeInfoStore.PutContainerInfo(containerInfo)
-	}
+	b.runtimeInfoStore.PutAllContainerInfo(containerInfos)
 	b.syncAllPodStatus(ctx)
 }
 

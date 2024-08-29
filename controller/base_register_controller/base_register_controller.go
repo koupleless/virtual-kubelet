@@ -367,7 +367,16 @@ func (brc *BaseRegisterController) podDeleteHandler(pod interface{}) {
 func (brc *BaseRegisterController) checkAndDeleteOfflineBase(_ context.Context) {
 	offlineBase := brc.runtimeInfoStore.GetOfflineBases(1000 * 20)
 	for _, baseID := range offlineBase {
-		brc.shutdownVirtualKubelet(baseID)
+		brc.onNodeStatusDataArrived(baseID, model.NodeStatusData{
+			CustomConditions: []corev1.NodeCondition{
+				{
+					Type:    corev1.NodeReady,
+					Status:  corev1.ConditionFalse,
+					Reason:  "NodeOffline",
+					Message: "It has been more than 20 seconds since the message from Node was received, please check",
+				},
+			},
+		})
 	}
 }
 

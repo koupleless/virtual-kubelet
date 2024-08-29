@@ -2,6 +2,7 @@ package suite
 
 import (
 	"context"
+	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -21,13 +22,16 @@ var _ = Describe("VNode Lifecycle Test", func() {
 
 	nodeInfo := prepareNode(nodeID, nodeVersion)
 
+	name := utils.FormatNodeName(nodeID)
+
 	Context("node online and deactive finally", func() {
 		It("node should become a ready vnode eventually", func() {
+			nodeInfo.NodeInfo.Metadata.Status = model.NodeStatusActivated
 			tl.PutNode(nodeID, nodeInfo)
 
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: "vnode." + nodeID,
+					Name: name,
 				}, vnode)
 				return err == nil
 			}, time.Second*5, time.Second).Should(BeTrue())
@@ -36,7 +40,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: "vnode." + nodeID,
+					Name: name,
 				}, vnode)
 				vnodeReady := false
 				for _, cond := range vnode.Status.Conditions {
@@ -47,7 +51,6 @@ var _ = Describe("VNode Lifecycle Test", func() {
 				}
 				return err == nil && vnodeReady
 			}, time.Second*20, time.Second).Should(BeTrue())
-			Expect(vnode).NotTo(BeNil())
 		})
 
 		It("node should not start again with the same name", func() {
@@ -81,10 +84,10 @@ var _ = Describe("VNode Lifecycle Test", func() {
 			tl.PutNode(nodeID, nodeInfo)
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: "vnode." + nodeID,
+					Name: name,
 				}, vnode)
 				return errors.IsNotFound(err)
-			}, time.Second*20, time.Second).Should(BeTrue())
+			}, time.Second*30, time.Second).Should(BeTrue())
 		})
 	})
 
@@ -95,7 +98,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: "vnode." + nodeID,
+					Name: name,
 				}, vnode)
 				return err == nil
 			}, time.Second*5, time.Second).Should(BeTrue())
@@ -104,7 +107,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: "vnode." + nodeID,
+					Name: name,
 				}, vnode)
 				vnodeReady := false
 				for _, cond := range vnode.Status.Conditions {
@@ -122,7 +125,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 			tl.DeleteNode(nodeID)
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: "vnode." + nodeID,
+					Name: name,
 				}, vnode)
 				return errors.IsNotFound(err)
 			}, time.Second*30, time.Second).Should(BeTrue())

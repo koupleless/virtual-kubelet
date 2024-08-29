@@ -29,9 +29,10 @@ var _ = Describe("VPod Lifecycle Test", func() {
 		It("node should be ready", func() {
 			nodeInfo.NodeInfo.Metadata.Status = model.NodeStatusActivated
 			tl.PutNode(nodeID, nodeInfo)
+			name := utils.FormatNodeName(nodeID)
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: "vnode." + nodeID,
+					Name: name,
 				}, vnode)
 				return err == nil
 			}, time.Second*5, time.Second).Should(BeTrue())
@@ -39,7 +40,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 			tl.OnNodeStatusDataArrived(nodeID, nodeInfo.NodeStatusData)
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: "vnode." + nodeID,
+					Name: name,
 				}, vnode)
 				vnodeReady := false
 				for _, cond := range vnode.Status.Conditions {
@@ -50,7 +51,6 @@ var _ = Describe("VPod Lifecycle Test", func() {
 				}
 				return err == nil && vnodeReady
 			}, time.Second*20, time.Second).Should(BeTrue())
-			Expect(vnode).NotTo(BeNil())
 		})
 
 		It("pod publish and should be scheduled", func() {

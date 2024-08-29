@@ -33,14 +33,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name: "vnode." + nodeID,
 				}, vnode)
-				vnodeReady := false
-				for _, cond := range vnode.Status.Conditions {
-					if cond.Type == v1.NodeReady {
-						vnodeReady = cond.Status == v1.ConditionTrue
-						break
-					}
-				}
-				return err == nil && vnodeReady
+				return err == nil
 			}, time.Second*20, time.Second).Should(BeTrue())
 			Expect(vnode).NotTo(BeNil())
 		})

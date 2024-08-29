@@ -120,8 +120,16 @@ func (b *VPodProvider) syncRelatedPodStatus(ctx context.Context, podKey, contain
 		}
 	} else {
 		podKeys := b.runtimeInfoStore.GetRelatedPodKeysByContainerName(containerName)
+		pods := make([]*corev1.Pod, 0)
 		for _, key := range podKeys {
 			pod := b.runtimeInfoStore.GetPodByKey(key)
+			pods = append(pods, pod)
+		}
+		// sort by create time
+		sort.Slice(pods, func(i, j int) bool {
+			return pods[i].CreationTimestamp.UnixMilli() > pods[j].CreationTimestamp.UnixMilli()
+		})
+		for _, pod := range pods {
 			if err := b.updatePodStatusToKubernetes(ctx, pod); err != nil {
 				logger.WithError(err).Error("update pod status error")
 			}

@@ -15,11 +15,8 @@ type OnNodeStatusDataArrived func(string, model.NodeStatusData)
 // OnQueryAllContainerStatusDataArrived is the container status data callback, will update vpod status to k8s
 type OnQueryAllContainerStatusDataArrived func(string, []model.ContainerStatusData)
 
-// OnStartContainerResponseArrived is the container start command callback, will update container-vpod status to k8s
-type OnStartContainerResponseArrived func(string, model.ContainerOperationResponseData)
-
-// OnShutdownContainerResponseArrived is the container stop callback, will update container-vpod status to k8s
-type OnShutdownContainerResponseArrived func(string, model.ContainerOperationResponseData)
+// OnSingleContainerStatusChanged is one container status data callback, will update container-vpod status to k8s
+type OnSingleContainerStatusChanged func(string, model.ContainerStatusData)
 
 type Tunnel interface {
 	// Key is the identity of Tunnel, will set to node label for special usage
@@ -32,7 +29,7 @@ type Tunnel interface {
 	Ready() bool
 
 	// RegisterCallback is the init func of Tunnel, please complete callback register in this func
-	RegisterCallback(OnNodeDiscovered, OnNodeStatusDataArrived, OnQueryAllContainerStatusDataArrived, OnStartContainerResponseArrived, OnShutdownContainerResponseArrived)
+	RegisterCallback(OnNodeDiscovered, OnNodeStatusDataArrived, OnQueryAllContainerStatusDataArrived, OnSingleContainerStatusChanged)
 
 	// OnNodeStart is the func call when a vnode start successfully, you can implement it on demand
 	OnNodeStart(ctx context.Context, nodeID string)

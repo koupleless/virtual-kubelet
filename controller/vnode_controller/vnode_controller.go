@@ -95,7 +95,7 @@ func NewVNodeController(config *BuildVNodeControllerConfig) (*VNodeController, e
 func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Manager) (err error) {
 	// init all tunnels
 	for _, t := range brc.tunnels {
-		t.RegisterCallback(brc.onNodeDiscovered, brc.onNodeStatusDataArrived, brc.onQueryAllContainerStatusDataArrived, brc.onStartResponseArrived, brc.onShutdownResponseArrived)
+		t.RegisterCallback(brc.onNodeDiscovered, brc.onNodeStatusDataArrived, brc.onQueryAllContainerStatusDataArrived, brc.onContainerStatusChanged)
 	}
 
 	brc.client = mgr.GetClient()
@@ -247,48 +247,14 @@ func (brc *VNodeController) onQueryAllContainerStatusDataArrived(nodeID string, 
 	vNode.SyncAllContainerInfo(data)
 }
 
-func (brc *VNodeController) onStartResponseArrived(nodeID string, data model.ContainerOperationResponseData) {
+func (brc *VNodeController) onContainerStatusChanged(nodeID string, data model.ContainerStatusData) {
 	vNode := brc.runtimeInfoStore.GetVNode(nodeID)
 	if vNode == nil {
 		return
 	}
 	brc.runtimeInfoStore.NodeMsgArrived(nodeID)
 
-	statusData := model.ContainerStatusData{
-		Key:        data.ContainerKey,
-		Name:       utils.GetContainerNameFromContainerKey(data.ContainerKey),
-		PodKey:     utils.GetPodKeyFromContainerKey(data.ContainerKey),
-		ChangeTime: time.Now(),
-		Reason:     data.Reason,
-		Message:    data.Message,
-	}
-	if data.Result == model.OperationResponseCodeSuccess {
-		statusData.State = model.ContainerStateActivated
-	} else if data.Result == model.OperationResponseCodeFailure {
-		statusData.State = model.ContainerStateDeactivated
-	}
-	vNode.SyncContainerInfo(statusData)
-}
-
-func (brc *VNodeController) onShutdownResponseArrived(nodeID string, data model.ContainerOperationResponseData) {
-	vNode := brc.runtimeInfoStore.GetVNode(nodeID)
-	if vNode == nil {
-		return
-	}
-	brc.runtimeInfoStore.NodeMsgArrived(nodeID)
-
-	statusData := model.ContainerStatusData{
-		Key:        data.ContainerKey,
-		Name:       utils.GetContainerNameFromContainerKey(data.ContainerKey),
-		PodKey:     utils.GetPodKeyFromContainerKey(data.ContainerKey),
-		ChangeTime: time.Now(),
-		Reason:     data.Reason,
-		Message:    data.Message,
-	}
-	if data.Result == model.OperationResponseCodeFailure {
-		statusData.State = model.ContainerStateDeactivated
-		vNode.SyncContainerInfo(statusData)
-	}
+	vNode.SyncSingleContainerInfo(data)
 }
 
 func (brc *VNodeController) podAddOrUpdateHandler(ctx context.Context, podFromKubernetes *corev1.Pod) {

@@ -71,14 +71,6 @@ const (
 	OperationResponseCodeFailure OperationResponseResult = "FAIL"
 )
 
-// ContainerOperationResponseData is the data of base biz operation response.
-type ContainerOperationResponseData struct {
-	ContainerKey string                  `json:"containerKey"`
-	Result       OperationResponseResult `json:"result"`
-	Reason       string                  `json:"reason"`
-	Message      string                  `json:"message"`
-}
-
 // ContainerState is the state of a container, will set to pod state and show on k8s
 type ContainerState string
 

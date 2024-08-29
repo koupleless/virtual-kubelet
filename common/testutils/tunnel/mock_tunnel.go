@@ -2,7 +2,6 @@ package tunnel
 
 import (
 	"context"
-	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/tunnel"
 	corev1 "k8s.io/api/core/v1"
@@ -21,8 +20,7 @@ type MockTunnel struct {
 	sync.Mutex
 	tunnel.OnNodeDiscovered
 	tunnel.OnNodeStatusDataArrived
-	tunnel.OnShutdownContainerResponseArrived
-	tunnel.OnStartContainerResponseArrived
+	tunnel.OnSingleContainerStatusChanged
 	tunnel.OnQueryAllContainerStatusDataArrived
 
 	containerStorage map[string]map[string]model.ContainerStatusData
@@ -75,13 +73,11 @@ func (m *MockTunnel) RegisterCallback(
 	discovered tunnel.OnNodeDiscovered,
 	onNodeStatusDataArrived tunnel.OnNodeStatusDataArrived,
 	onQueryAllContainerStatusDataArrived tunnel.OnQueryAllContainerStatusDataArrived,
-	onStartContainerResponseArrived tunnel.OnStartContainerResponseArrived,
-	onShutdownContainerResponseArrived tunnel.OnShutdownContainerResponseArrived) {
+	onSingleContainerStatusChanged tunnel.OnSingleContainerStatusChanged) {
 	m.OnNodeStatusDataArrived = onNodeStatusDataArrived
 	m.OnNodeDiscovered = discovered
 	m.OnQueryAllContainerStatusDataArrived = onQueryAllContainerStatusDataArrived
-	m.OnStartContainerResponseArrived = onStartContainerResponseArrived
-	m.OnShutdownContainerResponseArrived = onShutdownContainerResponseArrived
+	m.OnSingleContainerStatusChanged = onSingleContainerStatusChanged
 }
 
 func (m *MockTunnel) OnNodeStart(ctx context.Context, nodeID string) {
@@ -116,7 +112,7 @@ func (m *MockTunnel) StartContainer(ctx context.Context, nodeID, podKey string, 
 	if !has {
 		containerMap = map[string]model.ContainerStatusData{}
 	}
-	containerMap[key] = model.ContainerStatusData{
+	data := model.ContainerStatusData{
 		Key:        key,
 		Name:       container.Name,
 		PodKey:     podKey,
@@ -125,12 +121,10 @@ func (m *MockTunnel) StartContainer(ctx context.Context, nodeID, podKey string, 
 		Reason:     "mock_resolved",
 		Message:    "mock resolved",
 	}
+	containerMap[key] = data
 
 	m.containerStorage[nodeID] = containerMap
-	m.OnStartContainerResponseArrived(nodeID, model.ContainerOperationResponseData{
-		ContainerKey: utils.GetContainerKey(podKey, container.Name),
-		Result:       model.OperationResponseCodeSuccess,
-	})
+	m.OnSingleContainerStatusChanged(nodeID, data)
 	return nil
 }
 
@@ -139,12 +133,10 @@ func (m *MockTunnel) ShutdownContainer(ctx context.Context, nodeID, podKey strin
 	defer m.Unlock()
 	containerMap := m.containerStorage[nodeID]
 	key := m.GetContainerUniqueKey(podKey, container)
+	data := containerMap[key]
 	delete(containerMap, key)
 	m.containerStorage[nodeID] = containerMap
-	m.OnShutdownContainerResponseArrived(nodeID, model.ContainerOperationResponseData{
-		ContainerKey: utils.GetContainerKey(podKey, container.Name),
-		Result:       model.OperationResponseCodeSuccess,
-	})
+	m.OnSingleContainerStatusChanged(nodeID, data)
 	return nil
 }
 

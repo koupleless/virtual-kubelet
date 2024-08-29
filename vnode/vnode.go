@@ -112,7 +112,7 @@ func (n *VNode) SyncAllContainerInfo(infos []model.ContainerStatusData) {
 	go n.podProvider.SyncContainerInfo(context.Background(), infos)
 }
 
-func (n *VNode) SyncContainerInfo(info model.ContainerStatusData) {
+func (n *VNode) SyncSingleContainerInfo(info model.ContainerStatusData) {
 	go n.podProvider.SyncSingleContainerInfo(context.Background(), info)
 }
 

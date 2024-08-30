@@ -157,7 +157,7 @@ func (brc *BaseRegisterController) Run(ctx context.Context) {
 		return
 	}
 
-	go utils.TimedTaskWithInterval(ctx, time.Second, brc.checkAndDeleteOfflineBase)
+	//go utils.TimedTaskWithInterval(ctx, time.Second, brc.checkAndDeleteOfflineBase)
 
 	close(brc.ready)
 	log.G(ctx).Info("Base register controller ready")

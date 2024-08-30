@@ -16,7 +16,6 @@ package pod_provider
 
 import (
 	"context"
-	"errors"
 	"github.com/koupleless/virtual-kubelet/common/tracker"
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
@@ -211,7 +210,7 @@ func (b *VPodProvider) handleStartOperation(ctx context.Context, containerKey st
 		}
 
 		if containerStatus != nil && containerStatus.State == model.ContainerStateDeactivated {
-			return errors.New("ContainerStartedButNotActivated"), model.CodeContainerStartedButNotReady
+			logger.Info("ContainerDeactivated, restart")
 		}
 
 		if err := b.startContainer(ctx, podKey, container); err != nil {

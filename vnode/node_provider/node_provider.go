@@ -20,9 +20,7 @@ import (
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sync"
-	"time"
 )
 
 var _ virtual_kubelet.NodeProvider = &VNodeProvider{}
@@ -43,21 +41,36 @@ func (v *VNodeProvider) constructVNode() *corev1.Node {
 	vnodeCopy := v.nodeInfo.DeepCopy()
 	// node status
 	vnodeCopy.Status.Phase = corev1.NodeRunning
-	conditions := []corev1.NodeCondition{
-		{
+	conditionMap := map[corev1.NodeConditionType]corev1.NodeCondition{
+		corev1.NodeReady: {
 			Type:   corev1.NodeReady,
 			Status: corev1.ConditionTrue,
-			LastHeartbeatTime: metav1.Time{
-				Time: time.Now(),
-			},
+		},
+		corev1.NodeMemoryPressure: {
+			Type:   corev1.NodeMemoryPressure,
+			Status: corev1.ConditionFalse,
+		},
+		corev1.NodeDiskPressure: {
+			Type:   corev1.NodeDiskPressure,
+			Status: corev1.ConditionFalse,
+		},
+		corev1.NodePIDPressure: {
+			Type:   corev1.NodePIDPressure,
+			Status: corev1.ConditionFalse,
+		},
+		corev1.NodeNetworkUnavailable: {
+			Type:   corev1.NodeNetworkUnavailable,
+			Status: corev1.ConditionFalse,
 		},
 	}
+
 	for _, customCondition := range v.latestNodeStatusData.CustomConditions {
-		if customCondition.Type == corev1.NodeReady {
-			conditions[0].Status = customCondition.Status
-		} else {
-			conditions = append(conditions, customCondition)
-		}
+		conditionMap[customCondition.Type] = customCondition
+	}
+
+	conditions := make([]corev1.NodeCondition, 0)
+	for _, condition := range conditionMap {
+		conditions = append(conditions, condition)
 	}
 	vnodeCopy.Status.Conditions = conditions
 	vnodeCopy.Annotations = v.latestNodeStatusData.CustomAnnotations

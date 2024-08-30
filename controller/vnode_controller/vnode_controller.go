@@ -163,7 +163,8 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 
 	log.G(ctx).Info("register controller ready")
 
-	go utils.TimedTaskWithInterval(ctx, time.Second, brc.checkAndModifyOfflineNode)
+	// may cause pod evict, not check now
+	//go utils.TimedTaskWithInterval(ctx, time.Second, brc.checkAndModifyOfflineNode)
 
 	return nil
 }

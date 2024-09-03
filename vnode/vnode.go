@@ -53,11 +53,7 @@ func (n *VNode) Run(ctx context.Context) {
 		err = errors.Wrap(ctx.Err(), "context canceled")
 	case <-n.exit:
 		// base exit, process node delete and pod evict
-		err = n.client.Delete(ctx, n.nodeProvider.CurrNodeInfo(), &client.DeleteOptions{})
-		if err != nil {
-			err = errors.Wrap(err, "error deleting vnode")
-			return
-		}
+		n.client.Delete(ctx, n.nodeProvider.CurrNodeInfo(), &client.DeleteOptions{})
 		pods, err := n.podProvider.GetPods(ctx)
 		if err != nil {
 			err = errors.Wrap(err, "error getting pods from provider")
@@ -65,13 +61,9 @@ func (n *VNode) Run(ctx context.Context) {
 		}
 		for _, pod := range pods {
 			// base exit, process node delete and pod evict
-			err = n.client.Delete(ctx, pod, &client.DeleteOptions{
+			n.client.Delete(ctx, pod, &client.DeleteOptions{
 				GracePeriodSeconds: ptr.To[int64](0),
 			})
-			if err != nil {
-				err = errors.Wrap(err, "error deleting pod")
-				return
-			}
 		}
 		n.tunnel.OnNodeStop(ctx, n.nodeID)
 	}

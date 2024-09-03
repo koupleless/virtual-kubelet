@@ -45,7 +45,6 @@ type VNodeController struct {
 }
 
 func (brc *VNodeController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	log.G(ctx).Info("start reconcile for vpod")
 	pod := &corev1.Pod{}
 	err := brc.client.Get(ctx, types.NamespacedName{
 		Namespace: request.Namespace,

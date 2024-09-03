@@ -358,13 +358,9 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 
 		if b.client != nil {
 			// delete pod with no grace period, mock kubelet
-			err := b.client.Delete(ctx, pod, &client.DeleteOptions{
+			b.client.Delete(ctx, pod, &client.DeleteOptions{
 				GracePeriodSeconds: ptr.To[int64](0),
 			})
-			if err != nil {
-				// might have been deleted manually or exceeded grace period, logger error msg
-				logger.WithError(err).Error("Pod has been deleted in k8s")
-			}
 		}
 	}
 

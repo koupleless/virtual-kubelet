@@ -50,12 +50,11 @@ const (
 type ErrorCode string
 
 const (
-	CodeSuccess                     ErrorCode = "00000"
-	CodeTimeout                     ErrorCode = "00001"
-	CodeContainerStartTimeout       ErrorCode = "00002"
-	CodeContainerStartedButNotReady ErrorCode = "01001"
-	CodeContainerStartFailed        ErrorCode = "01002"
-	CodeContainerStopFailed         ErrorCode = "01003"
+	CodeSuccess               ErrorCode = "00000"
+	CodeTimeout               ErrorCode = "00001"
+	CodeContainerStartTimeout ErrorCode = "00002"
+	CodeContainerStartFailed  ErrorCode = "01002"
+	CodeContainerStopFailed   ErrorCode = "01003"
 )
 
 // NodeStatus is the node curr status
@@ -73,9 +72,9 @@ const (
 type ContainerState string
 
 const (
-	ContainerStateActivated   = "ACTIVATED"
-	ContainerStateResolved    = "RESOLVED"
-	ContainerStateDeactivated = "DEACTIVATED"
+	ContainerStateActivated   ContainerState = "ACTIVATED"
+	ContainerStateResolved    ContainerState = "RESOLVED"
+	ContainerStateDeactivated ContainerState = "DEACTIVATED"
 )
 
 // PodKeyAll present container status will share to all pods

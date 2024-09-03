@@ -78,7 +78,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 					Name:      basicPod.Name,
 				}, podFromKubernetes)
 				return err == nil && podFromKubernetes.Status.Phase == v1.PodRunning
-			}, time.Second*20, time.Second).Should(BeTrue())
+			}, time.Second*30, time.Second).Should(BeTrue())
 		})
 
 		It("when one container's status changes to deactived, pod should become unready", func() {

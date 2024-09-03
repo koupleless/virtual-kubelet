@@ -60,7 +60,7 @@ func (brc *VNodeController) Reconcile(ctx context.Context, request reconcile.Req
 		return reconcile.Result{
 			Requeue:      true,
 			RequeueAfter: time.Second * 5,
-		}, err
+		}, nil
 	}
 	if pod.DeletionTimestamp != nil {
 		brc.podDeleteHandler(ctx, pod)

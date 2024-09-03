@@ -18,9 +18,6 @@ type OnQueryAllContainerStatusDataArrived func(string, []model.ContainerStatusDa
 // OnSingleContainerStatusChanged is one container status data callback, will update container-vpod status to k8s
 type OnSingleContainerStatusChanged func(string, model.ContainerStatusData)
 
-// OnPodStatusChanged is one container status data callback, will update container-vpod status to k8s
-type OnPodStatusChanged func(string, model.PodStatusData)
-
 type Tunnel interface {
 	// Key is the identity of Tunnel, will set to node label for special usage
 	Key() string

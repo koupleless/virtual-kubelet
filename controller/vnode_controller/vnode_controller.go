@@ -331,12 +331,7 @@ func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t
 	var err error
 	// first apply for local lock
 	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), "nodeID", nodeID))
-	defer func() {
-		if err != nil {
-			logrus.WithError(err).Errorf("failed to start node %s", nodeID)
-		}
-		cancel()
-	}()
+	defer cancel()
 	if initData.NetworkInfo.NodeIP == "" {
 		initData.NetworkInfo.NodeIP = "127.0.0.1"
 	}
@@ -346,6 +341,12 @@ func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t
 		// already exist, return
 		return
 	}
+
+	defer func() {
+		if err != nil {
+			logrus.WithError(err).Errorf("failed to start node %s", nodeID)
+		}
+	}()
 
 	vn, err := vnode.NewVNode(&model.BuildVNodeConfig{
 		Client:       brc.client,

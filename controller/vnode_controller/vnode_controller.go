@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/koupleless/virtual-kubelet/common/errdefs"
 	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/common/trace"
 	"github.com/koupleless/virtual-kubelet/common/utils"
@@ -14,6 +13,7 @@ import (
 	errpkg "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
+	k8sErr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
@@ -52,7 +52,7 @@ func (brc *VNodeController) Reconcile(ctx context.Context, request reconcile.Req
 		Name:      request.Name,
 	}, pod)
 	if err != nil {
-		if errdefs.IsNotFound(err) {
+		if k8sErr.IsNotFound(err) {
 			log.G(ctx).WithField("vpodName", pod.Name).Info("vpod has been deleted")
 			return reconcile.Result{}, nil
 		}

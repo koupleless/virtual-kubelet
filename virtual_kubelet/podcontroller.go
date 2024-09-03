@@ -374,17 +374,17 @@ func (pc *PodController) syncPodFromKubernetesHandler(ctx context.Context, key s
 		}
 
 		pod, err = pc.provider.GetPod(ctx, namespace, name)
-		if err != nil && !errdefs.IsNotFound(err) {
+		if err != nil && !errors.IsNotFound(err) {
 			err = pkgerrors.Wrapf(err, "failed to fetch pod with key %q from provider", key)
 			span.SetStatus(err)
 			return err
 		}
-		if errdefs.IsNotFound(err) || pod == nil {
+		if errors.IsNotFound(err) || pod == nil {
 			return nil
 		}
 
 		err = pc.provider.DeletePod(ctx, pod)
-		if errdefs.IsNotFound(err) {
+		if errors.IsNotFound(err) {
 			return nil
 		}
 		if err != nil {
@@ -443,7 +443,7 @@ func (pc *PodController) syncPodInProvider(ctx context.Context, pod *corev1.Pod,
 	// If it does, guarantee it is deleted in the provider and Kubernetes.
 	if pod.DeletionTimestamp != nil {
 		log.G(ctx).Debug("Deleting pod in provider")
-		if err := pc.deletePod(ctx, pod); errdefs.IsNotFound(err) {
+		if err := pc.deletePod(ctx, pod); errors.IsNotFound(err) {
 			log.G(ctx).Debug("Pod not found in provider")
 		} else if err != nil {
 			err := pkgerrors.Wrapf(err, "failed to delete pod %q in the provider", loggablePodName(pod))
@@ -531,7 +531,7 @@ func (pc *PodController) deleteDanglingPods(ctx context.Context, threadiness int
 			// Add the pod's attributes to the current span.
 			ctx = addPodAttributes(ctx, span, pod)
 			// Actually delete the pod.
-			if err := pc.provider.DeletePod(ctx, pod.DeepCopy()); err != nil && !errdefs.IsNotFound(err) {
+			if err := pc.provider.DeletePod(ctx, pod.DeepCopy()); err != nil && !errors.IsNotFound(err) {
 				span.SetStatus(err)
 				log.G(ctx).Errorf("failed to delete pod %q in provider", loggablePodName(pod))
 			} else {

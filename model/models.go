@@ -3,7 +3,6 @@ package model
 import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"time"
@@ -68,12 +67,10 @@ type ContainerStatusData struct {
 	Message    string         `json:"message"`
 }
 
-type K8SConfig struct {
-	// KubeClient
-	KubeClient kubernetes.Interface
-
-	// InformerSyncPeriod
-	InformerSyncPeriod time.Duration
+// PodStatusData is the status data of a container
+type PodStatusData struct {
+	CustomLabels      map[string]string `json:"customLabels"`
+	CustomAnnotations map[string]string `json:"customAnnotations"`
 }
 
 type BuildVNodeProviderConfig struct {

@@ -16,6 +16,7 @@ package pod_provider
 
 import (
 	"context"
+	"github.com/google/go-cmp/cmp"
 	"github.com/koupleless/virtual-kubelet/common/tracker"
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
@@ -255,8 +256,8 @@ func (b *VPodProvider) CreatePod(ctx context.Context, pod *corev1.Pod) error {
 	// update the baseline info so the async handle logic can see them first
 	podCopy := pod.DeepCopy()
 	b.runtimeInfoStore.PutPod(podCopy)
+	podKey := utils.GetPodKey(podCopy)
 	for _, container := range podCopy.Spec.Containers {
-		podKey := utils.GetPodKey(podCopy)
 		containerKey := utils.GetContainerKey(podKey, container.Name)
 		b.startOperationQueue.Enqueue(ctx, containerKey)
 		logger.WithField("podKey", podKey).WithField("containerName", container.Name).Info("ItemEnqueued")
@@ -279,29 +280,46 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 	}
 
 	oldPod := b.runtimeInfoStore.GetPodByKey(podKey).DeepCopy()
+	newContainerMap := make(map[string]corev1.Container)
+	for _, container := range newPod.Spec.Containers {
+		newContainerMap[container.Name] = container
+	}
+	stopContainers := make([]corev1.Container, 0)
 	if oldPod != nil {
 		oldPopKey := utils.GetPodKey(oldPod)
 		// stop first
 		for _, container := range oldPod.Spec.Containers {
-			// sending to stop
-			containerKey := utils.GetContainerKey(oldPopKey, container.Name)
-			b.shutdownOperationQueue.Enqueue(ctx, containerKey)
-			logger.WithField("podKey", podKey).WithField("containerName", container.Name).Info("ItemEnqueued")
+			// check need to stop
+			needStop := true
+			newContainer, ok := newContainerMap[container.Name]
+			if ok {
+				needStop = !cmp.Equal(newContainer, container)
+			}
+			if needStop {
+				// sending to stop
+				containerKey := utils.GetContainerKey(oldPopKey, container.Name)
+				b.shutdownOperationQueue.Enqueue(ctx, containerKey)
+				stopContainers = append(stopContainers, container)
+				logger.WithField("podKey", podKey).WithField("containerName", container.Name).Info("ItemEnqueued")
+			} else {
+				// delete from new containers
+				delete(newContainerMap, container.Name)
+			}
 		}
 	}
 
-	b.runtimeInfoStore.PutPod(pod.DeepCopy())
+	b.runtimeInfoStore.PutPod(newPod.DeepCopy())
 
-	// start a go runtime, check old containers shutdown successfully, then start new containers
+	// only start new containers and changed containers
 	startNewContainer := func() {
-		for _, container := range newPod.Spec.Containers {
+		for _, container := range newContainerMap {
 			containerKey := utils.GetContainerKey(podKey, container.Name)
 			b.startOperationQueue.Enqueue(ctx, containerKey)
 			logger.WithField("podKey", podKey).WithField("containerName", container.Name).Info("ItemEnqueued")
 		}
 	}
 	go tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodUpdate, pod.Labels, model.CodeContainerStartTimeout, func() bool {
-		for _, oldContainer := range oldPod.Spec.Containers {
+		for _, oldContainer := range stopContainers {
 			oldPodKey := utils.GetPodKey(oldPod)
 			if b.queryContainerStatus(ctx, oldPodKey, &oldContainer) != nil {
 				return false

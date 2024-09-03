@@ -16,19 +16,19 @@ func (V *VPodPredicate) checkIsVPod(componentKey string) bool {
 }
 
 func (V *VPodPredicate) Create(e event.TypedCreateEvent[*corev1.Pod]) bool {
-	return V.checkIsVPod(e.Object.Labels[model.LabelKeyOfComponent])
+	return V.checkIsVPod(e.Object.Labels[model.LabelKeyOfComponent]) && e.Object.Spec.NodeName != ""
 }
 
 func (V *VPodPredicate) Delete(e event.TypedDeleteEvent[*corev1.Pod]) bool {
-	return V.checkIsVPod(e.Object.Labels[model.LabelKeyOfComponent])
+	return V.checkIsVPod(e.Object.Labels[model.LabelKeyOfComponent]) && e.Object.Spec.NodeName != ""
 }
 
 func (V *VPodPredicate) Update(e event.TypedUpdateEvent[*corev1.Pod]) bool {
-	return V.checkIsVPod(e.ObjectNew.Labels[model.LabelKeyOfComponent])
+	return V.checkIsVPod(e.ObjectNew.Labels[model.LabelKeyOfComponent]) && e.ObjectNew.Spec.NodeName != ""
 }
 
 func (V *VPodPredicate) Generic(e event.TypedGenericEvent[*corev1.Pod]) bool {
-	return V.checkIsVPod(e.Object.Labels[model.LabelKeyOfComponent])
+	return V.checkIsVPod(e.Object.Labels[model.LabelKeyOfComponent]) && e.Object.Spec.NodeName != ""
 }
 
 type VNodePredicate struct{}

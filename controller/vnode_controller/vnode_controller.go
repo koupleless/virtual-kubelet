@@ -125,6 +125,7 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 		},
 		DeleteFunc: func(ctx context.Context, e event.TypedDeleteEvent[*corev1.Node], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 			log.G(ctx).Info("vnode deleted ", e.Object.Name)
+			brc.shutdownVNode(utils.ExtractNodeIDFromNodeName(e.Object.Name))
 		},
 		GenericFunc: func(ctx context.Context, e event.TypedGenericEvent[*corev1.Node], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 			log.G(ctx).Info("vnode generic ", e.Object.Name)

@@ -135,7 +135,7 @@ func WithNodeEnableLeaseV1WithRenewInterval(client client.Client, leaseDurationS
 			return ErrConflictingLeaseControllerConfiguration
 		}
 
-		leaseController, err := newLeaseControllerWithRenewInterval(
+		lc, err := newLeaseControllerWithRenewInterval(
 			&clock.RealClock{},
 			client,
 			leaseDurationSeconds,
@@ -146,7 +146,7 @@ func WithNodeEnableLeaseV1WithRenewInterval(client client.Client, leaseDurationS
 			return fmt.Errorf("Unable to configure lease controller: %w", err)
 		}
 
-		n.leaseController = leaseController
+		n.leaseController = lc
 		return nil
 	}
 }

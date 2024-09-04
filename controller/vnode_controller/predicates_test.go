@@ -18,6 +18,9 @@ func TestVPodPredicate_CreatePass(t *testing.T) {
 			ObjectMeta: v1.ObjectMeta{
 				Labels: map[string]string{model.LabelKeyOfComponent: "suite"},
 			},
+			Spec: corev1.PodSpec{
+				NodeName: "test",
+			},
 		},
 	})
 	assert.True(t, pass)
@@ -46,6 +49,9 @@ func TestVPodPredicate_UpdatePass(t *testing.T) {
 			ObjectMeta: v1.ObjectMeta{
 				Labels: map[string]string{model.LabelKeyOfComponent: "suite"},
 			},
+			Spec: corev1.PodSpec{
+				NodeName: "test",
+			},
 		},
 	})
 	assert.True(t, pass)
@@ -73,6 +79,8 @@ func TestVPodPredicate_DeletePass(t *testing.T) {
 		Object: &corev1.Pod{
 			ObjectMeta: v1.ObjectMeta{
 				Labels: map[string]string{model.LabelKeyOfComponent: "suite"},
+			}, Spec: corev1.PodSpec{
+				NodeName: "test",
 			},
 		},
 	})
@@ -101,6 +109,9 @@ func TestVPodPredicate_GenericPass(t *testing.T) {
 		Object: &corev1.Pod{
 			ObjectMeta: v1.ObjectMeta{
 				Labels: map[string]string{model.LabelKeyOfComponent: "suite"},
+			},
+			Spec: corev1.PodSpec{
+				NodeName: "test",
 			},
 		},
 	})

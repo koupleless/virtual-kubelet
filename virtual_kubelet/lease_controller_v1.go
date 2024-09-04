@@ -222,7 +222,7 @@ func (c *leaseController) ensureLease(ctx context.Context, node *corev1.Node) (*
 			return nil, false, err
 		}
 		log.G(ctx).Debug("Successfully created lease")
-		return lease, true, nil
+		return leaseToCreate, true, nil
 	} else if err != nil {
 		// unexpected error getting lease
 		log.G(ctx).WithError(err).Error("Unexpected error getting lease")

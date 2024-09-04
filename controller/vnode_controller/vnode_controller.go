@@ -163,8 +163,7 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 
 	log.G(ctx).Info("register controller ready")
 
-	// may cause pod evict, not check now
-	//go utils.TimedTaskWithInterval(ctx, time.Second, brc.checkAndModifyOfflineNode)
+	go utils.TimedTaskWithInterval(ctx, time.Second, brc.checkAndModifyOfflineNode)
 
 	return nil
 }
@@ -312,7 +311,7 @@ func (brc *VNodeController) podDeleteHandler(ctx context.Context, podFromKuberne
 }
 
 func (brc *VNodeController) checkAndModifyOfflineNode(_ context.Context) {
-	offlineNodes := brc.runtimeInfoStore.GetOfflineNodes(1000 * 20)
+	offlineNodes := brc.runtimeInfoStore.GetOfflineNodes(1000 * 40)
 	for _, nodeID := range offlineNodes {
 		brc.onNodeStatusDataArrived(nodeID, model.NodeStatusData{
 			CustomConditions: []corev1.NodeCondition{

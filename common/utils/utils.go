@@ -92,6 +92,7 @@ func PodsEqual(pod1, pod2 *corev1.Pod) bool {
 	// - `spec.tolerations` (only additions to existing tolerations)
 	// - `objectmeta.labels`
 	// - `objectmeta.annotations`
+	// - `objectmeta.finalizers`
 	// compare the values of the pods to see if the values actually changed
 
 	return cmp.Equal(pod1.Spec.Containers, pod2.Spec.Containers) &&
@@ -99,7 +100,8 @@ func PodsEqual(pod1, pod2 *corev1.Pod) bool {
 		cmp.Equal(pod1.Spec.ActiveDeadlineSeconds, pod2.Spec.ActiveDeadlineSeconds) &&
 		cmp.Equal(pod1.Spec.Tolerations, pod2.Spec.Tolerations) &&
 		cmp.Equal(pod1.ObjectMeta.Labels, pod2.Labels) &&
-		cmp.Equal(pod1.ObjectMeta.Annotations, pod2.Annotations)
+		cmp.Equal(pod1.ObjectMeta.Annotations, pod2.Annotations) &&
+		cmp.Equal(pod1.ObjectMeta.Finalizers, pod2.Finalizers)
 }
 
 func FormatNodeName(nodeID string) string {

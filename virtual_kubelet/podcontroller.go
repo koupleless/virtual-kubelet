@@ -317,10 +317,11 @@ func (pc *PodController) CheckAndUpdatePod(ctx context.Context, key string, obj 
 			!cmp.Equal(newPod.Finalizers, kPod.lastPodStatusReceivedFromProvider.Finalizers)) {
 
 		kPod.lastPodStatusReceivedFromProvider = newPod
-
-		pc.syncPodStatusFromProvider.Enqueue(ctx, key)
 		// Reset this to avoid re-adding it continuously
 		kPod.lastPodStatusUpdateSkipped = false
+		// store curr kPod
+		pc.knownPods.Store(key, kPod)
+		pc.syncPodStatusFromProvider.Enqueue(ctx, key)
 	}
 	kPod.Unlock()
 }

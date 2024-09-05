@@ -95,7 +95,8 @@ func PodsEqual(pod1, pod2 *corev1.Pod) bool {
 		cmp.Equal(pod1.Spec.ActiveDeadlineSeconds, pod2.Spec.ActiveDeadlineSeconds) &&
 		cmp.Equal(pod1.Spec.Tolerations, pod2.Spec.Tolerations) &&
 		cmp.Equal(pod1.ObjectMeta.Labels, pod2.Labels) &&
-		cmp.Equal(pod1.ObjectMeta.Annotations, pod2.Annotations)
+		cmp.Equal(pod1.ObjectMeta.Annotations, pod2.Annotations) &&
+		cmp.Equal(pod1.ObjectMeta.Finalizers, pod2.Finalizers)
 }
 
 func FormatBaseNodeName(baseID string) string {

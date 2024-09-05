@@ -103,6 +103,7 @@ var _ = BeforeSuite(func() {
 
 var _ = AfterSuite(func() {
 	By("tearing down the suite environment")
+	testEnv.Stop()
 })
 
 func prepareNode(name, version string) tunnel.Node {

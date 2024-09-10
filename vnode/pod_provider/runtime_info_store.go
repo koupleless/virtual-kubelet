@@ -67,16 +67,18 @@ func (r *RuntimeInfoStore) DeletePod(podKey string) {
 	r.Lock()
 	defer r.Unlock()
 
-	pod := r.podKeyToPod[podKey]
+	pod, has := r.podKeyToPod[podKey]
 	delete(r.podKeyToPod, podKey)
-	for _, container := range pod.Spec.Containers {
-		containerKey := utils.GetContainerKey(podKey, container.Name)
-		relatedPodKeyMap, has := r.containerKeyToRelatedPodKey[container.Name]
-		if has {
-			delete(relatedPodKeyMap, podKey)
+	if has {
+		for _, container := range pod.Spec.Containers {
+			containerKey := utils.GetContainerKey(podKey, container.Name)
+			relatedPodKeyMap, has := r.containerKeyToRelatedPodKey[container.Name]
+			if has {
+				delete(relatedPodKeyMap, podKey)
+			}
+			delete(r.containerKeyToContainer, containerKey)
+			r.containerKeyToRelatedPodKey[container.Name] = relatedPodKeyMap
 		}
-		delete(r.containerKeyToContainer, containerKey)
-		r.containerKeyToRelatedPodKey[container.Name] = relatedPodKeyMap
 	}
 }
 

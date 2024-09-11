@@ -15,18 +15,67 @@
 package model
 
 const (
-	CommandHealth       = "health"
-	CommandQueryAllBiz  = "queryAllBiz"
-	CommandInstallBiz   = "installBiz"
-	CommandUnInstallBiz = "uninstallBiz"
+	VNodePrefix = "vnode"
 )
 
 const (
-	BaseHeartBeatTopic = "koupleless_%s/+/base/heart"
-	BaseHealthTopic    = "koupleless_%s/%s/base/health"
-	BaseBizTopic       = "koupleless_%s/%s/base/biz"
+	TrackSceneVPodDeploy = "vpod_deploy"
 )
 
 const (
-	BaseNodePrefix = "base-node"
+	TrackEventContainerStart    = "ContainerStart"
+	TrackEventContainerShutdown = "ContainerShutdown"
+	TrackEventVPodDelete        = "PodDelete"
+	TrackEventVPodUpdate        = "PodUpdate"
 )
+
+const (
+	LabelKeyOfTraceID      = "trace.koupleless.io/id"
+	LabelKeyOfComponent    = "virtual-kubelet.koupleless.io/component"
+	LabelKeyOfEnv          = "virtual-kubelet.koupleless.io/env"
+	LabelKeyOfVnodeTunnel  = "vnode.koupleless.io/tunnel"
+	LabelKeyOfVNodeName    = "vnode.koupleless.io/name"
+	LabelKeyOfVNodeVersion = "vnode.koupleless.io/version"
+)
+
+const (
+	TaintKeyOfVnode = "schedule.koupleless.io/virtual-node"
+	TaintKeyOfEnv   = "schedule.koupleless.io/node-env"
+)
+
+const (
+	ComponentVNode = "vnode"
+)
+
+type ErrorCode string
+
+const (
+	CodeSuccess               ErrorCode = "00000"
+	CodeTimeout               ErrorCode = "00001"
+	CodeContainerStartTimeout ErrorCode = "00002"
+	CodeContainerStartFailed  ErrorCode = "01002"
+	CodeContainerStopFailed   ErrorCode = "01003"
+)
+
+// NodeStatus is the node curr status
+type NodeStatus string
+
+const (
+	// NodeStatusActivated node activated, will start vnode if not being started
+	NodeStatusActivated NodeStatus = "ACTIVATED"
+
+	// NodeStatusDeactivated node deactivated, will shut down vnode if started
+	NodeStatusDeactivated NodeStatus = "DEACTIVATED"
+)
+
+// ContainerState is the state of a container, will set to pod state and show on k8s
+type ContainerState string
+
+const (
+	ContainerStateActivated   ContainerState = "ACTIVATED"
+	ContainerStateResolved    ContainerState = "RESOLVED"
+	ContainerStateDeactivated ContainerState = "DEACTIVATED"
+)
+
+// PodKeyAll present container status will share to all pods
+const PodKeyAll = "all"

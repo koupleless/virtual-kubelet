@@ -18,6 +18,9 @@ import (
 	"context"
 	"fmt"
 	"github.com/koupleless/virtual-kubelet/common/utils"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 	"time"
 
@@ -119,7 +122,7 @@ func (pc *PodController) handleProviderError(ctx context.Context, span trace.Spa
 		"reason":   pod.Status.Reason,
 	})
 
-	_, err := pc.client.Pods(pod.Namespace).UpdateStatus(ctx, pod, metav1.UpdateOptions{})
+	err := pc.client.Status().Update(ctx, pod, &client.SubResourceUpdateOptions{})
 	if err != nil {
 		logger.WithError(err).Warn("Failed to update pod status")
 	} else {
@@ -164,7 +167,7 @@ func (pc *PodController) updatePodStatus(ctx context.Context, podFromKubernetes 
 	kPod.Unlock()
 
 	if podFromProvider.DeletionTimestamp != nil && podFromKubernetes.DeletionTimestamp == nil {
-		deleteOptions := metav1.DeleteOptions{
+		deleteOptions := &client.DeleteOptions{
 			GracePeriodSeconds: podFromProvider.DeletionGracePeriodSeconds,
 		}
 		current := metav1.NewTime(time.Now())
@@ -174,7 +177,7 @@ func (pc *PodController) updatePodStatus(ctx context.Context, podFromKubernetes 
 		// check status here to avoid pod re-created deleted incorrectly. e.g. delete a pod from K8s and re-create it(statefulSet and so on),
 		// pod in provider may not delete immediately. so deletionTimestamp is not nil. Then the re-created one would be deleted if we do not check pod status.
 		if cmp.Equal(podFromKubernetes.Status, podFromProvider.Status) {
-			if err := pc.client.Pods(podFromKubernetes.Namespace).Delete(ctx, podFromKubernetes.Name, deleteOptions); err != nil && !errors.IsNotFound(err) {
+			if err := pc.client.Delete(ctx, podFromKubernetes, deleteOptions); err != nil && !errors.IsNotFound(err) {
 				span.SetStatus(err)
 				return pkgerrors.Wrap(err, "error while delete pod in kubernetes")
 			}
@@ -182,7 +185,7 @@ func (pc *PodController) updatePodStatus(ctx context.Context, podFromKubernetes 
 	}
 
 	podFromProvider.ResourceVersion = "0"
-	if _, err := pc.client.Pods(podFromProvider.Namespace).UpdateStatus(ctx, podFromProvider, metav1.UpdateOptions{}); err != nil && !errors.IsNotFound(err) {
+	if err := pc.client.Status().Update(ctx, podFromProvider); err != nil && !errors.IsNotFound(err) {
 		span.SetStatus(err)
 		return pkgerrors.Wrap(err, "error while updating pod status in kubernetes")
 	}
@@ -226,7 +229,7 @@ func (pc *PodController) enqueuePodStatusUpdate(ctx context.Context, pod *corev1
 		}
 		// Blind sync. Partial sync is better than nothing. If this returns false, the poll loop should not be invoked
 		// again as it means the context has timed out.
-		if !cache.WaitForNamedCacheSync("enqueuePodStatusUpdate", ctx.Done(), pc.informer.Informer().HasSynced) {
+		if !pc.cache.WaitForCacheSync(ctx) {
 			log.G(ctx).Warn("enqueuePodStatusUpdate proceeding with unsynced cache")
 		}
 
@@ -234,7 +237,10 @@ func (pc *PodController) enqueuePodStatusUpdate(ctx context.Context, pod *corev1
 		// should happen, and the pod *actually* exists is the above -- where we haven't been able to finish sync
 		// before context times out.
 		// The other class of errors is non-transient
-		_, err = pc.lister.Pods(pod.Namespace).Get(pod.Name)
+		err = pc.cache.Get(ctx, types.NamespacedName{
+			Namespace: pod.Namespace,
+			Name:      pod.Name,
+		}, pod)
 		if err != nil {
 			return false, err
 		}
@@ -287,7 +293,11 @@ func (pc *PodController) syncPodStatusFromProviderHandler(ctx context.Context, k
 		return pkgerrors.Wrap(err, "error splitting cache key")
 	}
 
-	pod, err := pc.lister.Pods(namespace).Get(name)
+	pod := &corev1.Pod{}
+	err = pc.cache.Get(ctx, types.NamespacedName{
+		Namespace: namespace,
+		Name:      name,
+	}, pod)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.G(ctx).WithError(err).Debug("Skipping pod status update for pod missing in Kubernetes")
@@ -318,7 +328,11 @@ func (pc *PodController) deletePodsFromKubernetesHandler(ctx context.Context, ke
 	}
 
 	// If the pod has been deleted from API server, we don't need to do anything.
-	k8sPod, err := pc.lister.Pods(namespace).Get(name)
+	k8sPod := &corev1.Pod{}
+	err = pc.client.Get(ctx, types.NamespacedName{
+		Namespace: namespace,
+		Name:      name,
+	}, k8sPod)
 	if errors.IsNotFound(err) {
 		return nil
 	}
@@ -336,9 +350,11 @@ func (pc *PodController) deletePodsFromKubernetesHandler(ctx context.Context, ke
 
 	// We don't check with the provider before doing this delete. At this point, even if an outstanding pod status update
 	// was in progress,
-	deleteOptions := metav1.NewDeleteOptions(0)
+	deleteOptions := &client.DeleteOptions{
+		GracePeriodSeconds: ptr.To[int64](0),
+	}
 	deleteOptions.Preconditions = metav1.NewUIDPreconditions(uid)
-	err = pc.client.Pods(namespace).Delete(ctx, name, *deleteOptions)
+	err = pc.client.Delete(ctx, k8sPod, deleteOptions)
 	if errors.IsNotFound(err) {
 		log.G(ctx).Warnf("Not deleting pod because %v", err)
 		return nil

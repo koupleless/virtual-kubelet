@@ -14,7 +14,6 @@ import (
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	k8sErr "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
@@ -178,7 +177,6 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 			podList := &corev1.PodList{}
 			err = brc.client.List(ctx, podList, &client.ListOptions{
 				LabelSelector: labels.NewSelector().Add(*podComponentRequirement),
-				FieldSelector: fields.AndSelectors(fields.OneTermNotEqualSelector("spec.nodeName", "")),
 			})
 			if err != nil {
 				log.G(ctx).WithError(err).Error("failed to list pods")

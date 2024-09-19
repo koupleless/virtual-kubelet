@@ -184,9 +184,10 @@ func (pc *PodController) updatePodStatus(ctx context.Context, podFromKubernetes 
 		}
 	}
 
-	podFromProvider.ObjectMeta = podFromKubernetes.ObjectMeta
-	podFromProvider.ResourceVersion = "0"
-	if err := pc.client.Status().Update(ctx, podFromProvider); err != nil && !errors.IsNotFound(err) {
+	patch := client.MergeFrom(podFromKubernetes.DeepCopy())
+	var err error
+	podFromKubernetes.Status = podFromProvider.Status
+	if err = pc.client.Status().Patch(ctx, podFromKubernetes, patch); err != nil && !errors.IsNotFound(err) {
 		span.SetStatus(err)
 		return pkgerrors.Wrap(err, "error while updating pod status in kubernetes")
 	}
@@ -295,7 +296,7 @@ func (pc *PodController) syncPodStatusFromProviderHandler(ctx context.Context, k
 	}
 
 	pod := &corev1.Pod{}
-	err = pc.cache.Get(ctx, types.NamespacedName{
+	err = pc.client.Get(ctx, types.NamespacedName{
 		Namespace: namespace,
 		Name:      name,
 	}, pod)

@@ -109,7 +109,11 @@ func FormatNodeName(nodeID string) string {
 }
 
 func ExtractNodeIDFromNodeName(nodeName string) string {
-	return strings.Join(strings.Split(nodeName, ".")[1:], ".")
+	split := strings.Split(nodeName, ".")
+	if len(split) == 1 {
+		return ""
+	}
+	return strings.Join(split[1:], ".")
 }
 
 func TranslateContainerStatusFromTunnelToContainerStatus(container corev1.Container, data *model.ContainerStatusData) corev1.ContainerStatus {

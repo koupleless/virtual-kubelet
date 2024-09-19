@@ -63,6 +63,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 			for _, container := range basicPod.Spec.Containers {
 				podKey := utils.GetPodKey(&basicPod)
 				key := tl.GetContainerUniqueKey(podKey, &container)
+				time.Sleep(time.Second)
 				tl.PutContainer(nodeID, key, model.ContainerStatusData{
 					Key:        key,
 					Name:       container.Name,

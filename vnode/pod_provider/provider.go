@@ -321,7 +321,8 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 	go tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodUpdate, pod.Labels, model.CodeContainerStartTimeout, func() bool {
 		for _, oldContainer := range stopContainers {
 			oldPodKey := utils.GetPodKey(oldPod)
-			if b.queryContainerStatus(ctx, oldPodKey, &oldContainer) != nil {
+			status := b.queryContainerStatus(ctx, oldPodKey, &oldContainer)
+			if status != nil && status.State != model.ContainerStateDeactivated {
 				return false
 			}
 		}
@@ -367,7 +368,8 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 	go tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodDelete, pod.Labels, model.CodeContainerStartTimeout, func() bool {
 		for _, oldContainer := range localPod.Spec.Containers {
 			oldPodKey := utils.GetPodKey(localPod)
-			if b.queryContainerStatus(ctx, oldPodKey, &oldContainer) != nil {
+			status := b.queryContainerStatus(ctx, oldPodKey, &oldContainer)
+			if status != nil && status.State != model.ContainerStateDeactivated {
 				return false
 			}
 		}

@@ -28,7 +28,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 	Context("pod publish and status sync", func() {
 		It("node should be ready", func() {
 			nodeInfo.NodeInfo.Metadata.Status = model.NodeStatusActivated
-			tl.PutNode(nodeID, nodeInfo)
+			tl.PutNode(ctx, nodeID, nodeInfo)
 			name := utils.FormatNodeName(nodeID)
 
 			Eventually(func() bool {
@@ -64,7 +64,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 				podKey := utils.GetPodKey(&basicPod)
 				key := tl.GetContainerUniqueKey(podKey, &container)
 				time.Sleep(time.Second)
-				tl.PutContainer(nodeID, key, model.ContainerStatusData{
+				tl.PutContainer(ctx, nodeID, key, model.ContainerStatusData{
 					Key:        key,
 					Name:       container.Name,
 					PodKey:     podKey,
@@ -86,7 +86,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 			container := basicPod.Spec.Containers[0]
 			podKey := utils.GetPodKey(&basicPod)
 			key := tl.GetContainerUniqueKey(podKey, &container)
-			tl.PutContainer(nodeID, key, model.ContainerStatusData{
+			tl.PutContainer(ctx, nodeID, key, model.ContainerStatusData{
 				Key:        key,
 				Name:       container.Name,
 				PodKey:     podKey,
@@ -138,7 +138,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 
 		It("node offline", func() {
 			nodeInfo.Metadata.Status = model.NodeStatusDeactivated
-			tl.PutNode(nodeID, nodeInfo)
+			tl.PutNode(ctx, nodeID, nodeInfo)
 			Eventually(func() bool {
 				node := &v1.Node{}
 				err := k8sClient.Get(ctx, types.NamespacedName{

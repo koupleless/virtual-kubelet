@@ -115,6 +115,10 @@ func (b *VPodProvider) syncRelatedPodStatus(ctx context.Context, podKey, contain
 	logger := log.G(ctx)
 	if podKey != model.PodKeyAll {
 		pod := b.runtimeInfoStore.GetPodByKey(podKey)
+		if pod == nil {
+			logger.Error("update non-exist pod status")
+			return
+		}
 		if err := b.updatePodStatusToKubernetes(ctx, pod); err != nil {
 			logger.WithError(err).Error("update pod status error")
 		}
@@ -158,6 +162,10 @@ func (b *VPodProvider) SyncContainerInfo(ctx context.Context, containerInfos []m
 func (b *VPodProvider) SyncSingleContainerInfo(ctx context.Context, info model.ContainerStatusData) {
 	b.runtimeInfoStore.PutContainerInfo(info)
 	b.syncRelatedPodStatus(ctx, info.PodKey, info.Name)
+}
+
+func (b *VPodProvider) InitContainerInfo(info model.ContainerStatusData) {
+	b.runtimeInfoStore.PutContainerInfo(info)
 }
 
 func (b *VPodProvider) queryAllContainerStatus(_ context.Context) []*model.ContainerStatusData {

@@ -7,16 +7,16 @@ import (
 )
 
 // OnNodeDiscovered is the node discover callback, will start/stop a vnode depends on node state
-type OnNodeDiscovered func(string, model.NodeInfo, Tunnel)
+type OnNodeDiscovered func(context.Context, string, model.NodeInfo, Tunnel)
 
 // OnNodeStatusDataArrived is the node health data callback, will update vnode status to k8s
 type OnNodeStatusDataArrived func(string, model.NodeStatusData)
 
 // OnQueryAllContainerStatusDataArrived is the container status data callback, will update vpod status to k8s
-type OnQueryAllContainerStatusDataArrived func(string, []model.ContainerStatusData)
+type OnQueryAllContainerStatusDataArrived func(context.Context, string, []model.ContainerStatusData)
 
 // OnSingleContainerStatusChanged is one container status data callback, will update container-vpod status to k8s
-type OnSingleContainerStatusChanged func(string, model.ContainerStatusData)
+type OnSingleContainerStatusChanged func(context.Context, string, model.ContainerStatusData)
 
 type Tunnel interface {
 	// Key is the identity of Tunnel, will set to node label for special usage

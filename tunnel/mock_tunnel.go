@@ -26,12 +26,12 @@ type MockTunnel struct {
 	nodeStorage      map[string]Node
 }
 
-func (m *MockTunnel) PutNode(nodeID string, node Node) {
+func (m *MockTunnel) PutNode(ctx context.Context, nodeID string, node Node) {
 	m.Lock()
 	defer m.Unlock()
 
 	m.nodeStorage[nodeID] = node
-	m.OnNodeDiscovered(nodeID, node.NodeInfo, m)
+	m.OnNodeDiscovered(ctx, nodeID, node.NodeInfo, m)
 }
 
 func (m *MockTunnel) DeleteNode(nodeID string) {
@@ -41,7 +41,7 @@ func (m *MockTunnel) DeleteNode(nodeID string) {
 	delete(m.nodeStorage, nodeID)
 }
 
-func (m *MockTunnel) PutContainer(nodeID, containerKey string, data model.ContainerStatusData) {
+func (m *MockTunnel) PutContainer(ctx context.Context, nodeID, containerKey string, data model.ContainerStatusData) {
 	m.Lock()
 	defer m.Unlock()
 
@@ -51,7 +51,7 @@ func (m *MockTunnel) PutContainer(nodeID, containerKey string, data model.Contai
 	}
 	containerMap[containerKey] = data
 	m.containerStorage[nodeID] = containerMap
-	m.OnQueryAllContainerStatusDataArrived(nodeID, translateContainerMap2ContainerList(containerMap))
+	m.OnQueryAllContainerStatusDataArrived(ctx, nodeID, translateContainerMap2ContainerList(containerMap))
 }
 
 func (m *MockTunnel) Key() string {
@@ -98,7 +98,7 @@ func (m *MockTunnel) FetchHealthData(ctx context.Context, nodeID string) error {
 func (m *MockTunnel) QueryAllContainerStatusData(ctx context.Context, nodeID string) error {
 	_, has := m.nodeStorage[nodeID]
 	if has {
-		m.OnQueryAllContainerStatusDataArrived(nodeID, translateContainerMap2ContainerList(m.containerStorage[nodeID]))
+		m.OnQueryAllContainerStatusDataArrived(ctx, nodeID, translateContainerMap2ContainerList(m.containerStorage[nodeID]))
 	}
 	return nil
 }
@@ -123,7 +123,7 @@ func (m *MockTunnel) StartContainer(ctx context.Context, nodeID, podKey string, 
 	containerMap[key] = data
 
 	m.containerStorage[nodeID] = containerMap
-	m.OnSingleContainerStatusChanged(nodeID, data)
+	m.OnSingleContainerStatusChanged(ctx, nodeID, data)
 	return nil
 }
 
@@ -135,7 +135,7 @@ func (m *MockTunnel) ShutdownContainer(ctx context.Context, nodeID, podKey strin
 	data := containerMap[key]
 	delete(containerMap, key)
 	m.containerStorage[nodeID] = containerMap
-	m.OnSingleContainerStatusChanged(nodeID, data)
+	m.OnSingleContainerStatusChanged(ctx, nodeID, data)
 	return nil
 }
 

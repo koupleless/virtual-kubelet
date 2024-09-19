@@ -184,7 +184,7 @@ func (pc *PodController) updatePodStatus(ctx context.Context, podFromKubernetes 
 		}
 	}
 
-	podFromProvider.ResourceVersion = "0"
+	podFromProvider.ObjectMeta = podFromKubernetes.ObjectMeta
 	if err := pc.client.Status().Update(ctx, podFromProvider); err != nil && !errors.IsNotFound(err) {
 		span.SetStatus(err)
 		return pkgerrors.Wrap(err, "error while updating pod status in kubernetes")

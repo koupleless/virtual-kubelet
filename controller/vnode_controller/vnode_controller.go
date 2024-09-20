@@ -426,7 +426,7 @@ func (brc *VNodeController) startVNode(ctx context.Context, nodeID string, initD
 
 	defer func() {
 		if err != nil {
-			logrus.WithError(err).Errorf("failed to start node %s", nodeID)
+			log.G(ctx).WithError(err).Errorf("failed to start node %s", nodeID)
 		}
 	}()
 

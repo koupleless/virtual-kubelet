@@ -247,7 +247,6 @@ func (b *VPodProvider) handleShutdownOperation(ctx context.Context, containerKey
 		container := b.runtimeInfoStore.GetContainer(containerKey)
 
 		if container != nil {
-			defer b.runtimeInfoStore.DeleteContainer(containerKey)
 			if err := b.stopContainer(ctx, podKey, container); err != nil {
 				logger.WithError(err).Error("StopContainerFailed")
 				return err, model.CodeContainerStopFailed

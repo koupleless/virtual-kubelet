@@ -99,13 +99,6 @@ func (r *RuntimeInfoStore) GetContainer(containerKey string) *corev1.Container {
 	return r.containerKeyToContainer[containerKey]
 }
 
-func (r *RuntimeInfoStore) DeleteContainer(containerKey string) {
-	r.RLock()
-	defer r.RUnlock()
-	delete(r.containerKeyToContainer, containerKey)
-	delete(r.containerNameToRelatedPodKey, containerKey)
-}
-
 func (r *RuntimeInfoStore) GetPodByKey(podKey string) *corev1.Pod {
 	r.RLock()
 	defer r.RUnlock()

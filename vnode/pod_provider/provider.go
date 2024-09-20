@@ -194,6 +194,10 @@ func (b *VPodProvider) handleStartOperation(ctx context.Context, containerKey st
 	var labelMap map[string]string
 	if podLocal != nil {
 		labelMap = podLocal.Labels
+	} else {
+		// pod has been deleted, skip
+		logger.WithField("podKey", podKey).Warn("pod has been deleted")
+		return nil
 	}
 	if labelMap == nil {
 		labelMap = make(map[string]string)

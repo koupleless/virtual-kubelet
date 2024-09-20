@@ -481,9 +481,9 @@ func (brc *VNodeController) startVNode(ctx context.Context, nodeID string, initD
 	go func() {
 		select {
 		case <-vn.Done():
-			logrus.WithError(vn.Err()).Errorf("node exit %s", nodeID)
+			logrus.WithError(vn.Err()).Info("node exit %s", nodeID)
 		case <-ctx.Done():
-			logrus.WithError(ctx.Err()).Errorf("node exit %s", nodeID)
+			logrus.WithError(ctx.Err()).Info("node exit %s", nodeID)
 		}
 		vnCancel()
 		brc.runtimeInfoStore.DeleteVNode(nodeID)

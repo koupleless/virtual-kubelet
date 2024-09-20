@@ -448,30 +448,32 @@ func (brc *VNodeController) startVNode(ctx context.Context, nodeID string, initD
 
 	brc.runtimeInfoStore.PutVNode(nodeID, vn)
 
-	go vn.Run(ctx)
+	vnCtx := context.WithValue(context.Background(), "nodeID", nodeID)
+	vnCtx, vnCancel := context.WithCancel(vnCtx)
+
+	go vn.Run(vnCtx)
 
 	if err = vn.WaitReady(time.Minute); err != nil {
 		err = errpkg.Wrap(err, "Error waiting vnode ready")
+		vnCancel()
 		return
 	}
 
 	t.OnNodeStart(ctx, nodeID)
 
-	go utils.TimedTaskWithInterval(ctx, time.Second*9, func(ctx context.Context) {
+	go utils.TimedTaskWithInterval(vnCtx, time.Second*9, func(ctx context.Context) {
 		err = t.FetchHealthData(ctx, nodeID)
 		if err != nil {
 			log.G(ctx).WithError(err).Errorf("Failed to fetch node health info from %s", nodeID)
 		}
 	})
 
-	go utils.TimedTaskWithInterval(ctx, time.Second*5, func(ctx context.Context) {
+	go utils.TimedTaskWithInterval(vnCtx, time.Second*5, func(ctx context.Context) {
 		err = t.QueryAllContainerStatusData(ctx, nodeID)
 		if err != nil {
 			log.G(ctx).WithError(err).Errorf("Failed to query containers info from %s", nodeID)
 		}
 	})
-
-	logrus.Infof("vnode running: %s", nodeID)
 
 	// record first msg arrived time
 	brc.runtimeInfoStore.NodeMsgArrived(nodeID)
@@ -483,6 +485,7 @@ func (brc *VNodeController) startVNode(ctx context.Context, nodeID string, initD
 		case <-ctx.Done():
 			logrus.WithError(ctx.Err()).Errorf("node exit %s", nodeID)
 		}
+		vnCancel()
 		brc.runtimeInfoStore.DeleteVNode(nodeID)
 	}()
 }

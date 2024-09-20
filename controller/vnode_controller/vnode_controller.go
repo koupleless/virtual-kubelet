@@ -13,10 +13,8 @@ import (
 	errpkg "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
-	k8sErr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,28 +45,25 @@ type VNodeController struct {
 }
 
 func (brc *VNodeController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	<-brc.ready
-	pod := &corev1.Pod{}
-	err := brc.client.Get(ctx, types.NamespacedName{
-		Namespace: request.Namespace,
-		Name:      request.Name,
-	}, pod)
-	if err != nil {
-		if k8sErr.IsNotFound(err) {
-			log.G(ctx).WithField("vpodName", pod.Name).Info("vpod has been deleted")
-			return reconcile.Result{}, nil
-		}
-		log.G(ctx).WithField("vpodName", pod.Name).WithError(err).Info("fail to get vpod")
-		return reconcile.Result{
-			Requeue:      true,
-			RequeueAfter: time.Second * 5,
-		}, nil
-	}
-	if pod.DeletionTimestamp != nil {
-		brc.podDeleteHandler(ctx, pod)
-	} else {
-		brc.podAddOrUpdateHandler(ctx, pod)
-	}
+	// do nothing here
+	//<-brc.ready
+	//pod := &corev1.Pod{}
+	//err := brc.client.Get(ctx, types.NamespacedName{
+	//	Namespace: request.Namespace,
+	//	Name:      request.Name,
+	//}, pod)
+	//if err != nil {
+	//	if k8sErr.IsNotFound(err) {
+	//		log.G(ctx).WithField("vpodName", pod.Name).Info("vpod has been deleted")
+	//		return reconcile.Result{}, nil
+	//	}
+	//	log.G(ctx).WithField("vpodName", pod.Name).WithError(err).Info("fail to get vpod")
+	//	return reconcile.Result{
+	//		Requeue:      true,
+	//		RequeueAfter: time.Second * 5,
+	//	}, nil
+	//}
+
 	return reconcile.Result{}, nil
 }
 
@@ -114,7 +109,26 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 		return err
 	}
 
-	if err = c.Watch(source.Kind(mgr.GetCache(), &corev1.Pod{}, &handler.TypedEnqueueRequestForObject[*corev1.Pod]{}, &VPodPredicate{
+	podHandler := handler.TypedFuncs[*corev1.Pod, reconcile.Request]{
+		CreateFunc: func(ctx context.Context, e event.TypedCreateEvent[*corev1.Pod], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			<-brc.ready
+			brc.podCreateHandler(ctx, e.Object)
+		},
+		UpdateFunc: func(ctx context.Context, e event.TypedUpdateEvent[*corev1.Pod], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			<-brc.ready
+			brc.podUpdateHandler(ctx, e.ObjectOld, e.ObjectNew)
+		},
+		DeleteFunc: func(ctx context.Context, e event.TypedDeleteEvent[*corev1.Pod], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			<-brc.ready
+			brc.podDeleteHandler(ctx, e.Object)
+		},
+		GenericFunc: func(ctx context.Context, e event.TypedGenericEvent[*corev1.Pod], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			<-brc.ready
+			log.G(ctx).Warn("GenericFunc called")
+		},
+	}
+
+	if err = c.Watch(source.Kind(mgr.GetCache(), &corev1.Pod{}, &podHandler, &VPodPredicate{
 		VPodIdentity: brc.vPodIdentity,
 	})); err != nil {
 		log.G(ctx).WithError(err).Error("unable to watch Pods")
@@ -306,10 +320,10 @@ func (brc *VNodeController) onContainerStatusChanged(ctx context.Context, nodeID
 	vNode.SyncSingleContainerInfo(ctx, data)
 }
 
-func (brc *VNodeController) podAddOrUpdateHandler(ctx context.Context, podFromKubernetes *corev1.Pod) {
+func (brc *VNodeController) podCreateHandler(ctx context.Context, podFromKubernetes *corev1.Pod) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	ctx, span := trace.StartSpan(ctx, "AddOrUpdateFunc")
+	ctx, span := trace.StartSpan(ctx, "CreateFunc")
 	defer span.End()
 
 	nodeName := podFromKubernetes.Spec.NodeName
@@ -323,19 +337,38 @@ func (brc *VNodeController) podAddOrUpdateHandler(ctx context.Context, podFromKu
 	// At this point we know that something in .metadata or .spec has changed, so we must proceed to sync the pod.
 	key := utils.GetPodKey(podFromKubernetes)
 	ctx = span.WithField(ctx, "key", key)
-	obj, ok := vn.LoadPodFromController(key)
-	isNewPod := false
-	shouldEnqueue := false
-	if !ok {
-		vn.PodStore(key, podFromKubernetes)
-		isNewPod = true
-	} else {
-		vn.CheckAndUpdatePod(ctx, key, obj, podFromKubernetes)
-		oldPod, isPod := obj.(*corev1.Pod)
-		shouldEnqueue = !isPod || podShouldEnqueue(oldPod, podFromKubernetes)
+	vn.PodStore(key, podFromKubernetes)
+
+	vn.SyncPodsFromKubernetesEnqueue(ctx, key)
+}
+
+func (brc *VNodeController) podUpdateHandler(ctx context.Context, oldPodFromKubernetes, newPodFromKubernetes *corev1.Pod) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	ctx, span := trace.StartSpan(ctx, "UpdateFunc")
+	defer span.End()
+
+	nodeName := newPodFromKubernetes.Spec.NodeName
+	// check node name in local storage
+	vn := brc.runtimeInfoStore.GetVNodeByNodeName(nodeName)
+	if vn == nil {
+		// node not exist, invalid add req
+		return
 	}
 
-	if isNewPod || shouldEnqueue {
+	// At this point we know that something in .metadata or .spec has changed, so we must proceed to sync the pod.
+	key := utils.GetPodKey(newPodFromKubernetes)
+	ctx = span.WithField(ctx, "key", key)
+	obj, ok := vn.LoadPodFromController(key)
+	isNewPod := false
+	if !ok {
+		vn.PodStore(key, newPodFromKubernetes)
+		isNewPod = true
+	} else {
+		vn.CheckAndUpdatePod(ctx, key, obj, newPodFromKubernetes)
+	}
+
+	if isNewPod || podShouldEnqueue(oldPodFromKubernetes, newPodFromKubernetes) {
 		vn.SyncPodsFromKubernetesEnqueue(ctx, key)
 	}
 }

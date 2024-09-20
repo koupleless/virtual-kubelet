@@ -232,7 +232,7 @@ func (brc *VNodeController) discoverPreviousNodes(ctx context.Context, nodeList 
 				nodeHostname = addr.Address
 			}
 		}
-		brc.startVNode(ctx, utils.ExtractNodeIDFromNodeName(node.Name), model.NodeInfo{
+		brc.startVNode(utils.ExtractNodeIDFromNodeName(node.Name), model.NodeInfo{
 			Metadata: model.NodeMetadata{
 				Name:    node.Labels[model.LabelKeyOfVNodeName],
 				Status:  model.NodeStatusActivated,
@@ -282,9 +282,9 @@ func (brc *VNodeController) discoverPreviousPods(ctx context.Context, podList *c
 	}
 }
 
-func (brc *VNodeController) onNodeDiscovered(ctx context.Context, nodeID string, data model.NodeInfo, t tunnel.Tunnel) {
+func (brc *VNodeController) onNodeDiscovered(nodeID string, data model.NodeInfo, t tunnel.Tunnel) {
 	if data.Metadata.Status == model.NodeStatusActivated {
-		brc.startVNode(ctx, nodeID, data, t)
+		brc.startVNode(nodeID, data, t)
 	} else {
 		brc.shutdownVNode(nodeID)
 	}
@@ -300,24 +300,24 @@ func (brc *VNodeController) onNodeStatusDataArrived(nodeID string, data model.No
 	vNode.SyncNodeStatus(data)
 }
 
-func (brc *VNodeController) onQueryAllContainerStatusDataArrived(ctx context.Context, nodeID string, data []model.ContainerStatusData) {
+func (brc *VNodeController) onQueryAllContainerStatusDataArrived(nodeID string, data []model.ContainerStatusData) {
 	vNode := brc.runtimeInfoStore.GetVNode(nodeID)
 	if vNode == nil {
 		return
 	}
 	brc.runtimeInfoStore.NodeMsgArrived(nodeID)
 
-	vNode.SyncAllContainerInfo(ctx, data)
+	vNode.SyncAllContainerInfo(context.TODO(), data)
 }
 
-func (brc *VNodeController) onContainerStatusChanged(ctx context.Context, nodeID string, data model.ContainerStatusData) {
+func (brc *VNodeController) onContainerStatusChanged(nodeID string, data model.ContainerStatusData) {
 	vNode := brc.runtimeInfoStore.GetVNode(nodeID)
 	if vNode == nil {
 		return
 	}
 	brc.runtimeInfoStore.NodeMsgArrived(nodeID)
 
-	vNode.SyncSingleContainerInfo(ctx, data)
+	vNode.SyncSingleContainerInfo(context.TODO(), data)
 }
 
 func (brc *VNodeController) podCreateHandler(ctx context.Context, podFromKubernetes *corev1.Pod) {
@@ -411,7 +411,7 @@ func (brc *VNodeController) checkAndModifyOfflineNode(_ context.Context) {
 	}
 }
 
-func (brc *VNodeController) startVNode(ctx context.Context, nodeID string, initData model.NodeInfo, t tunnel.Tunnel) {
+func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t tunnel.Tunnel) {
 	var err error
 	// first apply for local lock
 	if initData.NetworkInfo.NodeIP == "" {
@@ -426,7 +426,7 @@ func (brc *VNodeController) startVNode(ctx context.Context, nodeID string, initD
 
 	defer func() {
 		if err != nil {
-			log.G(ctx).WithError(err).Errorf("failed to start node %s", nodeID)
+			logrus.WithError(err).Errorf("failed to start node %s", nodeID)
 		}
 	}()
 
@@ -459,7 +459,7 @@ func (brc *VNodeController) startVNode(ctx context.Context, nodeID string, initD
 		return
 	}
 
-	t.OnNodeStart(ctx, nodeID)
+	t.OnNodeStart(vnCtx, nodeID)
 
 	go utils.TimedTaskWithInterval(vnCtx, time.Second*9, func(ctx context.Context) {
 		err = t.FetchHealthData(ctx, nodeID)
@@ -481,9 +481,9 @@ func (brc *VNodeController) startVNode(ctx context.Context, nodeID string, initD
 	go func() {
 		select {
 		case <-vn.Done():
-			logrus.WithError(vn.Err()).Info("node exit %s", nodeID)
-		case <-ctx.Done():
-			logrus.WithError(ctx.Err()).Info("node exit %s", nodeID)
+			logrus.WithError(vn.Err()).Infof("node exit %s", nodeID)
+		case <-vnCtx.Done():
+			logrus.WithError(vnCtx.Err()).Infof("node exit %s", nodeID)
 		}
 		vnCancel()
 		brc.runtimeInfoStore.DeleteVNode(nodeID)

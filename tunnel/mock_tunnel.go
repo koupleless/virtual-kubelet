@@ -31,7 +31,7 @@ func (m *MockTunnel) PutNode(ctx context.Context, nodeID string, node Node) {
 	defer m.Unlock()
 
 	m.nodeStorage[nodeID] = node
-	m.OnNodeDiscovered(ctx, nodeID, node.NodeInfo, m)
+	m.OnNodeDiscovered(nodeID, node.NodeInfo, m)
 }
 
 func (m *MockTunnel) DeleteNode(nodeID string) {
@@ -51,7 +51,7 @@ func (m *MockTunnel) PutContainer(ctx context.Context, nodeID, containerKey stri
 	}
 	containerMap[containerKey] = data
 	m.containerStorage[nodeID] = containerMap
-	m.OnQueryAllContainerStatusDataArrived(ctx, nodeID, translateContainerMap2ContainerList(containerMap))
+	m.OnQueryAllContainerStatusDataArrived(nodeID, translateContainerMap2ContainerList(containerMap))
 }
 
 func (m *MockTunnel) Key() string {
@@ -98,7 +98,7 @@ func (m *MockTunnel) FetchHealthData(ctx context.Context, nodeID string) error {
 func (m *MockTunnel) QueryAllContainerStatusData(ctx context.Context, nodeID string) error {
 	_, has := m.nodeStorage[nodeID]
 	if has {
-		m.OnQueryAllContainerStatusDataArrived(ctx, nodeID, translateContainerMap2ContainerList(m.containerStorage[nodeID]))
+		m.OnQueryAllContainerStatusDataArrived(nodeID, translateContainerMap2ContainerList(m.containerStorage[nodeID]))
 	}
 	return nil
 }
@@ -123,7 +123,7 @@ func (m *MockTunnel) StartContainer(ctx context.Context, nodeID, podKey string, 
 	containerMap[key] = data
 
 	m.containerStorage[nodeID] = containerMap
-	m.OnSingleContainerStatusChanged(ctx, nodeID, data)
+	m.OnSingleContainerStatusChanged(nodeID, data)
 	return nil
 }
 
@@ -135,7 +135,7 @@ func (m *MockTunnel) ShutdownContainer(ctx context.Context, nodeID, podKey strin
 	data := containerMap[key]
 	delete(containerMap, key)
 	m.containerStorage[nodeID] = containerMap
-	m.OnSingleContainerStatusChanged(ctx, nodeID, data)
+	m.OnSingleContainerStatusChanged(nodeID, data)
 	return nil
 }
 

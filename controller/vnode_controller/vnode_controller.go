@@ -109,6 +109,8 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 		return err
 	}
 
+	vpodRequirement, _ := labels.NewRequirement(model.LabelKeyOfComponent, selection.In, []string{brc.vPodIdentity})
+
 	podHandler := handler.TypedFuncs[*corev1.Pod, reconcile.Request]{
 		CreateFunc: func(ctx context.Context, e event.TypedCreateEvent[*corev1.Pod], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 			<-brc.ready
@@ -129,7 +131,7 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 	}
 
 	if err = c.Watch(source.Kind(mgr.GetCache(), &corev1.Pod{}, &podHandler, &VPodPredicate{
-		VPodIdentity: brc.vPodIdentity,
+		VPodLabelSelector: labels.NewSelector().Add(*vpodRequirement),
 	})); err != nil {
 		log.G(ctx).WithError(err).Error("unable to watch Pods")
 		return err
@@ -150,7 +152,12 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 		},
 	}
 
-	if err = c.Watch(source.Kind(mgr.GetCache(), &corev1.Node{}, &nodeHandler, &VNodePredicate{})); err != nil {
+	vnodeRequirement, _ := labels.NewRequirement(model.LabelKeyOfComponent, selection.In, []string{model.ComponentVNode})
+	envRequirement, _ := labels.NewRequirement(model.LabelKeyOfEnv, selection.In, []string{brc.env})
+
+	if err = c.Watch(source.Kind(mgr.GetCache(), &corev1.Node{}, &nodeHandler, &VNodePredicate{
+		VNodeLabelSelector: labels.NewSelector().Add(*vnodeRequirement, *envRequirement),
+	})); err != nil {
 		log.G(ctx).WithError(err).Error("unable to watch VNodes")
 		return err
 	}

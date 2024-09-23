@@ -325,7 +325,7 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 
 	// only start new containers and changed containers
 	startNewContainer := func() {
-		for _, container := range pod.Spec.Containers {
+		for _, container := range newPod.Spec.Containers {
 			_, has := newContainerMap[container.Name]
 			if has {
 				containerKey := utils.GetContainerKey(podKey, container.Name)

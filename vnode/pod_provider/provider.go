@@ -58,6 +58,14 @@ func (b *VPodProvider) NotifyPods(_ context.Context, cb func(*corev1.Pod)) {
 	b.notify = cb
 }
 
+func retryFunc(ctx context.Context, key string, timesTried int, originallyAdded time.Time, err error) (*time.Duration, error) {
+	duration := time.Millisecond * 100
+	if timesTried < 3 {
+		return &duration, nil
+	}
+	return nil, nil
+}
+
 func NewVPodProvider(namespace, localIP, nodeID string, client client.Client, t tunnel.Tunnel) *VPodProvider {
 	provider := &VPodProvider{
 		Namespace:        namespace,
@@ -72,20 +80,14 @@ func NewVPodProvider(namespace, localIP, nodeID string, client client.Client, t 
 		workqueue.DefaultControllerRateLimiter(),
 		"containerStartOperationQueue",
 		provider.handleStartOperation,
-		func(ctx context.Context, key string, timesTried int, originallyAdded time.Time, err error) (*time.Duration, error) {
-			duration := time.Millisecond * 100
-			return &duration, nil
-		},
+		retryFunc,
 	)
 
 	provider.shutdownOperationQueue = queue.New(
 		workqueue.DefaultControllerRateLimiter(),
 		"containerShutdownOperationQueue",
 		provider.handleShutdownOperation,
-		func(ctx context.Context, key string, timesTried int, originallyAdded time.Time, err error) (*time.Duration, error) {
-			duration := time.Millisecond * 100
-			return &duration, nil
-		},
+		retryFunc,
 	)
 
 	return provider

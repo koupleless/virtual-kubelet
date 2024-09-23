@@ -325,10 +325,13 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 
 	// only start new containers and changed containers
 	startNewContainer := func() {
-		for _, container := range newContainerMap {
-			containerKey := utils.GetContainerKey(podKey, container.Name)
-			b.startOperationQueue.Enqueue(ctx, containerKey)
-			logger.WithField("podKey", podKey).WithField("containerName", container.Name).Info("ItemEnqueued")
+		for _, container := range pod.Spec.Containers {
+			_, has := newContainerMap[container.Name]
+			if has {
+				containerKey := utils.GetContainerKey(podKey, container.Name)
+				b.startOperationQueue.Enqueue(ctx, containerKey)
+				logger.WithField("podKey", podKey).WithField("containerName", container.Name).Info("ItemEnqueued")
+			}
 		}
 	}
 	go tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodUpdate, pod.Labels, model.CodeContainerStartTimeout, func() bool {

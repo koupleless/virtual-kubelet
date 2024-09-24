@@ -21,7 +21,7 @@ import (
 type VNode struct {
 	nodeID string
 	client client.Client
-	tunnel tunnel.Tunnel
+	tunnel.Tunnel
 
 	nodeProvider *node_provider.VNodeProvider
 	podProvider  *pod_provider.VPodProvider
@@ -65,7 +65,7 @@ func (n *VNode) Run(ctx context.Context) {
 				GracePeriodSeconds: ptr.To[int64](0),
 			})
 		}
-		n.tunnel.OnNodeStop(ctx, n.nodeID)
+		n.Tunnel.OnNodeStop(ctx, n.nodeID)
 	}
 }
 
@@ -95,15 +95,27 @@ func (n *VNode) WaitReady(timeout time.Duration) error {
 }
 
 func (n *VNode) SyncNodeStatus(data model.NodeStatusData) {
-	go n.nodeProvider.Notify(data)
+	if n.nodeProvider != nil {
+		go n.nodeProvider.Notify(data)
+	}
 }
 
-func (n *VNode) SyncAllContainerInfo(infos []model.ContainerStatusData) {
-	go n.podProvider.SyncContainerInfo(context.Background(), infos)
+func (n *VNode) SyncAllContainerInfo(ctx context.Context, infos []model.ContainerStatusData) {
+	if n.podProvider != nil {
+		go n.podProvider.SyncContainerInfo(ctx, infos)
+	}
 }
 
-func (n *VNode) SyncSingleContainerInfo(info model.ContainerStatusData) {
-	go n.podProvider.SyncSingleContainerInfo(context.Background(), info)
+func (n *VNode) SyncSingleContainerInfo(ctx context.Context, info model.ContainerStatusData) {
+	if n.podProvider != nil {
+		go n.podProvider.SyncSingleContainerInfo(ctx, info)
+	}
+}
+
+func (n *VNode) InitContainerInfo(info model.ContainerStatusData) {
+	if n.podProvider != nil {
+		n.podProvider.InitContainerInfo(info)
+	}
 }
 
 // Done returns a channel that will be closed when the vnode has exited.
@@ -126,7 +138,9 @@ func (n *VNode) Shutdown() {
 }
 
 func (n *VNode) PodStore(key string, pod *corev1.Pod) {
-	n.node.PodController().StorePod(key, pod)
+	if n.node != nil {
+		n.node.PodController().StorePod(key, pod)
+	}
 }
 
 func (n *VNode) LoadPodFromController(key string) (any, bool) {
@@ -134,15 +148,21 @@ func (n *VNode) LoadPodFromController(key string) (any, bool) {
 }
 
 func (n *VNode) CheckAndUpdatePod(ctx context.Context, key string, obj interface{}, pod *corev1.Pod) {
-	n.node.PodController().CheckAndUpdatePod(ctx, key, obj, pod)
+	if n.node != nil {
+		n.node.PodController().CheckAndUpdatePod(ctx, key, obj, pod)
+	}
 }
 
 func (n *VNode) SyncPodsFromKubernetesEnqueue(ctx context.Context, key string) {
-	n.node.PodController().SyncPodsFromKubernetesEnqueue(ctx, key)
+	if n.node != nil {
+		n.node.PodController().SyncPodsFromKubernetesEnqueue(ctx, key)
+	}
 }
 
 func (n *VNode) DeletePodsFromKubernetesForget(ctx context.Context, key string) {
-	n.node.PodController().DeletePodsFromKubernetesForget(ctx, key)
+	if n.node != nil {
+		n.node.PodController().DeletePodsFromKubernetesForget(ctx, key)
+	}
 }
 
 func (n *VNode) DeletePod(key string) {
@@ -198,7 +218,7 @@ func NewVNode(config *model.BuildVNodeConfig, t tunnel.Tunnel) (kn *VNode, err e
 		client:       config.Client,
 		nodeProvider: nodeProvider,
 		podProvider:  podProvider,
-		tunnel:       t,
+		Tunnel:       t,
 		node:         cm,
 		done:         make(chan struct{}),
 		exit:         make(chan struct{}),

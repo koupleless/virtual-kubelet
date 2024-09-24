@@ -27,7 +27,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 	Context("node online and deactive finally", func() {
 		It("node should become a ready vnode eventually", func() {
 			nodeInfo.NodeInfo.Metadata.Status = model.NodeStatusActivated
-			tl.PutNode(nodeID, nodeInfo)
+			tl.PutNode(ctx, nodeID, nodeInfo)
 
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
@@ -45,7 +45,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 		})
 
 		It("node should not start again with the same name", func() {
-			tl.PutNode(nodeID, nodeInfo)
+			tl.PutNode(ctx, nodeID, nodeInfo)
 		})
 
 		It("node should contains custom information after status sync", func() {
@@ -72,7 +72,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 
 		It("node offline with deactive message and finally exit", func() {
 			nodeInfo.NodeInfo.Metadata.Status = model.NodeStatusDeactivated
-			tl.PutNode(nodeID, nodeInfo)
+			tl.PutNode(ctx, nodeID, nodeInfo)
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name: name,
@@ -85,7 +85,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 	Context("node online and timeout finally", func() {
 		It("node should become a ready vnode eventually", func() {
 			nodeInfo.Metadata.Status = model.NodeStatusActivated
-			tl.PutNode(nodeID, nodeInfo)
+			tl.PutNode(ctx, nodeID, nodeInfo)
 
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
@@ -121,7 +121,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 
 		It("node offline with deactive message and finally exit", func() {
 			nodeInfo.NodeInfo.Metadata.Status = model.NodeStatusDeactivated
-			tl.PutNode(nodeID, nodeInfo)
+			tl.PutNode(ctx, nodeID, nodeInfo)
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name: name,

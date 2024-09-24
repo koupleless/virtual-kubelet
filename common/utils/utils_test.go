@@ -155,6 +155,7 @@ func TestFormatNodeName(t *testing.T) {
 
 func TestExtractNodeIDFromNodeName(t *testing.T) {
 	assert.Equal(t, "suite", ExtractNodeIDFromNodeName("vnode.suite"))
+	assert.Equal(t, "", ExtractNodeIDFromNodeName("suite"))
 }
 
 func TestTranslateContainerStatusFromTunnelToContainerStatus_NoData(t *testing.T) {

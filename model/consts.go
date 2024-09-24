@@ -72,9 +72,14 @@ const (
 type ContainerState string
 
 const (
-	ContainerStateActivated   ContainerState = "ACTIVATED"
-	ContainerStateResolved    ContainerState = "RESOLVED"
+	// ContainerStateActivated means container ready
+	ContainerStateActivated ContainerState = "ACTIVATED"
+	// ContainerStateResolved means container starting
+	ContainerStateResolved ContainerState = "RESOLVED"
+	// ContainerStateDeactivated means container down or broken
 	ContainerStateDeactivated ContainerState = "DEACTIVATED"
+	// ContainerStateWaiting means container is waiting for start
+	ContainerStateWaiting ContainerState = "WAITING"
 )
 
 // PodKeyAll present container status will share to all pods

@@ -28,7 +28,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 	Context("pod publish and status sync", func() {
 		It("node should be ready", func() {
 			nodeInfo.NodeInfo.Metadata.Status = model.NodeStatusActivated
-			tl.PutNode(nodeID, nodeInfo)
+			tl.PutNode(ctx, nodeID, nodeInfo)
 			name := utils.FormatNodeName(nodeID)
 
 			Eventually(func() bool {
@@ -64,7 +64,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 				podKey := utils.GetPodKey(&basicPod)
 				key := tl.GetContainerUniqueKey(podKey, &container)
 				time.Sleep(time.Second)
-				tl.PutContainer(nodeID, key, model.ContainerStatusData{
+				tl.PutContainer(ctx, nodeID, key, model.ContainerStatusData{
 					Key:        key,
 					Name:       container.Name,
 					PodKey:     podKey,
@@ -86,7 +86,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 			container := basicPod.Spec.Containers[0]
 			podKey := utils.GetPodKey(&basicPod)
 			key := tl.GetContainerUniqueKey(podKey, &container)
-			tl.PutContainer(nodeID, key, model.ContainerStatusData{
+			tl.PutContainer(ctx, nodeID, key, model.ContainerStatusData{
 				Key:        key,
 				Name:       container.Name,
 				PodKey:     podKey,
@@ -100,6 +100,50 @@ var _ = Describe("VPod Lifecycle Test", func() {
 					Name:      basicPod.Name,
 				}, podFromKubernetes)
 				return err == nil && podFromKubernetes.Status.Phase == v1.PodRunning && podFromKubernetes.Status.Conditions[0].Status == v1.ConditionFalse
+			}, time.Second*20, time.Second).Should(BeTrue())
+		})
+
+		It("when this container's status changes to activated, but wrong pod key, pod should not change status", func() {
+			container := basicPod.Spec.Containers[0]
+			podKey := utils.GetPodKey(&basicPod) + "-wrong"
+			key := tl.GetContainerUniqueKey(podKey, &container)
+			tl.PutContainer(ctx, nodeID, key, model.ContainerStatusData{
+				Key:        key,
+				Name:       container.Name,
+				PodKey:     podKey,
+				State:      model.ContainerStateActivated,
+				ChangeTime: time.Now(),
+			})
+			time.Sleep(time.Second)
+			Eventually(func() bool {
+				podFromKubernetes := &v1.Pod{}
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Namespace: basicPod.Namespace,
+					Name:      basicPod.Name,
+				}, podFromKubernetes)
+				return err == nil && podFromKubernetes.Status.Phase == v1.PodRunning && podFromKubernetes.Status.Conditions[0].Status == v1.ConditionFalse
+			}, time.Second*20, time.Second).Should(BeTrue())
+		})
+
+		It("when this container's status changes to activated, with pod key all , pod should change status", func() {
+			container := basicPod.Spec.Containers[0]
+			podKey := utils.GetPodKey(&basicPod)
+			key := tl.GetContainerUniqueKey(podKey, &container)
+			tl.PutContainer(ctx, nodeID, key, model.ContainerStatusData{
+				Key:        key,
+				Name:       container.Name,
+				PodKey:     model.PodKeyAll,
+				State:      model.ContainerStateActivated,
+				ChangeTime: time.Now(),
+			})
+			time.Sleep(time.Second)
+			Eventually(func() bool {
+				podFromKubernetes := &v1.Pod{}
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Namespace: basicPod.Namespace,
+					Name:      basicPod.Name,
+				}, podFromKubernetes)
+				return err == nil && podFromKubernetes.Status.Phase == v1.PodRunning && podFromKubernetes.Status.Conditions[0].Status == v1.ConditionTrue
 			}, time.Second*20, time.Second).Should(BeTrue())
 		})
 
@@ -138,7 +182,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 
 		It("node offline", func() {
 			nodeInfo.Metadata.Status = model.NodeStatusDeactivated
-			tl.PutNode(nodeID, nodeInfo)
+			tl.PutNode(ctx, nodeID, nodeInfo)
 			Eventually(func() bool {
 				node := &v1.Node{}
 				err := k8sClient.Get(ctx, types.NamespacedName{

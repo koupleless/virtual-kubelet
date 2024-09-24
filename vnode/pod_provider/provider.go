@@ -29,9 +29,7 @@ import (
 	"time"
 
 	"github.com/koupleless/virtual-kubelet/common/log"
-	"github.com/koupleless/virtual-kubelet/common/queue"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/util/workqueue"
 )
 
 var _ nodeutil.Provider = &VPodProvider{}
@@ -45,9 +43,6 @@ type VPodProvider struct {
 	runtimeInfoStore *RuntimeInfoStore
 
 	tunnel tunnel.Tunnel
-
-	startOperationQueue    *queue.Queue
-	shutdownOperationQueue *queue.Queue
 
 	port int
 
@@ -68,32 +63,10 @@ func NewVPodProvider(namespace, localIP, nodeID string, client client.Client, t 
 		runtimeInfoStore: NewRuntimeInfoStore(),
 	}
 
-	provider.startOperationQueue = queue.New(
-		workqueue.DefaultControllerRateLimiter(),
-		"containerStartOperationQueue",
-		provider.handleStartOperation,
-		func(ctx context.Context, key string, timesTried int, originallyAdded time.Time, err error) (*time.Duration, error) {
-			duration := time.Millisecond * 100
-			return &duration, nil
-		},
-	)
-
-	provider.shutdownOperationQueue = queue.New(
-		workqueue.DefaultControllerRateLimiter(),
-		"containerShutdownOperationQueue",
-		provider.handleShutdownOperation,
-		func(ctx context.Context, key string, timesTried int, originallyAdded time.Time, err error) (*time.Duration, error) {
-			duration := time.Millisecond * 100
-			return &duration, nil
-		},
-	)
-
 	return provider
 }
 
 func (b *VPodProvider) Run(ctx context.Context) {
-	go b.startOperationQueue.Run(ctx, 1)
-	go b.shutdownOperationQueue.Run(ctx, 1)
 	go utils.TimedTaskWithInterval(ctx, time.Minute, b.syncAllPodStatus)
 }
 
@@ -115,6 +88,10 @@ func (b *VPodProvider) syncRelatedPodStatus(ctx context.Context, podKey, contain
 	logger := log.G(ctx)
 	if podKey != model.PodKeyAll {
 		pod := b.runtimeInfoStore.GetPodByKey(podKey)
+		if pod == nil {
+			logger.Error("update non-exist pod status")
+			return
+		}
 		if err := b.updatePodStatusToKubernetes(ctx, pod); err != nil {
 			logger.WithError(err).Error("update pod status error")
 		}
@@ -160,6 +137,10 @@ func (b *VPodProvider) SyncSingleContainerInfo(ctx context.Context, info model.C
 	b.syncRelatedPodStatus(ctx, info.PodKey, info.Name)
 }
 
+func (b *VPodProvider) InitContainerInfo(info model.ContainerStatusData) {
+	b.runtimeInfoStore.PutContainerInfo(info)
+}
+
 func (b *VPodProvider) queryAllContainerStatus(_ context.Context) []*model.ContainerStatusData {
 	return b.runtimeInfoStore.GetLatestContainerInfos()
 }
@@ -177,76 +158,52 @@ func (b *VPodProvider) stopContainer(ctx context.Context, podKey string, contain
 	return b.tunnel.ShutdownContainer(ctx, b.nodeID, podKey, container)
 }
 
-func (b *VPodProvider) handleStartOperation(ctx context.Context, containerKey string) error {
-	logger := log.G(ctx).WithField("containerKey", containerKey)
+func (b *VPodProvider) handleContainerStart(ctx context.Context, pod *corev1.Pod, containers []corev1.Container) {
+	podKey := utils.GetPodKey(pod)
+
+	logger := log.G(ctx).WithField("podKey", podKey)
 	logger.Info("HandleContainerStartOperation")
 
-	podKey := utils.GetPodKeyFromContainerKey(containerKey)
-	podLocal := b.runtimeInfoStore.GetPodByKey(podKey)
-	var labelMap map[string]string
-	if podLocal != nil {
-		labelMap = podLocal.Labels
-	}
+	labelMap := pod.Labels
 	if labelMap == nil {
 		labelMap = make(map[string]string)
 	}
 
-	return tracker.G().FuncTrack(labelMap[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventContainerStart, labelMap, func() (error, model.ErrorCode) {
-		container := b.runtimeInfoStore.GetContainer(containerKey)
-		if container == nil {
-			// this should never happen, no retry here
+	for _, container := range containers {
+		err := tracker.G().FuncTrack(labelMap[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventContainerStart, labelMap, func() (error, model.ErrorCode) {
+			if err := b.startContainer(ctx, podKey, &container); err != nil {
+				return err, model.CodeContainerStartFailed
+			}
 			return nil, model.CodeSuccess
+		})
+		if err != nil {
+			logger.WithError(err).WithField("containerKey", utils.GetContainerKey(podKey, container.Name)).Error("ContainerStartFailed")
 		}
-		containerStatus := b.queryContainerStatus(ctx, podKey, container)
-
-		if containerStatus != nil && containerStatus.State == model.ContainerStateActivated {
-			logger.Info("ContainerAlreadyActivated")
-			return nil, model.CodeSuccess
-		}
-
-		if containerStatus != nil && containerStatus.State == model.ContainerStateResolved {
-			// process concurrent install operation
-			logger.Info("ContainerStarting")
-			return nil, model.CodeSuccess
-		}
-
-		if containerStatus != nil && containerStatus.State == model.ContainerStateDeactivated {
-			logger.Info("ContainerDeactivated, restart")
-		}
-
-		if err := b.startContainer(ctx, podKey, container); err != nil {
-			return err, model.CodeContainerStartFailed
-		}
-		return nil, model.CodeSuccess
-	})
+	}
 }
 
-func (b *VPodProvider) handleShutdownOperation(ctx context.Context, containerKey string) error {
-	logger := log.G(ctx).WithField("containerKey", containerKey)
-	logger.Info("HandleStopContainerOperationStarted")
+func (b *VPodProvider) handleContainerShutdown(ctx context.Context, pod *corev1.Pod, containers []corev1.Container) {
+	podKey := utils.GetPodKey(pod)
 
-	podKey := utils.GetPodKeyFromContainerKey(containerKey)
-	podLocal := b.runtimeInfoStore.GetPodByKey(podKey)
-	var labelMap map[string]string
-	if podLocal != nil {
-		labelMap = podLocal.Labels
-	}
+	logger := log.G(ctx).WithField("podKey", podKey)
+	logger.Info("HandleContainerStartOperation")
+
+	labelMap := pod.Labels
 	if labelMap == nil {
 		labelMap = make(map[string]string)
 	}
 
-	return tracker.G().FuncTrack(labelMap[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventContainerShutdown, labelMap, func() (error, model.ErrorCode) {
-		container := b.runtimeInfoStore.GetContainer(containerKey)
-
-		if container != nil {
-			defer b.runtimeInfoStore.DeleteContainer(containerKey)
-			if err := b.stopContainer(ctx, podKey, container); err != nil {
-				logger.WithError(err).Error("StopContainerFailed")
-				return err, model.CodeContainerStopFailed
+	for _, container := range containers {
+		err := tracker.G().FuncTrack(labelMap[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventContainerShutdown, labelMap, func() (error, model.ErrorCode) {
+			if err := b.stopContainer(ctx, podKey, &container); err != nil {
+				return err, model.CodeContainerStartFailed
 			}
+			return nil, model.CodeSuccess
+		})
+		if err != nil {
+			logger.WithError(err).WithField("containerKey", utils.GetContainerKey(podKey, container.Name)).Error("ContainerShutdownFailed")
 		}
-		return nil, model.CodeSuccess
-	})
+	}
 }
 
 func (b *VPodProvider) CreatePod(ctx context.Context, pod *corev1.Pod) error {
@@ -256,12 +213,7 @@ func (b *VPodProvider) CreatePod(ctx context.Context, pod *corev1.Pod) error {
 	// update the baseline info so the async handle logic can see them first
 	podCopy := pod.DeepCopy()
 	b.runtimeInfoStore.PutPod(podCopy)
-	podKey := utils.GetPodKey(podCopy)
-	for _, container := range podCopy.Spec.Containers {
-		containerKey := utils.GetContainerKey(podKey, container.Name)
-		b.startOperationQueue.Enqueue(ctx, containerKey)
-		logger.WithField("podKey", podKey).WithField("containerName", container.Name).Info("ItemEnqueued")
-	}
+	go b.handleContainerStart(ctx, podCopy, podCopy.Spec.Containers)
 
 	return nil
 }
@@ -286,8 +238,8 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 	}
 	stopContainers := make([]corev1.Container, 0)
 	if oldPod != nil {
-		oldPopKey := utils.GetPodKey(oldPod)
 		// stop first
+		containersShouldStop := make([]corev1.Container, 0)
 		for _, container := range oldPod.Spec.Containers {
 			// check need to stop
 			needStop := true
@@ -297,31 +249,34 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 			}
 			if needStop {
 				// sending to stop
-				containerKey := utils.GetContainerKey(oldPopKey, container.Name)
-				b.shutdownOperationQueue.Enqueue(ctx, containerKey)
-				stopContainers = append(stopContainers, container)
-				logger.WithField("podKey", podKey).WithField("containerName", container.Name).Info("ItemEnqueued")
+				containersShouldStop = append(containersShouldStop, container)
 			} else {
 				// delete from new containers
 				delete(newContainerMap, container.Name)
 			}
 		}
+		go b.handleContainerShutdown(ctx, oldPod, containersShouldStop)
 	}
 
 	b.runtimeInfoStore.PutPod(newPod.DeepCopy())
 
 	// only start new containers and changed containers
 	startNewContainer := func() {
-		for _, container := range newContainerMap {
-			containerKey := utils.GetContainerKey(podKey, container.Name)
-			b.startOperationQueue.Enqueue(ctx, containerKey)
-			logger.WithField("podKey", podKey).WithField("containerName", container.Name).Info("ItemEnqueued")
+		containersShouldStart := make([]corev1.Container, 0)
+
+		for _, container := range newPod.Spec.Containers {
+			_, has := newContainerMap[container.Name]
+			if has {
+				containersShouldStart = append(containersShouldStart, container)
+			}
 		}
+		go b.handleContainerStart(ctx, newPod, containersShouldStart)
 	}
 	go tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodUpdate, pod.Labels, model.CodeContainerStartTimeout, func() bool {
 		for _, oldContainer := range stopContainers {
 			oldPodKey := utils.GetPodKey(oldPod)
-			if b.queryContainerStatus(ctx, oldPodKey, &oldContainer) != nil {
+			status := b.queryContainerStatus(ctx, oldPodKey, &oldContainer)
+			if status != nil && status.State != model.ContainerStateDeactivated {
 				return false
 			}
 		}
@@ -340,17 +295,8 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 	if localPod == nil {
 		localPod = pod.DeepCopy()
 	}
-	for _, container := range localPod.Spec.Containers {
-		// sending to delete
-		containerKey := utils.GetContainerKey(podKey, container.Name)
-		b.shutdownOperationQueue.Enqueue(ctx, containerKey)
-		logger.WithField("podKey", podKey).WithField("containerName", container.Name).Info("ItemEnqueued")
-	}
 
-	if pod.DeletionGracePeriodSeconds == nil || *pod.DeletionGracePeriodSeconds == 0 {
-		// force delete, just return
-		return nil
-	}
+	go b.handleContainerShutdown(ctx, localPod, localPod.Spec.Containers)
 
 	// check all containers shutdown successfully
 	deletePod := func() {
@@ -364,10 +310,16 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 		}
 	}
 
+	if pod.DeletionGracePeriodSeconds == nil || *pod.DeletionGracePeriodSeconds == 0 {
+		// force delete, just return, skip check and delete
+		return nil
+	}
+
 	go tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodDelete, pod.Labels, model.CodeContainerStartTimeout, func() bool {
 		for _, oldContainer := range localPod.Spec.Containers {
 			oldPodKey := utils.GetPodKey(localPod)
-			if b.queryContainerStatus(ctx, oldPodKey, &oldContainer) != nil {
+			status := b.queryContainerStatus(ctx, oldPodKey, &oldContainer)
+			if status != nil && status.State != model.ContainerStateDeactivated {
 				return false
 			}
 		}

@@ -88,27 +88,6 @@ func TestRuntimeInfoStore_GetContainer(t *testing.T) {
 	assert.NotNil(t, c)
 }
 
-func TestRuntimeInfoStore_DeleteContainer(t *testing.T) {
-	store := NewRuntimeInfoStore()
-	store.PutPod(&corev1.Pod{
-		ObjectMeta: v1.ObjectMeta{
-			Name:      "pod1",
-			Namespace: "ns1",
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:  "container1",
-					Image: "image1",
-				},
-			},
-		},
-	})
-	store.DeleteContainer("ns1/pod1/container1")
-	c := store.GetContainer("ns1/pod1/container1")
-	assert.Nil(t, c)
-}
-
 func TestRuntimeInfoStore_GetPodByKey(t *testing.T) {
 	store := NewRuntimeInfoStore()
 	store.PutPod(&corev1.Pod{

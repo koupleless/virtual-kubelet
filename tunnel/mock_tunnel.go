@@ -26,7 +26,7 @@ type MockTunnel struct {
 	nodeStorage      map[string]Node
 }
 
-func (m *MockTunnel) PutNode(nodeID string, node Node) {
+func (m *MockTunnel) PutNode(ctx context.Context, nodeID string, node Node) {
 	m.Lock()
 	defer m.Unlock()
 
@@ -41,7 +41,7 @@ func (m *MockTunnel) DeleteNode(nodeID string) {
 	delete(m.nodeStorage, nodeID)
 }
 
-func (m *MockTunnel) PutContainer(nodeID, containerKey string, data model.ContainerStatusData) {
+func (m *MockTunnel) PutContainer(ctx context.Context, nodeID, containerKey string, data model.ContainerStatusData) {
 	m.Lock()
 	defer m.Unlock()
 
@@ -51,7 +51,7 @@ func (m *MockTunnel) PutContainer(nodeID, containerKey string, data model.Contai
 	}
 	containerMap[containerKey] = data
 	m.containerStorage[nodeID] = containerMap
-	m.OnQueryAllContainerStatusDataArrived(nodeID, translateContainerMap2ContainerList(containerMap))
+	m.OnSingleContainerStatusChanged(nodeID, data)
 }
 
 func (m *MockTunnel) Key() string {

@@ -51,7 +51,7 @@ func (m *MockTunnel) PutContainer(ctx context.Context, nodeID, containerKey stri
 	}
 	containerMap[containerKey] = data
 	m.containerStorage[nodeID] = containerMap
-	m.OnQueryAllContainerStatusDataArrived(nodeID, translateContainerMap2ContainerList(containerMap))
+	m.OnSingleContainerStatusChanged(nodeID, data)
 }
 
 func (m *MockTunnel) Key() string {

@@ -105,12 +105,12 @@ var _ = Describe("VPod Lifecycle Test", func() {
 
 		It("when this container's status changes to activated, but wrong pod key, pod should not change status", func() {
 			container := basicPod.Spec.Containers[0]
-			podKey := utils.GetPodKey(&basicPod)
+			podKey := utils.GetPodKey(&basicPod) + "-wrong"
 			key := tl.GetContainerUniqueKey(podKey, &container)
 			tl.PutContainer(ctx, nodeID, key, model.ContainerStatusData{
 				Key:        key,
 				Name:       container.Name,
-				PodKey:     podKey + "-wrong",
+				PodKey:     podKey,
 				State:      model.ContainerStateActivated,
 				ChangeTime: time.Now(),
 			})

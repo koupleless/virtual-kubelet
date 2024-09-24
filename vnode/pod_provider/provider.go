@@ -310,12 +310,12 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 		}
 	}
 
-	go tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodDelete, pod.Labels, model.CodeContainerStartTimeout, func() bool {
-		if pod.DeletionGracePeriodSeconds == nil || *pod.DeletionGracePeriodSeconds == 0 {
-			// force delete, just return
-			return true
-		}
+	if pod.DeletionGracePeriodSeconds == nil || *pod.DeletionGracePeriodSeconds == 0 {
+		// force delete, just return, skip check and delete
+		return nil
+	}
 
+	go tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodDelete, pod.Labels, model.CodeContainerStartTimeout, func() bool {
 		for _, oldContainer := range localPod.Spec.Containers {
 			oldPodKey := utils.GetPodKey(localPod)
 			status := b.queryContainerStatus(ctx, oldPodKey, &oldContainer)

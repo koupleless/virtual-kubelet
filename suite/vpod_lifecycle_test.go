@@ -103,6 +103,50 @@ var _ = Describe("VPod Lifecycle Test", func() {
 			}, time.Second*20, time.Second).Should(BeTrue())
 		})
 
+		It("when this container's status changes to activated, but wrong pod key, pod should not change status", func() {
+			container := basicPod.Spec.Containers[0]
+			podKey := utils.GetPodKey(&basicPod)
+			key := tl.GetContainerUniqueKey(podKey, &container)
+			tl.PutContainer(ctx, nodeID, key, model.ContainerStatusData{
+				Key:        key,
+				Name:       container.Name,
+				PodKey:     podKey + "-wrong",
+				State:      model.ContainerStateActivated,
+				ChangeTime: time.Now(),
+			})
+			time.Sleep(time.Second)
+			Eventually(func() bool {
+				podFromKubernetes := &v1.Pod{}
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Namespace: basicPod.Namespace,
+					Name:      basicPod.Name,
+				}, podFromKubernetes)
+				return err == nil && podFromKubernetes.Status.Phase == v1.PodRunning && podFromKubernetes.Status.Conditions[0].Status == v1.ConditionFalse
+			}, time.Second*20, time.Second).Should(BeTrue())
+		})
+
+		It("when this container's status changes to activated, with pod key all , pod should change status", func() {
+			container := basicPod.Spec.Containers[0]
+			podKey := utils.GetPodKey(&basicPod)
+			key := tl.GetContainerUniqueKey(podKey, &container)
+			tl.PutContainer(ctx, nodeID, key, model.ContainerStatusData{
+				Key:        key,
+				Name:       container.Name,
+				PodKey:     model.PodKeyAll,
+				State:      model.ContainerStateActivated,
+				ChangeTime: time.Now(),
+			})
+			time.Sleep(time.Second)
+			Eventually(func() bool {
+				podFromKubernetes := &v1.Pod{}
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Namespace: basicPod.Namespace,
+					Name:      basicPod.Name,
+				}, podFromKubernetes)
+				return err == nil && podFromKubernetes.Status.Phase == v1.PodRunning && podFromKubernetes.Status.Conditions[0].Status == v1.ConditionTrue
+			}, time.Second*20, time.Second).Should(BeTrue())
+		})
+
 		It("update pod containers, pod should be pending", func() {
 			err := k8sClient.Get(ctx, types.NamespacedName{
 				Namespace: basicPod.Namespace,

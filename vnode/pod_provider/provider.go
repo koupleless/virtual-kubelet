@@ -16,6 +16,7 @@ package pod_provider
 
 import (
 	"context"
+	"errors"
 	"github.com/google/go-cmp/cmp"
 	"github.com/koupleless/virtual-kubelet/common/tracker"
 	"github.com/koupleless/virtual-kubelet/common/utils"
@@ -170,8 +171,18 @@ func (b *VPodProvider) handleContainerStart(ctx context.Context, pod *corev1.Pod
 	}
 
 	for _, container := range containers {
-		err := tracker.G().FuncTrack(labelMap[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventContainerStart, labelMap, func() (error, model.ErrorCode) {
-			if err := b.startContainer(ctx, podKey, &container); err != nil {
+		err := tracker.G().FuncTrack(labelMap[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventContainerShutdown, labelMap, func() (error, model.ErrorCode) {
+			err := utils.CallWithRetry(ctx, func(retryTimes int) (bool, error) {
+				if retryTimes >= 5 {
+					return false, errors.New("exceed max retry times")
+				}
+				innerErr := b.startContainer(ctx, podKey, &container)
+
+				return innerErr != nil, innerErr
+			}, func(retryTimes int) time.Duration {
+				return time.Second
+			})
+			if err != nil {
 				return err, model.CodeContainerStartFailed
 			}
 			return nil, model.CodeSuccess
@@ -195,8 +206,18 @@ func (b *VPodProvider) handleContainerShutdown(ctx context.Context, pod *corev1.
 
 	for _, container := range containers {
 		err := tracker.G().FuncTrack(labelMap[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventContainerShutdown, labelMap, func() (error, model.ErrorCode) {
-			if err := b.stopContainer(ctx, podKey, &container); err != nil {
-				return err, model.CodeContainerStartFailed
+			err := utils.CallWithRetry(ctx, func(retryTimes int) (bool, error) {
+				if retryTimes >= 5 {
+					return false, errors.New("exceed max retry times")
+				}
+				innerErr := b.stopContainer(ctx, podKey, &container)
+
+				return innerErr != nil, innerErr
+			}, func(retryTimes int) time.Duration {
+				return time.Second
+			})
+			if err != nil {
+				return err, model.CodeContainerStopFailed
 			}
 			return nil, model.CodeSuccess
 		})

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/go-cmp/cmp"
+	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
@@ -46,6 +47,32 @@ func CheckAndFinallyCall(ctx context.Context, checkFunc func() bool, timeout, in
 			}
 		}
 	}
+}
+
+func CallWithRetry(ctx context.Context, call func(retryTimes int) (shouldRetry bool, err error), retryInterval func(retryTimes int) time.Duration) error {
+	logger := log.G(ctx)
+	retryTimes := 0
+	shouldRetry, err := call(retryTimes)
+
+	defer func() {
+		if err != nil {
+			logger.WithError(err).Infof("Calling with retry failed")
+		}
+	}()
+
+	for shouldRetry {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		retryTimes++
+		logger.WithError(err).Infof("Calling with retry times: %d", retryTimes)
+		shouldRetry, err = call(retryTimes)
+		time.Sleep(retryInterval(retryTimes))
+	}
+
+	return err
 }
 
 func ConvertByteNumToResourceQuantity(byteNum int64) resource.Quantity {

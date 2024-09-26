@@ -311,6 +311,12 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 		return nil
 	}
 
+	localPod := b.runtimeInfoStore.GetPodByKey(podKey)
+	if localPod == nil {
+		// has been deleted or not managed by current provider, just return
+		return nil
+	}
+
 	go b.handleContainerShutdown(ctx, pod, pod.Spec.Containers)
 
 	// check all containers shutdown successfully

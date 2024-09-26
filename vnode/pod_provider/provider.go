@@ -317,12 +317,13 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 		return nil
 	}
 
+	// delete from curr provider
+	b.runtimeInfoStore.DeletePod(podKey)
+
 	go b.handleContainerShutdown(ctx, pod, pod.Spec.Containers)
 
 	// check all containers shutdown successfully
 	deletePod := func() {
-		b.runtimeInfoStore.DeletePod(podKey)
-
 		if b.client != nil {
 			// delete pod with no grace period, mock kubelet
 			b.client.Delete(ctx, pod, &client.DeleteOptions{

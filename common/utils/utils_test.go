@@ -235,7 +235,8 @@ func TestSplitMetaNamespaceKey(t *testing.T) {
 }
 
 func TestCallWithRetry_ContextCanceled(t *testing.T) {
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*5)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
 	err := CallWithRetry(ctx, func(_ int) (shouldRetry bool, err error) {
 		return true, nil
 	}, nil)

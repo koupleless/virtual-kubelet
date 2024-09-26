@@ -301,6 +301,10 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 	podKey := utils.GetPodKey(pod)
 	logger := log.G(ctx).WithField("podKey", podKey)
 	logger.Info("DeletePodStarted")
+	if pod == nil {
+		// this should never happen
+		return nil
+	}
 
 	go b.handleContainerShutdown(ctx, pod, pod.Spec.Containers)
 

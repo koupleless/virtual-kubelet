@@ -16,7 +16,6 @@ package pod_provider
 
 import (
 	"context"
-	"errors"
 	"github.com/google/go-cmp/cmp"
 	"github.com/koupleless/virtual-kubelet/common/tracker"
 	"github.com/koupleless/virtual-kubelet/common/utils"
@@ -172,16 +171,11 @@ func (b *VPodProvider) handleContainerStart(ctx context.Context, pod *corev1.Pod
 
 	for _, container := range containers {
 		err := tracker.G().FuncTrack(labelMap[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventContainerShutdown, labelMap, func() (error, model.ErrorCode) {
-			err := utils.CallWithRetry(ctx, func(retryTimes int) (bool, error) {
-				if retryTimes >= 5 {
-					return false, errors.New("exceed max retry times")
-				}
+			err := utils.CallWithRetry(ctx, func(_ int) (bool, error) {
 				innerErr := b.startContainer(ctx, podKey, &container)
 
 				return innerErr != nil, innerErr
-			}, func(retryTimes int) time.Duration {
-				return time.Second
-			})
+			}, nil)
 			if err != nil {
 				return err, model.CodeContainerStartFailed
 			}
@@ -206,16 +200,11 @@ func (b *VPodProvider) handleContainerShutdown(ctx context.Context, pod *corev1.
 
 	for _, container := range containers {
 		err := tracker.G().FuncTrack(labelMap[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventContainerShutdown, labelMap, func() (error, model.ErrorCode) {
-			err := utils.CallWithRetry(ctx, func(retryTimes int) (bool, error) {
-				if retryTimes >= 5 {
-					return false, errors.New("exceed max retry times")
-				}
+			err := utils.CallWithRetry(ctx, func(_ int) (bool, error) {
 				innerErr := b.stopContainer(ctx, podKey, &container)
 
 				return innerErr != nil, innerErr
-			}, func(retryTimes int) time.Duration {
-				return time.Second
-			})
+			}, nil)
 			if err != nil {
 				return err, model.CodeContainerStopFailed
 			}

@@ -15,6 +15,16 @@ import (
 	"time"
 )
 
+func defaultRateLimiter(retryTimes int) time.Duration {
+	if retryTimes < 30 {
+		return time.Duration(retryTimes) * 100 * time.Millisecond
+	} else if retryTimes < 100 {
+		return time.Duration(retryTimes) * time.Duration(retryTimes) * 100 * time.Millisecond
+	} else {
+		return 1000 * time.Second
+	}
+}
+
 func TimedTaskWithInterval(ctx context.Context, interval time.Duration, task func(context.Context)) {
 	task(ctx)
 	ticker := time.NewTicker(interval)
@@ -49,10 +59,13 @@ func CheckAndFinallyCall(ctx context.Context, checkFunc func() bool, timeout, in
 	}
 }
 
-func CallWithRetry(ctx context.Context, call func(retryTimes int) (shouldRetry bool, err error), retryInterval func(retryTimes int) time.Duration) error {
+func CallWithRetry(ctx context.Context, call func(retryTimes int) (shouldRetry bool, err error), retryRateLimiter func(retryTimes int) time.Duration) error {
 	logger := log.G(ctx)
 	retryTimes := 0
 	shouldRetry, err := call(retryTimes)
+	if retryRateLimiter == nil {
+		retryRateLimiter = defaultRateLimiter
+	}
 
 	defer func() {
 		if err != nil {
@@ -61,15 +74,15 @@ func CallWithRetry(ctx context.Context, call func(retryTimes int) (shouldRetry b
 	}()
 
 	for shouldRetry {
+		retryTimes++
+		timer := time.NewTimer(retryRateLimiter(retryTimes))
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		default:
+		case <-timer.C:
+			logger.WithError(err).Infof("Calling with retry times: %d", retryTimes)
+			shouldRetry, err = call(retryTimes)
 		}
-		retryTimes++
-		logger.WithError(err).Infof("Calling with retry times: %d", retryTimes)
-		shouldRetry, err = call(retryTimes)
-		time.Sleep(retryInterval(retryTimes))
 	}
 
 	return err

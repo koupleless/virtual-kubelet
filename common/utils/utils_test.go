@@ -233,3 +233,20 @@ func TestSplitMetaNamespaceKey(t *testing.T) {
 	assert.Equal(t, "", name)
 	assert.Error(t, err)
 }
+
+func TestCallWithRetry_ContextCanceled(t *testing.T) {
+	ctx, _ := context.WithTimeout(context.Background(), time.Second*5)
+	err := CallWithRetry(ctx, func(_ int) (shouldRetry bool, err error) {
+		return true, nil
+	}, nil)
+	assert.Error(t, err)
+}
+
+func TestCallWithRetry_RetryAndSuccess(t *testing.T) {
+	flag := 0
+	err := CallWithRetry(context.Background(), func(_ int) (shouldRetry bool, err error) {
+		flag++
+		return flag < 5, nil
+	}, nil)
+	assert.NoError(t, err)
+}

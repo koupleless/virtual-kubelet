@@ -191,7 +191,7 @@ func (b *VPodProvider) handleContainerShutdown(ctx context.Context, pod *corev1.
 	podKey := utils.GetPodKey(pod)
 
 	logger := log.G(ctx).WithField("podKey", podKey)
-	logger.Info("HandleContainerStartOperation")
+	logger.Info("HandleContainerShutdownOperation")
 
 	labelMap := pod.Labels
 	if labelMap == nil {
@@ -306,6 +306,11 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 		return nil
 	}
 
+	if pod.DeletionGracePeriodSeconds == nil || *pod.DeletionGracePeriodSeconds == 0 {
+		// force delete, just return, skip check and delete
+		return nil
+	}
+
 	go b.handleContainerShutdown(ctx, pod, pod.Spec.Containers)
 
 	// check all containers shutdown successfully
@@ -318,11 +323,6 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 				GracePeriodSeconds: ptr.To[int64](0),
 			})
 		}
-	}
-
-	if pod.DeletionGracePeriodSeconds == nil || *pod.DeletionGracePeriodSeconds == 0 {
-		// force delete, just return, skip check and delete
-		return nil
 	}
 
 	go tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodDelete, pod.Labels, model.CodeContainerStartTimeout, func() bool {

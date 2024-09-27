@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-func defaultRateLimiter(retryTimes int) time.Duration {
+func DefaultRateLimiter(retryTimes int) time.Duration {
 	if retryTimes < 30 {
 		return time.Duration(retryTimes) * 100 * time.Millisecond
 	} else if retryTimes < 100 {
@@ -64,7 +64,7 @@ func CallWithRetry(ctx context.Context, call func(retryTimes int) (shouldRetry b
 	retryTimes := 0
 	shouldRetry, err := call(retryTimes)
 	if retryRateLimiter == nil {
-		retryRateLimiter = defaultRateLimiter
+		retryRateLimiter = DefaultRateLimiter
 	}
 
 	defer func() {

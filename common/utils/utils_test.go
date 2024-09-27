@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"errors"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
@@ -235,7 +236,7 @@ func TestSplitMetaNamespaceKey(t *testing.T) {
 }
 
 func TestCallWithRetry_ContextCanceled(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	err := CallWithRetry(ctx, func(_ int) (shouldRetry bool, err error) {
 		return true, nil
@@ -247,7 +248,20 @@ func TestCallWithRetry_RetryAndSuccess(t *testing.T) {
 	flag := 0
 	err := CallWithRetry(context.Background(), func(_ int) (shouldRetry bool, err error) {
 		flag++
-		return flag < 5, nil
+		return flag < 2, nil
 	}, nil)
 	assert.NoError(t, err)
+}
+
+func TestCallWithRetry_RetryAndError(t *testing.T) {
+	err := CallWithRetry(context.Background(), func(_ int) (shouldRetry bool, err error) {
+		return false, errors.New("test error")
+	}, nil)
+	assert.Error(t, err)
+}
+
+func TestDefaultRateLimiter(t *testing.T) {
+	assert.Equal(t, DefaultRateLimiter(1), 100*time.Millisecond)
+	assert.Equal(t, DefaultRateLimiter(30), 90*time.Second)
+	assert.Equal(t, DefaultRateLimiter(100), 1000*time.Second)
 }

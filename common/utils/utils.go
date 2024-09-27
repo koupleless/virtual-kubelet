@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/go-cmp/cmp"
+	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
@@ -13,6 +14,16 @@ import (
 	"strings"
 	"time"
 )
+
+func DefaultRateLimiter(retryTimes int) time.Duration {
+	if retryTimes < 30 {
+		return time.Duration(retryTimes) * 100 * time.Millisecond
+	} else if retryTimes < 100 {
+		return time.Duration(retryTimes) * time.Duration(retryTimes) * 100 * time.Millisecond
+	} else {
+		return 1000 * time.Second
+	}
+}
 
 func TimedTaskWithInterval(ctx context.Context, interval time.Duration, task func(context.Context)) {
 	task(ctx)
@@ -46,6 +57,35 @@ func CheckAndFinallyCall(ctx context.Context, checkFunc func() bool, timeout, in
 			}
 		}
 	}
+}
+
+func CallWithRetry(ctx context.Context, call func(retryTimes int) (shouldRetry bool, err error), retryRateLimiter func(retryTimes int) time.Duration) error {
+	logger := log.G(ctx)
+	retryTimes := 0
+	shouldRetry, err := call(retryTimes)
+	if retryRateLimiter == nil {
+		retryRateLimiter = DefaultRateLimiter
+	}
+
+	defer func() {
+		if err != nil {
+			logger.WithError(err).Infof("Calling with retry failed")
+		}
+	}()
+
+	for shouldRetry {
+		retryTimes++
+		timer := time.NewTimer(retryRateLimiter(retryTimes))
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+			logger.WithError(err).Infof("Calling with retry times: %d", retryTimes)
+			shouldRetry, err = call(retryTimes)
+		}
+	}
+
+	return err
 }
 
 func ConvertByteNumToResourceQuantity(byteNum int64) resource.Quantity {

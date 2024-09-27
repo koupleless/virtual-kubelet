@@ -170,8 +170,13 @@ func (b *VPodProvider) handleContainerStart(ctx context.Context, pod *corev1.Pod
 	}
 
 	for _, container := range containers {
-		err := tracker.G().FuncTrack(labelMap[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventContainerStart, labelMap, func() (error, model.ErrorCode) {
-			if err := b.startContainer(ctx, podKey, &container); err != nil {
+		err := tracker.G().FuncTrack(labelMap[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventContainerShutdown, labelMap, func() (error, model.ErrorCode) {
+			err := utils.CallWithRetry(ctx, func(_ int) (bool, error) {
+				innerErr := b.startContainer(ctx, podKey, &container)
+
+				return innerErr != nil, innerErr
+			}, nil)
+			if err != nil {
 				return err, model.CodeContainerStartFailed
 			}
 			return nil, model.CodeSuccess
@@ -186,7 +191,7 @@ func (b *VPodProvider) handleContainerShutdown(ctx context.Context, pod *corev1.
 	podKey := utils.GetPodKey(pod)
 
 	logger := log.G(ctx).WithField("podKey", podKey)
-	logger.Info("HandleContainerStartOperation")
+	logger.Info("HandleContainerShutdownOperation")
 
 	labelMap := pod.Labels
 	if labelMap == nil {
@@ -195,8 +200,13 @@ func (b *VPodProvider) handleContainerShutdown(ctx context.Context, pod *corev1.
 
 	for _, container := range containers {
 		err := tracker.G().FuncTrack(labelMap[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventContainerShutdown, labelMap, func() (error, model.ErrorCode) {
-			if err := b.stopContainer(ctx, podKey, &container); err != nil {
-				return err, model.CodeContainerStartFailed
+			err := utils.CallWithRetry(ctx, func(_ int) (bool, error) {
+				innerErr := b.stopContainer(ctx, podKey, &container)
+
+				return innerErr != nil, innerErr
+			}, nil)
+			if err != nil {
+				return err, model.CodeContainerStopFailed
 			}
 			return nil, model.CodeSuccess
 		})
@@ -272,6 +282,7 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 		}
 		go b.handleContainerStart(ctx, newPod, containersShouldStart)
 	}
+
 	go tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodUpdate, pod.Labels, model.CodeContainerStartTimeout, func() bool {
 		for _, oldContainer := range stopContainers {
 			oldPodKey := utils.GetPodKey(oldPod)
@@ -290,18 +301,29 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 	podKey := utils.GetPodKey(pod)
 	logger := log.G(ctx).WithField("podKey", podKey)
 	logger.Info("DeletePodStarted")
-
-	localPod := b.runtimeInfoStore.GetPodByKey(podKey).DeepCopy()
-	if localPod == nil {
-		localPod = pod.DeepCopy()
+	if pod == nil {
+		// this should never happen
+		return nil
 	}
 
-	go b.handleContainerShutdown(ctx, localPod, localPod.Spec.Containers)
+	if pod.DeletionGracePeriodSeconds == nil || *pod.DeletionGracePeriodSeconds == 0 {
+		// force delete, just return, skip check and delete
+		return nil
+	}
+
+	localPod := b.runtimeInfoStore.GetPodByKey(podKey)
+	if localPod == nil {
+		// has been deleted or not managed by current provider, just return
+		return nil
+	}
+
+	// delete from curr provider
+	b.runtimeInfoStore.DeletePod(podKey)
+
+	go b.handleContainerShutdown(ctx, pod, pod.Spec.Containers)
 
 	// check all containers shutdown successfully
 	deletePod := func() {
-		b.runtimeInfoStore.DeletePod(podKey)
-
 		if b.client != nil {
 			// delete pod with no grace period, mock kubelet
 			b.client.Delete(ctx, pod, &client.DeleteOptions{
@@ -310,15 +332,9 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 		}
 	}
 
-	if pod.DeletionGracePeriodSeconds == nil || *pod.DeletionGracePeriodSeconds == 0 {
-		// force delete, just return, skip check and delete
-		return nil
-	}
-
 	go tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodDelete, pod.Labels, model.CodeContainerStartTimeout, func() bool {
-		for _, oldContainer := range localPod.Spec.Containers {
-			oldPodKey := utils.GetPodKey(localPod)
-			status := b.queryContainerStatus(ctx, oldPodKey, &oldContainer)
+		for _, container := range pod.Spec.Containers {
+			status := b.queryContainerStatus(ctx, podKey, &container)
 			if status != nil && status.State != model.ContainerStateDeactivated {
 				return false
 			}

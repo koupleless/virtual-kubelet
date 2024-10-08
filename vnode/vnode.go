@@ -82,9 +82,9 @@ func (n *VNode) Run(ctx context.Context) {
 }
 
 func (n *VNode) RenewLease(ctx context.Context, clientID string) {
-	//utils.TimedTaskWithInterval(ctx, model.NodeLeaseUpdatePeriodSeconds, func(ctx context.Context) {
-	//	n.retryUpdateLease(ctx, clientID)
-	//})
+	utils.TimedTaskWithInterval(ctx, model.NodeLeaseUpdatePeriodSeconds, func(ctx context.Context) {
+		n.retryUpdateLease(ctx, clientID)
+	})
 }
 
 func (n *VNode) retryUpdateLease(ctx context.Context, clientID string) {
@@ -194,9 +194,10 @@ func (n *VNode) CreateNodeLease(ctx context.Context, controllerID string) bool {
 		// lease exist, check if outdated
 		if lease.Spec.RenewTime == nil || time.Now().Sub(lease.Spec.RenewTime.Time).Microseconds() > model.NodeLeaseDurationSeconds*1000*1000 {
 			// outdated, try to update
-			lease.Spec.RenewTime = &metav1.MicroTime{Time: time.Now()}
-			lease.Spec.HolderIdentity = ptr.To(controllerID)
-			err = n.client.Update(ctx, lease)
+			newLease := lease.DeepCopy()
+			newLease.Spec.RenewTime = &metav1.MicroTime{Time: time.Now()}
+			newLease.Spec.HolderIdentity = ptr.To(controllerID)
+			err = n.client.Update(ctx, newLease)
 			if err == nil {
 				return true
 			}

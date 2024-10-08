@@ -5,6 +5,7 @@ import (
 	"github.com/koupleless/virtual-kubelet/vnode"
 	"gotest.tools/assert"
 	"testing"
+	"time"
 )
 
 func TestNewRuntimeInfoStore(t *testing.T) {
@@ -58,4 +59,11 @@ func TestRuntimeInfoStore_GetBaseNodeByNodeID(t *testing.T) {
 	store.PutVNode("suite", &vnode.VNode{})
 	node = store.GetVNodeByNodeName(utils.FormatNodeName("suite", "suite"))
 	assert.Assert(t, node != nil)
+}
+
+func TestRuntimeInfoStore_GetLeaseOutdatedVNodeName(t *testing.T) {
+	store := NewRuntimeInfoStore()
+	store.PutVNodeLeaseLatestUpdateTime("test", time.Now().Add(-time.Second*2))
+	nameList := store.GetLeaseOutdatedVNodeName(time.Second)
+	assert.Assert(t, len(nameList) == 1)
 }

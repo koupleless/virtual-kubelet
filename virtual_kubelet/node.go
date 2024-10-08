@@ -30,7 +30,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
-	"k8s.io/utils/clock"
 )
 
 const (
@@ -104,53 +103,6 @@ func NewNodeController(p NodeProvider, node *corev1.Node, client client.Client, 
 // NodeControllerOpt are the functional options used for configuring a node
 type NodeControllerOpt func(*NodeController) error //nolint:revive
 
-// WithNodeEnableLeaseV1 enables support for v1 leases.
-// V1 Leases share all the same properties as v1beta1 leases, except they do not fallback like
-// the v1beta1 lease controller does if the API server does not support it. If the lease duration is not specified (0)
-// then DefaultLeaseDuration will be used
-func WithNodeEnableLeaseV1(client client.Client, leaseDurationSeconds int32) NodeControllerOpt {
-	if leaseDurationSeconds == 0 {
-		leaseDurationSeconds = DefaultLeaseDuration
-	}
-
-	interval := float64(leaseDurationSeconds) * DefaultRenewIntervalFraction
-	intervalDuration := time.Second * time.Duration(int(interval))
-
-	return WithNodeEnableLeaseV1WithRenewInterval(client, leaseDurationSeconds, intervalDuration)
-}
-
-// WithNodeEnableLeaseV1WithRenewInterval enables support for v1 leases, and sets a specific renew interval,
-// as opposed to the standard multiplier specified by DefaultRenewIntervalFraction
-func WithNodeEnableLeaseV1WithRenewInterval(client client.Client, leaseDurationSeconds int32, interval time.Duration) NodeControllerOpt {
-	if client == nil {
-		panic("client is nil")
-	}
-
-	if leaseDurationSeconds == 0 {
-		leaseDurationSeconds = DefaultLeaseDuration
-	}
-
-	return func(n *NodeController) error {
-		if n.leaseController != nil {
-			return ErrConflictingLeaseControllerConfiguration
-		}
-
-		lc, err := newLeaseControllerWithRenewInterval(
-			&clock.RealClock{},
-			client,
-			leaseDurationSeconds,
-			interval,
-			n,
-		)
-		if err != nil {
-			return fmt.Errorf("Unable to configure lease controller: %w", err)
-		}
-
-		n.leaseController = lc
-		return nil
-	}
-}
-
 // WithNodeStatusUpdateErrorHandler adds an error handler for cases where there is an error
 // when updating the node status.
 // This allows the caller to have some control on how errors are dealt with when
@@ -180,8 +132,6 @@ type NodeController struct { //nolint:revive
 	serverNodeLock sync.Mutex
 	serverNode     *corev1.Node
 	client         client.Client
-
-	leaseController *leaseController
 
 	pingInterval   time.Duration
 	statusInterval time.Duration
@@ -241,11 +191,6 @@ func (n *NodeController) Run(ctx context.Context) (retErr error) {
 
 	if err := n.ensureNode(ctx, providerNode); err != nil {
 		return err
-	}
-
-	if n.leaseController != nil {
-		log.G(ctx).WithField("leaseController", n.leaseController).Debug("Starting leasecontroller")
-		n.group.StartWithContext(ctx, n.leaseController.Run)
 	}
 
 	return n.controlLoop(ctx, providerNode)
@@ -311,13 +256,6 @@ func (n *NodeController) controlLoop(ctx context.Context, providerNode *corev1.N
 	defer n.group.Wait()
 
 	var sleepInterval time.Duration
-	if n.leaseController == nil {
-		log.G(ctx).WithField("pingInterval", n.pingInterval).Debug("lease controller is not enabled, updating node status in Kube API server at Ping Time Interval")
-		sleepInterval = n.pingInterval
-	} else {
-		log.G(ctx).WithField("statusInterval", n.statusInterval).Debug("lease controller in use, updating at statusInterval")
-		sleepInterval = n.statusInterval
-	}
 
 	loop := func() bool {
 		ctx, span := trace.StartSpan(ctx, "node.controlLoop.loop")

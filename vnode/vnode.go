@@ -113,11 +113,12 @@ func (n *VNode) retryUpdateLease(ctx context.Context, clientID string) {
 			return
 		}
 
-		lease.Spec.RenewTime = &metav1.MicroTime{Time: time.Now()}
-		err = n.client.Update(ctx, lease)
+		newLease := lease.DeepCopy()
+		newLease.Spec.RenewTime = &metav1.MicroTime{Time: time.Now()}
+		err = n.client.Update(ctx, newLease)
 		if err == nil {
 			log.G(ctx).WithField("retries", i).Debug("Successfully updated lease")
-			n.latestLease = lease
+			n.latestLease = newLease
 			return
 		}
 		log.G(ctx).WithError(err).Error("failed to update node lease")

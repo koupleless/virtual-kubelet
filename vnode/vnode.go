@@ -2,6 +2,8 @@ package vnode
 
 import (
 	"context"
+	"fmt"
+	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/tunnel"
@@ -10,7 +12,10 @@ import (
 	"github.com/koupleless/virtual-kubelet/vnode/node_provider"
 	"github.com/koupleless/virtual-kubelet/vnode/pod_provider"
 	"github.com/pkg/errors"
+	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"runtime"
@@ -20,6 +25,7 @@ import (
 
 type VNode struct {
 	nodeID string
+	env    string
 	client client.Client
 	tunnel.Tunnel
 
@@ -27,8 +33,14 @@ type VNode struct {
 	podProvider  *pod_provider.VPodProvider
 	node         *nodeutil.Node
 
-	done chan struct{}
-	exit chan struct{}
+	exit                  chan struct{}
+	exitWhenLeaderChanged chan struct{}
+	shouldRetryLease      chan struct{}
+	done                  chan struct{}
+
+	isLeader bool
+
+	latestLease *coordinationv1.Lease
 
 	err error
 }
@@ -47,30 +59,82 @@ func (n *VNode) Run(ctx context.Context) {
 		err = n.node.Run(ctx)
 	}()
 
+	n.isLeader = true
+	go n.OnNodeStart(ctx, n.nodeID)
+	defer n.OnNodeStop(ctx, n.nodeID)
+
 	select {
 	case <-ctx.Done():
 		// exit
 		err = errors.Wrap(ctx.Err(), "context canceled")
+	case <-n.exitWhenLeaderChanged:
+		// exit local go runtime
+		err = errors.New("leader changed")
 	case <-n.exit:
-		// base exit, process node delete and pod evict
-		n.client.Delete(ctx, n.nodeProvider.CurrNodeInfo(), &client.DeleteOptions{})
-		pods, err := n.podProvider.GetPods(ctx)
+		// node exit, process node delete and lease delete
+		node := n.nodeProvider.CurrNodeInfo()
+		err = n.client.Delete(context.Background(), node)
 		if err != nil {
-			err = errors.Wrap(err, "error getting pods from provider")
 			return
 		}
-		for _, pod := range pods {
-			// base exit, process node delete and pod evict
-			n.client.Delete(ctx, pod, &client.DeleteOptions{
-				GracePeriodSeconds: ptr.To[int64](0),
-			})
-		}
-		n.Tunnel.OnNodeStop(ctx, n.nodeID)
+		err = n.client.Delete(context.Background(), n.latestLease)
 	}
 }
 
-func (n *VNode) WaitReady(timeout time.Duration) error {
-	ctx := context.Background()
+func (n *VNode) RenewLease(ctx context.Context, clientID string) {
+	utils.TimedTaskWithInterval(ctx, model.NodeLeaseUpdatePeriodSeconds, func(ctx context.Context) {
+		n.retryUpdateLease(ctx, clientID)
+	})
+}
+
+func (n *VNode) retryUpdateLease(ctx context.Context, clientID string) {
+	for i := 0; i < 5; i++ {
+		lease := &coordinationv1.Lease{}
+		err := n.client.Get(ctx, types.NamespacedName{
+			Name:      utils.FormatNodeName(n.nodeID, n.env),
+			Namespace: corev1.NamespaceNodeLease,
+		}, lease)
+		if apierrors.IsNotFound(err) {
+			// for disconnect then connect, lease may have been deleted, create again
+			success := n.CreateNodeLease(ctx, clientID)
+			if !success {
+				// create failed, exit current node but not delete
+				n.leaderChanged()
+			}
+			return
+		} else if err != nil {
+			log.G(ctx).WithError(err).WithField("retries", i).Error("failed to get node lease when updating node lease")
+			continue
+		}
+
+		// if holder identity not current client id, means leader changed
+		if lease.Spec.HolderIdentity == nil || *lease.Spec.HolderIdentity != clientID {
+			n.leaderChanged()
+			return
+		}
+
+		lease.Spec.RenewTime = &metav1.MicroTime{Time: time.Now()}
+		err = n.client.Update(ctx, lease)
+		if err == nil {
+			log.G(ctx).WithField("retries", i).Debug("Successfully updated lease")
+			n.latestLease = lease
+			return
+		}
+		log.G(ctx).WithError(err).Error("failed to update node lease")
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return
+		}
+		// OptimisticLockError requires getting the newer version of lease to proceed.
+		if apierrors.IsConflict(err) {
+			continue
+		}
+	}
+
+	log.G(ctx).WithError(fmt.Errorf("failed after %d attempts to update node lease", model.NodeLeaseMaxRetryTimes)).Error("failed to update node lease")
+	n.leaderChanged()
+}
+
+func (n *VNode) WaitReady(ctx context.Context, timeout time.Duration) error {
 	if timeout > 0 {
 		var cancel func()
 		ctx, cancel = context.WithTimeout(context.Background(), timeout)
@@ -86,12 +150,84 @@ func (n *VNode) WaitReady(timeout time.Duration) error {
 	utils.CheckAndFinallyCall(ctx, func() bool {
 		vnode := &corev1.Node{}
 		err = n.client.Get(ctx, types.NamespacedName{
-			Name: utils.FormatNodeName(n.nodeID),
+			Name: utils.FormatNodeName(n.nodeID, n.env),
 		}, vnode)
 		return err == nil
 	}, timeout, time.Millisecond*200, func() {}, func() {})
 
 	return err
+}
+
+func (n *VNode) CreateNodeLease(ctx context.Context, controllerID string) bool {
+	logger := log.G(ctx)
+
+	defer n.LockRetryLease()
+
+	lease := &coordinationv1.Lease{}
+	nodeName := utils.FormatNodeName(n.nodeID, n.env)
+
+	err := n.client.Get(ctx, types.NamespacedName{
+		Name:      nodeName,
+		Namespace: corev1.NamespaceNodeLease,
+	}, lease)
+
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			// try to create new lease
+			lease = n.newLease(controllerID)
+
+			err = n.client.Create(ctx, lease)
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				// context canceled, just return
+				return false
+			}
+
+			if apierrors.IsAlreadyExists(err) {
+				return false
+			} else if err != nil {
+				logger.WithError(err).Error("error creating node lease")
+				return false
+			}
+		}
+	} else {
+		// lease exist, check if outdated
+		if lease.Spec.RenewTime == nil || time.Now().Sub(lease.Spec.RenewTime.Time).Microseconds() > model.NodeLeaseDurationSeconds*1000*1000 {
+			// outdated, try to update
+			lease.Spec.RenewTime = &metav1.MicroTime{Time: time.Now()}
+			lease.Spec.HolderIdentity = ptr.To(controllerID)
+			err = n.client.Update(ctx, lease)
+			if err == nil {
+				return true
+			}
+			logger.WithError(err).Error("failed to update outdated node lease")
+		}
+		// not outdated
+		return false
+	}
+
+	n.latestLease = lease
+	return true
+}
+
+func (n *VNode) newLease(holderIdentity string) *coordinationv1.Lease {
+	nodeName := utils.FormatNodeName(n.nodeID, n.env)
+	lease := &coordinationv1.Lease{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nodeName,
+			Namespace: corev1.NamespaceNodeLease,
+			Labels: map[string]string{
+				model.LabelKeyOfEnv:       n.env,
+				model.LabelKeyOfComponent: model.ComponentVNodeLease,
+			},
+		},
+		Spec: coordinationv1.LeaseSpec{
+			HolderIdentity:       ptr.To(holderIdentity),
+			LeaseDurationSeconds: ptr.To[int32](model.NodeLeaseDurationSeconds),
+			RenewTime:            &metav1.MicroTime{Time: time.Now()},
+		},
+	}
+
+	return lease
 }
 
 func (n *VNode) SyncNodeStatus(data model.NodeStatusData) {
@@ -123,17 +259,52 @@ func (n *VNode) Done() <-chan struct{} {
 	return n.done
 }
 
+// ExitWhenLeaderChanged returns a channel that will be closed when the vnode leader changed
+func (n *VNode) ExitWhenLeaderChanged() <-chan struct{} {
+	return n.exitWhenLeaderChanged
+}
+
+// IsLeader returns a bool marked current vnode is leader or not
+func (n *VNode) IsLeader() bool {
+	return n.isLeader
+}
+
+func (n *VNode) ShouldRetryLease() <-chan struct{} {
+	return n.shouldRetryLease
+}
+
+func (n *VNode) RetryLease() {
+	select {
+	case <-n.shouldRetryLease:
+	default:
+		close(n.shouldRetryLease)
+	}
+}
+
+func (n *VNode) LockRetryLease() {
+	n.shouldRetryLease = make(chan struct{})
+}
+
 // Err returns err which causes vnode exit
 func (n *VNode) Err() error {
 	return n.err
 }
 
-// Shutdown is the func of shutting down a vnode
+// Shutdown is the func of shutting down a vnode when base exit
 func (n *VNode) Shutdown() {
 	select {
 	case <-n.exit:
 	default:
 		close(n.exit)
+	}
+}
+
+// leaderChanged is the func of shutting down a vnode when leader changed
+func (n *VNode) leaderChanged() {
+	select {
+	case <-n.exitWhenLeaderChanged:
+	default:
+		close(n.exitWhenLeaderChanged)
 	}
 }
 
@@ -180,7 +351,7 @@ func NewVNode(config *model.BuildVNodeConfig, t tunnel.Tunnel) (kn *VNode, err e
 	var nodeProvider *node_provider.VNodeProvider
 	var podProvider *pod_provider.VPodProvider
 	cm, err := nodeutil.NewNode(
-		utils.FormatNodeName(config.NodeID),
+		utils.FormatNodeName(config.NodeID, config.Env),
 		func(cfg nodeutil.ProviderConfig) (nodeutil.Provider, virtual_kubelet.NodeProvider, error) {
 			nodeProvider = node_provider.NewVirtualKubeletNode(model.BuildVNodeProviderConfig{
 				NodeIP:       config.NodeIP,
@@ -214,13 +385,16 @@ func NewVNode(config *model.BuildVNodeConfig, t tunnel.Tunnel) (kn *VNode, err e
 	}
 
 	return &VNode{
-		nodeID:       config.NodeID,
-		client:       config.Client,
-		nodeProvider: nodeProvider,
-		podProvider:  podProvider,
-		Tunnel:       t,
-		node:         cm,
-		done:         make(chan struct{}),
-		exit:         make(chan struct{}),
+		nodeID:                config.NodeID,
+		client:                config.Client,
+		env:                   config.Env,
+		nodeProvider:          nodeProvider,
+		podProvider:           podProvider,
+		Tunnel:                t,
+		node:                  cm,
+		exit:                  make(chan struct{}),
+		done:                  make(chan struct{}),
+		exitWhenLeaderChanged: make(chan struct{}),
+		shouldRetryLease:      make(chan struct{}),
 	}, nil
 }

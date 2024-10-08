@@ -44,7 +44,7 @@ func TestDiscoverPreviousNode(t *testing.T) {
 	}, []tunnel.Tunnel{
 		&mockTunnel,
 	})
-	vc.discoverPreviousNodes(context.TODO(), &corev1.NodeList{
+	vc.discoverPreviousNodes(&corev1.NodeList{
 		Items: []corev1.Node{
 			{
 				ObjectMeta: v1.ObjectMeta{
@@ -74,7 +74,7 @@ func TestDiscoverPreviousNode(t *testing.T) {
 			},
 		},
 	})
-	assert.Equal(t, len(vc.runtimeInfoStore.nodeIDLock), 1)
+	assert.Equal(t, len(vc.runtimeInfoStore.startLock), 1)
 }
 
 func TestDiscoverPreviousPods(t *testing.T) {
@@ -84,10 +84,11 @@ func TestDiscoverPreviousPods(t *testing.T) {
 	}, []tunnel.Tunnel{
 		&mockTunnel,
 	})
-	vc.runtimeInfoStore.PutVNode("test-node", &vnode.VNode{
+	vn := &vnode.VNode{
 		Tunnel: &mockTunnel,
-	})
-	vc.discoverPreviousPods(context.TODO(), &corev1.PodList{
+	}
+	vc.runtimeInfoStore.PutVNode("test-node", vn)
+	vc.discoverPreviousPods(context.TODO(), vn, &corev1.PodList{
 		Items: []corev1.Pod{
 			{
 				Spec: corev1.PodSpec{

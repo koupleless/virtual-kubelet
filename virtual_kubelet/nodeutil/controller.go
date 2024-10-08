@@ -244,7 +244,7 @@ func NewNode(name string, newProvider NewProviderFunc, opts ...NodeOpt) (*Node, 
 	}
 
 	nodeControllerOpts := []virtual_kubelet.NodeControllerOpt{
-		virtual_kubelet.WithNodeEnableLeaseV1(cfg.Client, virtual_kubelet.DefaultLeaseDuration),
+		//virtual_kubelet.WithNodeEnableLeaseV1(cfg.Client, virtual_kubelet.DefaultLeaseDuration),
 	}
 
 	if cfg.NodeStatusUpdateErrorHandler != nil {

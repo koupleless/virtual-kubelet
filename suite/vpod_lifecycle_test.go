@@ -23,13 +23,13 @@ var _ = Describe("VPod Lifecycle Test", func() {
 	podNamespace := "default"
 
 	nodeInfo := prepareNode(nodeID, nodeVersion)
-	basicPod := prepareBasicPod(podName, podNamespace, utils.FormatNodeName(nodeID))
+	basicPod := prepareBasicPod(podName, podNamespace, utils.FormatNodeName(nodeID, env))
 
 	Context("pod publish and status sync", func() {
 		It("node should be ready", func() {
 			nodeInfo.NodeInfo.Metadata.Status = model.NodeStatusActivated
 			tl.PutNode(ctx, nodeID, nodeInfo)
-			name := utils.FormatNodeName(nodeID)
+			name := utils.FormatNodeName(nodeID, env)
 
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
@@ -55,7 +55,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 					Namespace: basicPod.Namespace,
 					Name:      basicPod.Name,
 				}, podFromKubernetes)
-				return err == nil && podFromKubernetes.Status.Phase == v1.PodPending && podFromKubernetes.Spec.NodeName == utils.FormatNodeName(nodeID)
+				return err == nil && podFromKubernetes.Status.Phase == v1.PodPending && podFromKubernetes.Spec.NodeName == utils.FormatNodeName(nodeID, env)
 			}, time.Second*20, time.Second).Should(BeTrue())
 		})
 
@@ -186,7 +186,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 			Eventually(func() bool {
 				node := &v1.Node{}
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: utils.FormatNodeName(nodeID),
+					Name: utils.FormatNodeName(nodeID, env),
 				}, node)
 				return errors.IsNotFound(err)
 			}, time.Second*20, time.Second).Should(BeTrue())

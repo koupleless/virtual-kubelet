@@ -82,9 +82,9 @@ func (n *VNode) Run(ctx context.Context) {
 }
 
 func (n *VNode) RenewLease(ctx context.Context, clientID string) {
-	utils.TimedTaskWithInterval(ctx, model.NodeLeaseUpdatePeriodSeconds, func(ctx context.Context) {
-		n.retryUpdateLease(ctx, clientID)
-	})
+	//utils.TimedTaskWithInterval(ctx, model.NodeLeaseUpdatePeriodSeconds, func(ctx context.Context) {
+	//	n.retryUpdateLease(ctx, clientID)
+	//})
 }
 
 func (n *VNode) retryUpdateLease(ctx context.Context, clientID string) {

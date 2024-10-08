@@ -339,7 +339,9 @@ func (n *VNode) DeletePodsFromKubernetesForget(ctx context.Context, key string) 
 }
 
 func (n *VNode) DeletePod(key string) {
-	n.node.PodController().DeletePod(key)
+	if n.node != nil {
+		n.node.PodController().DeletePod(key)
+	}
 }
 
 func NewVNode(config *model.BuildVNodeConfig, t tunnel.Tunnel) (kn *VNode, err error) {

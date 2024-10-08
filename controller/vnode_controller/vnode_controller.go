@@ -125,10 +125,6 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 			<-brc.ready
 			brc.podDeleteHandler(ctx, e.Object)
 		},
-		GenericFunc: func(ctx context.Context, e event.TypedGenericEvent[*corev1.Pod], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-			<-brc.ready
-			log.G(ctx).Warn("GenericFunc called")
-		},
 	}
 
 	if err = c.Watch(source.Kind(mgr.GetCache(), &corev1.Pod{}, &podHandler, &predicates.VPodPredicate{
@@ -149,8 +145,6 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 			log.G(ctx).Info("vnode deleted ", e.Object.Name)
 			brc.runtimeInfoStore.DeleteNode(e.Object.Name)
 			brc.shutdownVNode(utils.ExtractNodeIDFromNodeName(e.Object.Name))
-		},
-		GenericFunc: func(ctx context.Context, e event.TypedGenericEvent[*corev1.Node], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 		},
 	}
 
@@ -175,8 +169,6 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 		DeleteFunc: func(ctx context.Context, e event.TypedDeleteEvent[*v1.Lease], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 			log.G(ctx).Info("vnode lease deleted, wake vnode up", e.Object.Name)
 			brc.wakeUpVNode(utils.ExtractNodeIDFromNodeName(e.Object.Name))
-		},
-		GenericFunc: func(ctx context.Context, e event.TypedGenericEvent[*v1.Lease], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 		},
 	}
 

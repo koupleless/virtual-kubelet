@@ -27,8 +27,6 @@ func DefaultRateLimiter(retryTimes int) time.Duration {
 }
 
 func TimedTaskWithInterval(ctx context.Context, interval time.Duration, task func(context.Context)) {
-	task(ctx)
-
 	wait.UntilWithContext(ctx, task, interval)
 }
 

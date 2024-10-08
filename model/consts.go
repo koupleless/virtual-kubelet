@@ -87,7 +87,7 @@ const (
 const PodKeyAll = "all"
 
 const (
-	NodeLeaseDurationSeconds     = 20
-	NodeLeaseUpdatePeriodSeconds = 6
+	NodeLeaseDurationSeconds     = 40
+	NodeLeaseUpdatePeriodSeconds = 18
 	NodeLeaseMaxRetryTimes       = 5
 )

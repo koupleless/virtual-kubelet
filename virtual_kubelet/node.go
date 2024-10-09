@@ -255,16 +255,16 @@ func (n *NodeController) Ready() <-chan struct{} {
 func (n *NodeController) controlLoop(ctx context.Context, providerNode *corev1.Node) error {
 	defer n.group.Wait()
 
-	var sleepInterval time.Duration
+	//var sleepInterval time.Duration
 
 	loop := func() bool {
 		ctx, span := trace.StartSpan(ctx, "node.controlLoop.loop")
 		defer span.End()
 
-		var timer *time.Timer
-		ctx = span.WithField(ctx, "sleepTime", n.pingInterval)
-		timer = time.NewTimer(sleepInterval)
-		defer timer.Stop()
+		//var timer *time.Timer
+		//ctx = span.WithField(ctx, "sleepTime", n.pingInterval)
+		//timer = time.NewTimer(sleepInterval)
+		//defer timer.Stop()
 
 		select {
 		case <-ctx.Done():
@@ -279,10 +279,10 @@ func (n *NodeController) controlLoop(ctx context.Context, providerNode *corev1.N
 			if err := n.updateStatus(ctx, providerNode, false); err != nil {
 				log.G(ctx).WithError(err).Error("Error handling node status update")
 			}
-		case <-timer.C:
-			if err := n.updateStatus(ctx, providerNode, false); err != nil {
-				log.G(ctx).WithError(err).Error("Error handling node status update")
-			}
+			//case <-timer.C:
+			//	if err := n.updateStatus(ctx, providerNode, false); err != nil {
+			//		log.G(ctx).WithError(err).Error("Error handling node status update")
+			//	}
 		}
 		return false
 	}

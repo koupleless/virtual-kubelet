@@ -223,7 +223,7 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 				}
 			})
 
-			go utils.TimedTaskWithInterval(ctx, time.Second, func(ctx context.Context) {
+			go utils.TimedTaskWithInterval(ctx, time.Second*20, func(ctx context.Context) {
 				notReachableNodeInfos := brc.runtimeInfoStore.GetNotReachableNodeInfos(time.Second * model.NodeLeaseDurationSeconds)
 				for _, nodeInfo := range notReachableNodeInfos {
 					vNode := brc.runtimeInfoStore.GetVNode(nodeInfo.NodeID)

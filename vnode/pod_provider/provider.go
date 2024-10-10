@@ -306,11 +306,6 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 		return nil
 	}
 
-	if pod.DeletionGracePeriodSeconds == nil || *pod.DeletionGracePeriodSeconds == 0 {
-		// force delete, just return, skip check and delete
-		return nil
-	}
-
 	localPod := b.runtimeInfoStore.GetPodByKey(podKey)
 	if localPod == nil {
 		// has been deleted or not managed by current provider, just return
@@ -321,6 +316,12 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 	b.runtimeInfoStore.DeletePod(podKey)
 
 	go b.handleContainerShutdown(ctx, pod, pod.Spec.Containers)
+
+	if pod.DeletionGracePeriodSeconds == nil || *pod.DeletionGracePeriodSeconds == 0 {
+		// force delete, just return, skip check and delete
+		logger.Warnf("Pod force delete")
+		return nil
+	}
 
 	// check all containers shutdown successfully
 	deletePod := func() {

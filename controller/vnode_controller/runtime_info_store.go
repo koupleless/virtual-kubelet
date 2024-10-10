@@ -16,6 +16,7 @@ package vnode_controller
 
 import (
 	"github.com/koupleless/virtual-kubelet/common/utils"
+	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/vnode"
 	"github.com/pkg/errors"
 	"sync"
@@ -25,18 +26,67 @@ import (
 // RuntimeInfoStore provide the in memory runtime information.
 type RuntimeInfoStore struct {
 	sync.RWMutex
-	nodeIDToVNode      map[string]*vnode.VNode
-	nodeIDLock         map[string]bool
-	vnodeLatestMsgTime map[string]int64
+	nodeIDToVNode   map[string]*vnode.VNode
+	startLock       map[string]bool
+	runningNodeMap  map[string]bool
+	allNodeMap      map[string]bool
+	leaseUpdateTime map[string]time.Time
+	latestMsgTime   map[string]time.Time
 }
 
 func NewRuntimeInfoStore() *RuntimeInfoStore {
 	return &RuntimeInfoStore{
-		RWMutex:            sync.RWMutex{},
-		nodeIDToVNode:      make(map[string]*vnode.VNode),
-		vnodeLatestMsgTime: make(map[string]int64),
-		nodeIDLock:         make(map[string]bool),
+		RWMutex:         sync.RWMutex{},
+		nodeIDToVNode:   make(map[string]*vnode.VNode),
+		startLock:       make(map[string]bool),
+		runningNodeMap:  make(map[string]bool),
+		allNodeMap:      make(map[string]bool),
+		leaseUpdateTime: make(map[string]time.Time),
+		latestMsgTime:   make(map[string]time.Time),
 	}
+}
+
+func (r *RuntimeInfoStore) NodeRunning(nodeID string) {
+	r.Lock()
+	defer r.Unlock()
+
+	r.runningNodeMap[nodeID] = true
+	r.latestMsgTime[nodeID] = time.Now()
+}
+
+func (r *RuntimeInfoStore) NodeShutdown(nodeID string) {
+	r.Lock()
+	defer r.Unlock()
+
+	delete(r.runningNodeMap, nodeID)
+}
+
+func (r *RuntimeInfoStore) RunningNodeNum() int {
+	r.Lock()
+	defer r.Unlock()
+
+	return len(r.runningNodeMap)
+}
+
+func (r *RuntimeInfoStore) PutNode(nodeName string) {
+	r.Lock()
+	defer r.Unlock()
+
+	r.allNodeMap[nodeName] = true
+}
+
+func (r *RuntimeInfoStore) DeleteNode(nodeName string) {
+	r.Lock()
+	defer r.Unlock()
+
+	delete(r.allNodeMap, nodeName)
+}
+
+func (r *RuntimeInfoStore) AllNodeNum() int {
+	r.Lock()
+	defer r.Unlock()
+
+	return len(r.allNodeMap)
 }
 
 func (r *RuntimeInfoStore) PutVNode(nodeID string, vnode *vnode.VNode) {
@@ -50,10 +100,10 @@ func (r *RuntimeInfoStore) PutVNodeIDNX(nodeID string) error {
 	r.Lock()
 	defer r.Unlock()
 
-	if r.nodeIDLock[nodeID] {
+	if r.startLock[nodeID] {
 		return errors.Errorf("nodeID %s already exists", nodeID)
 	}
-	r.nodeIDLock[nodeID] = true
+	r.startLock[nodeID] = true
 	return nil
 }
 
@@ -62,8 +112,8 @@ func (r *RuntimeInfoStore) DeleteVNode(nodeID string) {
 	defer r.Unlock()
 
 	delete(r.nodeIDToVNode, nodeID)
-	delete(r.vnodeLatestMsgTime, nodeID)
-	delete(r.nodeIDLock, nodeID)
+	delete(r.startLock, nodeID)
+	delete(r.latestMsgTime, nodeID)
 }
 
 func (r *RuntimeInfoStore) GetVNode(nodeID string) *vnode.VNode {
@@ -82,29 +132,51 @@ func (r *RuntimeInfoStore) GetVNodes() []*vnode.VNode {
 	return ret
 }
 
-func (r *RuntimeInfoStore) NodeMsgArrived(nodeID string) {
-	r.Lock()
-	defer r.Unlock()
-	r.vnodeLatestMsgTime[nodeID] = time.Now().UnixMilli()
-}
-
-func (r *RuntimeInfoStore) GetOfflineNodes(maxUnreachableMilliSec int64) []string {
-	r.Lock()
-	defer r.Unlock()
-	offlineNodeIDs := make([]string, 0)
-	minMsgTime := time.Now().UnixMilli() - maxUnreachableMilliSec
-	for nodeID, latestMsgTime := range r.vnodeLatestMsgTime {
-		if latestMsgTime >= minMsgTime {
-			continue
-		}
-		offlineNodeIDs = append(offlineNodeIDs, nodeID)
-	}
-	return offlineNodeIDs
-}
-
 func (r *RuntimeInfoStore) GetVNodeByNodeName(nodeName string) *vnode.VNode {
 	r.Lock()
 	defer r.Unlock()
 	nodeID := utils.ExtractNodeIDFromNodeName(nodeName)
 	return r.nodeIDToVNode[nodeID]
+}
+
+func (r *RuntimeInfoStore) PutVNodeLeaseLatestUpdateTime(nodeName string, renewTime time.Time) {
+	r.Lock()
+	defer r.Unlock()
+	r.leaseUpdateTime[nodeName] = renewTime
+}
+
+func (r *RuntimeInfoStore) GetLeaseOutdatedVNodeName(leaseDuration time.Duration) []string {
+	r.Lock()
+	defer r.Unlock()
+	now := time.Now()
+	ret := make([]string, 0)
+	for nodeName, latestUpdateTime := range r.leaseUpdateTime {
+		if now.Sub(latestUpdateTime) > leaseDuration {
+			ret = append(ret, nodeName)
+		}
+	}
+	return ret
+}
+
+func (r *RuntimeInfoStore) GetNotReachableNodeInfos(maxUnreachableDuration time.Duration) []model.UnreachableNodeInfo {
+	r.Lock()
+	defer r.Unlock()
+	now := time.Now()
+	ret := make([]model.UnreachableNodeInfo, 0)
+	for nodeID, latestUpdateTime := range r.latestMsgTime {
+		if now.Sub(latestUpdateTime) > maxUnreachableDuration {
+			ret = append(ret, model.UnreachableNodeInfo{
+				NodeID:              nodeID,
+				LatestReachableTime: latestUpdateTime,
+			})
+		}
+	}
+	return ret
+}
+
+func (r *RuntimeInfoStore) NodeMsgArrived(nodeID string) {
+	r.Lock()
+	defer r.Unlock()
+
+	r.latestMsgTime[nodeID] = time.Now()
 }

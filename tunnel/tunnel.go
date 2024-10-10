@@ -37,6 +37,9 @@ type Tunnel interface {
 	// OnNodeStop is the func call when a vnode shutdown successfully, you can implement it on demand
 	OnNodeStop(ctx context.Context, nodeID string)
 
+	// OnNodeNotReady is the func call when a vnode status turns to not ready, you can implement it on demand
+	OnNodeNotReady(ctx context.Context, info model.UnreachableNodeInfo)
+
 	// FetchHealthData is the func call for vnode to fetch health data , you need to fetch health data and call OnNodeStatusDataArrived when data arrived
 	FetchHealthData(ctx context.Context, nodeID string) error
 

@@ -109,10 +109,20 @@ type BuildVNodeConfig struct {
 }
 
 type BuildVNodeControllerConfig struct {
+	// identity of vk instance, recommended to set it to pod name
 	ClientID string
 
 	Env string
 
 	// VPodIdentity is the vpod special value of model.LabelKeyOfComponent
 	VPodIdentity string
+
+	IsCluster bool
+
+	WorkloadMaxLevel int
+}
+
+type UnreachableNodeInfo struct {
+	NodeID              string
+	LatestReachableTime time.Time
 }

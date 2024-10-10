@@ -151,11 +151,11 @@ func TestGetContainerKey(t *testing.T) {
 }
 
 func TestFormatNodeName(t *testing.T) {
-	assert.Equal(t, model.VNodePrefix+"."+"suite", FormatNodeName("suite"))
+	assert.Equal(t, model.VNodePrefix+".suite.suite", FormatNodeName("suite", "suite"))
 }
 
 func TestExtractNodeIDFromNodeName(t *testing.T) {
-	assert.Equal(t, "suite", ExtractNodeIDFromNodeName("vnode.suite"))
+	assert.Equal(t, "suite", ExtractNodeIDFromNodeName("vnode.suite.suite"))
 	assert.Equal(t, "", ExtractNodeIDFromNodeName("suite"))
 }
 

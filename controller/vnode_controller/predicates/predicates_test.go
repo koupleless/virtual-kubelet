@@ -1,8 +1,9 @@
-package vnode_controller
+package predicates
 
 import (
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/stretchr/testify/assert"
+	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -254,6 +255,126 @@ func TestVNodePredicate_GenericNotPass(t *testing.T) {
 	}
 	pass := predicate.Generic(event.TypedGenericEvent[*corev1.Node]{
 		Object: &corev1.Node{
+			ObjectMeta: v1.ObjectMeta{
+				Labels: map[string]string{},
+			},
+		},
+	})
+	assert.False(t, pass)
+}
+
+func TestVNodeLeasePredicate_CreatePass(t *testing.T) {
+	vnodeRequirement, _ := labels.NewRequirement(model.LabelKeyOfComponent, selection.In, []string{model.ComponentVNodeLease})
+	predicate := VNodeLeasePredicate{
+		LabelSelector: labels.NewSelector().Add(*vnodeRequirement),
+	}
+	pass := predicate.Create(event.TypedCreateEvent[*coordinationv1.Lease]{
+		Object: &coordinationv1.Lease{
+			ObjectMeta: v1.ObjectMeta{
+				Labels: map[string]string{model.LabelKeyOfComponent: model.ComponentVNodeLease},
+			},
+		},
+	})
+	assert.True(t, pass)
+}
+
+func TestVNodeLeasePredicate_CreateNotPass(t *testing.T) {
+	vnodeRequirement, _ := labels.NewRequirement(model.LabelKeyOfComponent, selection.In, []string{model.ComponentVNodeLease})
+	predicate := VNodeLeasePredicate{
+		LabelSelector: labels.NewSelector().Add(*vnodeRequirement),
+	}
+	pass := predicate.Create(event.TypedCreateEvent[*coordinationv1.Lease]{
+		Object: &coordinationv1.Lease{
+			ObjectMeta: v1.ObjectMeta{
+				Labels: map[string]string{},
+			},
+		},
+	})
+	assert.False(t, pass)
+}
+
+func TestVNodeLeasePredicate_UpdatePass(t *testing.T) {
+	vnodeRequirement, _ := labels.NewRequirement(model.LabelKeyOfComponent, selection.In, []string{model.ComponentVNodeLease})
+	predicate := VNodeLeasePredicate{
+		LabelSelector: labels.NewSelector().Add(*vnodeRequirement),
+	}
+	pass := predicate.Update(event.TypedUpdateEvent[*coordinationv1.Lease]{
+		ObjectNew: &coordinationv1.Lease{
+			ObjectMeta: v1.ObjectMeta{
+				Labels: map[string]string{model.LabelKeyOfComponent: model.ComponentVNodeLease},
+			},
+		},
+	})
+	assert.True(t, pass)
+}
+
+func TestVNodeLeasePredicate_UpdateNotPass(t *testing.T) {
+	vnodeRequirement, _ := labels.NewRequirement(model.LabelKeyOfComponent, selection.In, []string{model.ComponentVNodeLease})
+	predicate := VNodeLeasePredicate{
+		LabelSelector: labels.NewSelector().Add(*vnodeRequirement),
+	}
+	pass := predicate.Update(event.TypedUpdateEvent[*coordinationv1.Lease]{
+		ObjectNew: &coordinationv1.Lease{
+			ObjectMeta: v1.ObjectMeta{
+				Labels: map[string]string{},
+			},
+		},
+	})
+	assert.False(t, pass)
+}
+
+func TestVNodeLeasePredicate_DeletePass(t *testing.T) {
+	vnodeRequirement, _ := labels.NewRequirement(model.LabelKeyOfComponent, selection.In, []string{model.ComponentVNodeLease})
+	predicate := VNodeLeasePredicate{
+		LabelSelector: labels.NewSelector().Add(*vnodeRequirement),
+	}
+	pass := predicate.Delete(event.TypedDeleteEvent[*coordinationv1.Lease]{
+		Object: &coordinationv1.Lease{
+			ObjectMeta: v1.ObjectMeta{
+				Labels: map[string]string{model.LabelKeyOfComponent: model.ComponentVNodeLease},
+			},
+		},
+	})
+	assert.True(t, pass)
+}
+
+func TestVNodeLeasePredicate_DeleteNotPass(t *testing.T) {
+	vnodeRequirement, _ := labels.NewRequirement(model.LabelKeyOfComponent, selection.In, []string{model.ComponentVNodeLease})
+	predicate := VNodeLeasePredicate{
+		LabelSelector: labels.NewSelector().Add(*vnodeRequirement),
+	}
+	pass := predicate.Delete(event.TypedDeleteEvent[*coordinationv1.Lease]{
+		Object: &coordinationv1.Lease{
+			ObjectMeta: v1.ObjectMeta{
+				Labels: map[string]string{},
+			},
+		},
+	})
+	assert.False(t, pass)
+}
+
+func TestVNodeLeasePredicate_GenericPass(t *testing.T) {
+	vnodeRequirement, _ := labels.NewRequirement(model.LabelKeyOfComponent, selection.In, []string{model.ComponentVNodeLease})
+	predicate := VNodeLeasePredicate{
+		LabelSelector: labels.NewSelector().Add(*vnodeRequirement),
+	}
+	pass := predicate.Generic(event.TypedGenericEvent[*coordinationv1.Lease]{
+		Object: &coordinationv1.Lease{
+			ObjectMeta: v1.ObjectMeta{
+				Labels: map[string]string{model.LabelKeyOfComponent: model.ComponentVNodeLease},
+			},
+		},
+	})
+	assert.True(t, pass)
+}
+
+func TestVNodeLeasePredicate_GenericNotPass(t *testing.T) {
+	vnodeRequirement, _ := labels.NewRequirement(model.LabelKeyOfComponent, selection.In, []string{model.ComponentVNodeLease})
+	predicate := VNodeLeasePredicate{
+		LabelSelector: labels.NewSelector().Add(*vnodeRequirement),
+	}
+	pass := predicate.Generic(event.TypedGenericEvent[*coordinationv1.Lease]{
+		Object: &coordinationv1.Lease{
 			ObjectMeta: v1.ObjectMeta{
 				Labels: map[string]string{},
 			},

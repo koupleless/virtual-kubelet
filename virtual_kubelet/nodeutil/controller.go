@@ -172,9 +172,6 @@ type NodeConfig struct {
 	// Set the number of workers to reconcile pods
 	// The default value is derived from the number of cores available.
 	NumWorkers int
-
-	// Set the error handler for node status update failures
-	NodeStatusUpdateErrorHandler virtual_kubelet.ErrorHandler
 }
 
 // WithClient return a NodeOpt that sets the client that will be used to create/manage the node.
@@ -243,13 +240,7 @@ func NewNode(name string, newProvider NewProviderFunc, opts ...NodeOpt) (*Node, 
 		return nil, errors.Wrap(err, "error creating provider")
 	}
 
-	nodeControllerOpts := []virtual_kubelet.NodeControllerOpt{
-		virtual_kubelet.WithNodeEnableLeaseV1(cfg.Client, virtual_kubelet.DefaultLeaseDuration),
-	}
-
-	if cfg.NodeStatusUpdateErrorHandler != nil {
-		nodeControllerOpts = append(nodeControllerOpts, virtual_kubelet.WithNodeStatusUpdateErrorHandler(cfg.NodeStatusUpdateErrorHandler))
-	}
+	nodeControllerOpts := []virtual_kubelet.NodeControllerOpt{}
 
 	nc, err := virtual_kubelet.NewNodeController(
 		np,

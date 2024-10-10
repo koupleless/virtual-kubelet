@@ -26,6 +26,10 @@ type MockTunnel struct {
 	nodeStorage      map[string]Node
 }
 
+func (m *MockTunnel) OnNodeNotReady(ctx context.Context, info model.UnreachableNodeInfo) {
+	return
+}
+
 func (m *MockTunnel) PutNode(ctx context.Context, nodeID string, node Node) {
 	m.Lock()
 	defer m.Unlock()

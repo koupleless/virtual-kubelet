@@ -75,6 +75,7 @@ var _ = BeforeSuite(func() {
 		ClientID:     clientID,
 		Env:          env,
 		VPodIdentity: vPodIdentity,
+		IsCluster:    true,
 	}, tunnels)
 
 	err = vnodeController.SetupWithManager(ctx, k8sManager)

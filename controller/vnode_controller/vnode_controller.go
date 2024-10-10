@@ -223,6 +223,20 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 				}
 			})
 
+			go utils.TimedTaskWithInterval(ctx, time.Second, func(ctx context.Context) {
+				notReachableNodeInfos := brc.runtimeInfoStore.GetNotReachableNodeInfos(time.Second * model.NodeLeaseDurationSeconds)
+				for _, nodeInfo := range notReachableNodeInfos {
+					vNode := brc.runtimeInfoStore.GetVNode(nodeInfo.NodeID)
+					if vNode == nil {
+						continue
+					}
+
+					if vNode.IsLeader() {
+						vNode.Tunnel.OnNodeNotReady(ctx, nodeInfo)
+					}
+				}
+			})
+
 			close(brc.ready)
 		} else {
 			log.G(ctx).Error("cache sync failed")
@@ -313,6 +327,7 @@ func (brc *VNodeController) onNodeStatusDataArrived(nodeID string, data model.No
 	}
 
 	if vNode.IsLeader() {
+		brc.runtimeInfoStore.NodeMsgArrived(nodeID)
 		vNode.SyncNodeStatus(data)
 	}
 }
@@ -324,6 +339,7 @@ func (brc *VNodeController) onQueryAllContainerStatusDataArrived(nodeID string, 
 	}
 
 	if vNode.IsLeader() {
+		brc.runtimeInfoStore.NodeMsgArrived(nodeID)
 		vNode.SyncAllContainerInfo(context.TODO(), data)
 	}
 }
@@ -335,6 +351,7 @@ func (brc *VNodeController) onContainerStatusChanged(nodeID string, data model.C
 	}
 
 	if vNode.IsLeader() {
+		brc.runtimeInfoStore.NodeMsgArrived(nodeID)
 		vNode.SyncSingleContainerInfo(context.TODO(), data)
 	}
 }
@@ -499,7 +516,7 @@ func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t
 			return
 		}
 
-		brc.runtimeInfoStore.NodeRunning(utils.FormatNodeName(nodeID, brc.env))
+		brc.runtimeInfoStore.NodeRunning(nodeID)
 
 		go utils.TimedTaskWithInterval(vnCtx, time.Second*9, func(ctx context.Context) {
 			err = t.FetchHealthData(vnCtx, nodeID)
@@ -579,7 +596,7 @@ func (brc *VNodeController) shutdownVNode(nodeID string) {
 		return
 	}
 	vNode.Shutdown()
-	brc.runtimeInfoStore.NodeShutdown(utils.FormatNodeName(nodeID, brc.env))
+	brc.runtimeInfoStore.NodeShutdown(nodeID)
 }
 
 func (brc *VNodeController) wakeUpVNode(nodeID string) {

@@ -121,3 +121,8 @@ type BuildVNodeControllerConfig struct {
 
 	WorkloadMaxLevel int
 }
+
+type UnreachableNodeInfo struct {
+	NodeID              string
+	LatestReachableTime time.Time
+}

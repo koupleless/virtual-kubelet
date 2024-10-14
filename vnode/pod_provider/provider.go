@@ -66,10 +66,6 @@ func NewVPodProvider(namespace, localIP, nodeID string, client client.Client, t 
 	return provider
 }
 
-func (b *VPodProvider) Run(ctx context.Context) {
-	go utils.TimedTaskWithInterval(ctx, time.Minute, b.syncAllPodStatus)
-}
-
 func (b *VPodProvider) syncAllPodStatus(ctx context.Context) {
 	logger := log.G(ctx)
 	pods := b.runtimeInfoStore.GetPods()
@@ -128,21 +124,17 @@ func (b *VPodProvider) updatePodStatusToKubernetes(ctx context.Context, pod *cor
 }
 
 func (b *VPodProvider) SyncContainerInfo(ctx context.Context, containerInfos []model.ContainerStatusData) {
-	b.runtimeInfoStore.SyncContainerInfo(containerInfos)
-	b.syncAllPodStatus(ctx)
-}
-
-func (b *VPodProvider) SyncSingleContainerInfo(ctx context.Context, info model.ContainerStatusData) {
-	b.runtimeInfoStore.PutContainerInfo(info)
-	b.syncRelatedPodStatus(ctx, info.PodKey, info.Name)
+	for _, containerInfo := range containerInfos {
+		updated := b.runtimeInfoStore.PutContainerStatus(containerInfo)
+		if updated {
+			// only when container status updated, update related pod status
+			b.syncRelatedPodStatus(ctx, containerInfo.PodKey, containerInfo.Name)
+		}
+	}
 }
 
 func (b *VPodProvider) InitContainerInfo(info model.ContainerStatusData) {
-	b.runtimeInfoStore.PutContainerInfo(info)
-}
-
-func (b *VPodProvider) queryAllContainerStatus(_ context.Context) []*model.ContainerStatusData {
-	return b.runtimeInfoStore.GetLatestContainerInfos()
+	b.runtimeInfoStore.PutContainerStatus(info)
 }
 
 func (b *VPodProvider) queryContainerStatus(_ context.Context, podKey string, container *corev1.Container) *model.ContainerStatusData {
@@ -151,6 +143,9 @@ func (b *VPodProvider) queryContainerStatus(_ context.Context, podKey string, co
 }
 
 func (b *VPodProvider) startContainer(ctx context.Context, podKey string, container *corev1.Container) error {
+	// clear local container status cache
+	containerKey := b.tunnel.GetContainerUniqueKey(podKey, container)
+	b.runtimeInfoStore.ClearContainerStatus(containerKey)
 	return b.tunnel.StartContainer(ctx, b.nodeID, podKey, container)
 }
 

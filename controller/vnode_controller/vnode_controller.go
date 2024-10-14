@@ -223,7 +223,7 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 				}
 			})
 
-			go utils.TimedTaskWithInterval(ctx, time.Second*20, func(ctx context.Context) {
+			go utils.TimedTaskWithInterval(ctx, time.Second, func(ctx context.Context) {
 				notReachableNodeInfos := brc.runtimeInfoStore.GetNotReachableNodeInfos(time.Second * model.NodeLeaseDurationSeconds)
 				for _, nodeInfo := range notReachableNodeInfos {
 					vNode := brc.runtimeInfoStore.GetVNode(nodeInfo.NodeID)
@@ -340,7 +340,7 @@ func (brc *VNodeController) onQueryAllContainerStatusDataArrived(nodeID string, 
 
 	if vNode.IsLeader() {
 		brc.runtimeInfoStore.NodeMsgArrived(nodeID)
-		vNode.SyncAllContainerInfo(context.TODO(), data)
+		vNode.SyncContainerInfo(context.TODO(), data)
 	}
 }
 
@@ -352,7 +352,7 @@ func (brc *VNodeController) onContainerStatusChanged(nodeID string, data model.C
 
 	if vNode.IsLeader() {
 		brc.runtimeInfoStore.NodeMsgArrived(nodeID)
-		vNode.SyncSingleContainerInfo(context.TODO(), data)
+		vNode.SyncContainerInfo(context.TODO(), []model.ContainerStatusData{data})
 	}
 }
 

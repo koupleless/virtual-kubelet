@@ -212,3 +212,10 @@ func SplitMetaNamespaceKey(key string) (namespace, name string, err error) {
 
 	return "", "", fmt.Errorf("unexpected key format: %q", key)
 }
+
+func IsContainerStatusDataEqual(dataA, dataB *model.ContainerStatusData) bool {
+	if dataA == nil || dataB == nil {
+		return false
+	}
+	return dataA.State == dataB.State && dataA.Reason == dataB.Reason && dataA.Message == dataB.Message && dataA.PodKey == dataB.PodKey
+}

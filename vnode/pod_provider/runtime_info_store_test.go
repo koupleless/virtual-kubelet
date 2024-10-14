@@ -130,7 +130,7 @@ func TestRuntimeInfoStore_GetPods(t *testing.T) {
 
 func TestRuntimeInfoStore_PutContainerInfo(t *testing.T) {
 	store := NewRuntimeInfoStore()
-	store.PutContainerInfo(model.ContainerStatusData{
+	store.PutContainerStatus(model.ContainerStatusData{
 		Key:        "suite-container",
 		Name:       "container",
 		PodKey:     "suite",
@@ -144,7 +144,7 @@ func TestRuntimeInfoStore_PutContainerInfo(t *testing.T) {
 
 func TestRuntimeInfoStore_GetLatestContainerInfos(t *testing.T) {
 	store := NewRuntimeInfoStore()
-	store.PutContainerInfo(model.ContainerStatusData{
+	store.PutContainerStatus(model.ContainerStatusData{
 		Key:        "suite-container",
 		Name:       "container",
 		PodKey:     "suite",
@@ -159,7 +159,7 @@ func TestRuntimeInfoStore_GetLatestContainerInfos(t *testing.T) {
 
 func TestRuntimeInfoStore_GetLatestContainerInfoByContainerKey(t *testing.T) {
 	store := NewRuntimeInfoStore()
-	store.PutContainerInfo(model.ContainerStatusData{
+	store.PutContainerStatus(model.ContainerStatusData{
 		Key:        "suite-container",
 		Name:       "container",
 		PodKey:     "suite",

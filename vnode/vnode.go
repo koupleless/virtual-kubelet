@@ -54,7 +54,6 @@ func (n *VNode) Run(ctx context.Context) {
 		close(n.done)
 	}()
 
-	n.podProvider.Run(ctx)
 	go func() {
 		err = n.node.Run(ctx)
 	}()
@@ -74,7 +73,7 @@ func (n *VNode) Run(ctx context.Context) {
 		// node exit, process node delete and lease delete
 		node := n.nodeProvider.CurrNodeInfo()
 		err = n.client.Delete(context.Background(), node)
-		if err != nil {
+		if err != nil && !apierrors.IsNotFound(err) {
 			return
 		}
 		err = n.client.Delete(context.Background(), n.latestLease)
@@ -238,15 +237,9 @@ func (n *VNode) SyncNodeStatus(data model.NodeStatusData) {
 	}
 }
 
-func (n *VNode) SyncAllContainerInfo(ctx context.Context, infos []model.ContainerStatusData) {
+func (n *VNode) SyncContainerInfo(ctx context.Context, infos []model.ContainerStatusData) {
 	if n.podProvider != nil {
 		go n.podProvider.SyncContainerInfo(ctx, infos)
-	}
-}
-
-func (n *VNode) SyncSingleContainerInfo(ctx context.Context, info model.ContainerStatusData) {
-	if n.podProvider != nil {
-		go n.podProvider.SyncSingleContainerInfo(ctx, info)
 	}
 }
 

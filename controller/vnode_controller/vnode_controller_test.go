@@ -259,5 +259,5 @@ func TestWakeUpNonExistVNode(t *testing.T) {
 	}, []tunnel.Tunnel{
 		&mockTunnel,
 	})
-	vc.wakeUpVNode("test-node")
+	vc.wakeUpVNode(context.TODO(), "test-node")
 }

@@ -167,8 +167,7 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 			brc.runtimeInfoStore.PutVNodeLeaseLatestUpdateTime(e.ObjectNew.Name, e.ObjectNew.Spec.RenewTime.Time)
 		},
 		DeleteFunc: func(ctx context.Context, e event.TypedDeleteEvent[*v1.Lease], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-			log.G(ctx).Info("vnode lease deleted, wake vnode up", e.Object.Name)
-			brc.wakeUpVNode(utils.ExtractNodeIDFromNodeName(e.Object.Name))
+			brc.wakeUpVNode(ctx, utils.ExtractNodeIDFromNodeName(e.Object.Name))
 		},
 	}
 
@@ -219,7 +218,7 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 			go utils.TimedTaskWithInterval(ctx, time.Millisecond*500, func(ctx context.Context) {
 				outdatedVNodeNameList := brc.runtimeInfoStore.GetLeaseOutdatedVNodeName(time.Second * model.NodeLeaseDurationSeconds)
 				for _, nodeName := range outdatedVNodeNameList {
-					brc.wakeUpVNode(utils.ExtractNodeIDFromNodeName(nodeName))
+					brc.wakeUpVNode(ctx, utils.ExtractNodeIDFromNodeName(nodeName))
 				}
 			})
 
@@ -599,10 +598,11 @@ func (brc *VNodeController) shutdownVNode(nodeID string) {
 	brc.runtimeInfoStore.NodeShutdown(nodeID)
 }
 
-func (brc *VNodeController) wakeUpVNode(nodeID string) {
+func (brc *VNodeController) wakeUpVNode(ctx context.Context, nodeID string) {
 	vNode := brc.runtimeInfoStore.GetVNode(nodeID)
 	if vNode == nil {
 		return
 	}
+	log.G(ctx).Info("vnode lease outdated, wake vnode up :", nodeID)
 	vNode.RetryLease()
 }

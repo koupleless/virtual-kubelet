@@ -66,20 +66,6 @@ func NewVPodProvider(namespace, localIP, nodeID string, client client.Client, t 
 	return provider
 }
 
-func (b *VPodProvider) syncAllPodStatus(ctx context.Context) {
-	logger := log.G(ctx)
-	pods := b.runtimeInfoStore.GetPods()
-	// sort by create time
-	sort.Slice(pods, func(i, j int) bool {
-		return pods[i].CreationTimestamp.UnixMilli() > pods[j].CreationTimestamp.UnixMilli()
-	})
-	for _, pod := range pods {
-		if err := b.updatePodStatusToKubernetes(ctx, pod); err != nil {
-			logger.WithError(err).Error("update pod status error")
-		}
-	}
-}
-
 func (b *VPodProvider) syncRelatedPodStatus(ctx context.Context, podKey, containerName string) {
 	logger := log.G(ctx)
 	if podKey != model.PodKeyAll {

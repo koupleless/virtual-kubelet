@@ -59,6 +59,7 @@ func (n *VNode) Run(ctx context.Context) {
 	}()
 
 	n.isLeader = true
+	n.exitWhenLeaderChanged = make(chan struct{})
 	go n.OnNodeStart(ctx, n.nodeID)
 	defer n.OnNodeStop(ctx, n.nodeID)
 

@@ -144,16 +144,6 @@ func (r *RuntimeInfoStore) ClearContainerStatus(containerKey string) {
 	delete(r.latestContainerInfosFromNode, containerKey)
 }
 
-func (r *RuntimeInfoStore) SyncContainerInfo(containerInfos []model.ContainerStatusData) {
-	r.Lock()
-	defer r.Unlock()
-
-	r.latestContainerInfosFromNode = map[string]*model.ContainerStatusData{}
-	for _, containerInfo := range containerInfos {
-		r.latestContainerInfosFromNode[containerInfo.Key] = &containerInfo
-	}
-}
-
 func (r *RuntimeInfoStore) GetLatestContainerInfos() []*model.ContainerStatusData {
 	r.Lock()
 	defer r.Unlock()

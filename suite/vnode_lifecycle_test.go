@@ -6,6 +6,7 @@ import (
 	"github.com/koupleless/virtual-kubelet/model"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	v12 "k8s.io/api/coordination/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -22,7 +23,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 
 	nodeInfo := prepareNode(nodeID, nodeVersion)
 
-	name := utils.FormatNodeName(nodeID)
+	name := utils.FormatNodeName(nodeID, env)
 
 	Context("node online and deactive finally", func() {
 		It("node should become a ready vnode eventually", func() {
@@ -70,6 +71,13 @@ var _ = Describe("VNode Lifecycle Test", func() {
 			Expect(existTestTaint).To(BeTrue())
 		})
 
+		It("node not ready should send not ready to mock tunnel", func() {
+			tl.DeleteNode(nodeID)
+			Eventually(func() bool {
+				return tl.NodeNotReady[nodeID]
+			}, time.Second*50, time.Second).Should(BeTrue())
+		})
+
 		It("node offline with deactive message and finally exit", func() {
 			nodeInfo.NodeInfo.Metadata.Status = model.NodeStatusDeactivated
 			tl.PutNode(ctx, nodeID, nodeInfo)
@@ -77,7 +85,12 @@ var _ = Describe("VNode Lifecycle Test", func() {
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name: name,
 				}, vnode)
-				return errors.IsNotFound(err)
+				lease := &v12.Lease{}
+				leaseErr := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      name,
+					Namespace: v1.NamespaceNodeLease,
+				}, lease)
+				return errors.IsNotFound(err) && errors.IsNotFound(leaseErr)
 			}, time.Second*30, time.Second).Should(BeTrue())
 		})
 	})
@@ -101,22 +114,6 @@ var _ = Describe("VNode Lifecycle Test", func() {
 				return err == nil && vnodeReady
 			}, time.Second*20, time.Second).Should(BeTrue())
 			Expect(vnode).NotTo(BeNil())
-		})
-
-		It("node timeout offline need to be not ready", func() {
-			tl.DeleteNode(nodeID)
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: name,
-				}, vnode)
-				notReady := false
-				for _, cond := range vnode.Status.Conditions {
-					if cond.Type == v1.NodeReady && cond.Status == v1.ConditionFalse {
-						notReady = true
-					}
-				}
-				return err == nil && notReady
-			}, time.Minute, time.Second).Should(BeTrue())
 		})
 
 		It("node offline with deactive message and finally exit", func() {

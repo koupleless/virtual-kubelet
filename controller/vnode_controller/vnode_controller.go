@@ -7,11 +7,13 @@ import (
 	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/common/trace"
 	"github.com/koupleless/virtual-kubelet/common/utils"
+	"github.com/koupleless/virtual-kubelet/controller/vnode_controller/predicates"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/tunnel"
 	"github.com/koupleless/virtual-kubelet/vnode"
 	errpkg "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	v1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
@@ -34,6 +36,10 @@ type VNodeController struct {
 
 	vPodIdentity string
 
+	isCluster bool
+
+	workloadMaxLevel int
+
 	tunnels []tunnel.Tunnel
 
 	client client.Client
@@ -44,26 +50,8 @@ type VNodeController struct {
 	runtimeInfoStore *RuntimeInfoStore
 }
 
-func (brc *VNodeController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+func (brc *VNodeController) Reconcile(_ context.Context, _ reconcile.Request) (reconcile.Result, error) {
 	// do nothing here
-	//<-brc.ready
-	//pod := &corev1.Pod{}
-	//err := brc.client.Get(ctx, types.NamespacedName{
-	//	Namespace: request.Namespace,
-	//	Name:      request.Name,
-	//}, pod)
-	//if err != nil {
-	//	if k8sErr.IsNotFound(err) {
-	//		log.G(ctx).WithField("vpodName", pod.Name).Info("vpod has been deleted")
-	//		return reconcile.Result{}, nil
-	//	}
-	//	log.G(ctx).WithField("vpodName", pod.Name).WithError(err).Info("fail to get vpod")
-	//	return reconcile.Result{
-	//		Requeue:      true,
-	//		RequeueAfter: time.Second * 5,
-	//	}, nil
-	//}
-
 	return reconcile.Result{}, nil
 }
 
@@ -80,10 +68,16 @@ func NewVNodeController(config *model.BuildVNodeControllerConfig, tunnels []tunn
 		return nil, errors.New("config must set vpod identity")
 	}
 
+	if config.IsCluster && config.WorkloadMaxLevel == 0 {
+		config.WorkloadMaxLevel = 3
+	}
+
 	return &VNodeController{
 		clientID:         config.ClientID,
 		env:              config.Env,
 		vPodIdentity:     config.VPodIdentity,
+		isCluster:        config.IsCluster,
+		workloadMaxLevel: config.WorkloadMaxLevel,
 		tunnels:          tunnels,
 		runtimeInfoStore: NewRuntimeInfoStore(),
 		ready:            make(chan struct{}),
@@ -100,6 +94,13 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 	brc.cache = mgr.GetCache()
 
 	log.G(ctx).Info("Setting up register controller")
+
+	if err = mgr.GetFieldIndexer().IndexField(ctx, &corev1.Pod{}, "spec.nodeName", func(rawObj client.Object) []string {
+		pod := rawObj.(*corev1.Pod)
+		return []string{pod.Spec.NodeName}
+	}); err != nil {
+		return err
+	}
 
 	c, err := controller.New("vnode-controller", mgr, controller.Options{
 		Reconciler: brc,
@@ -124,13 +125,9 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 			<-brc.ready
 			brc.podDeleteHandler(ctx, e.Object)
 		},
-		GenericFunc: func(ctx context.Context, e event.TypedGenericEvent[*corev1.Pod], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-			<-brc.ready
-			log.G(ctx).Warn("GenericFunc called")
-		},
 	}
 
-	if err = c.Watch(source.Kind(mgr.GetCache(), &corev1.Pod{}, &podHandler, &VPodPredicate{
+	if err = c.Watch(source.Kind(mgr.GetCache(), &corev1.Pod{}, &podHandler, &predicates.VPodPredicate{
 		VPodLabelSelector: labels.NewSelector().Add(*vpodRequirement),
 	})); err != nil {
 		log.G(ctx).WithError(err).Error("unable to watch Pods")
@@ -140,23 +137,44 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 	nodeHandler := handler.TypedFuncs[*corev1.Node, reconcile.Request]{
 		CreateFunc: func(ctx context.Context, e event.TypedCreateEvent[*corev1.Node], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 			log.G(ctx).Info("vnode created ", e.Object.Name)
+			brc.runtimeInfoStore.PutNode(e.Object.Name)
 		},
 		UpdateFunc: func(ctx context.Context, e event.TypedUpdateEvent[*corev1.Node], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 		},
 		DeleteFunc: func(ctx context.Context, e event.TypedDeleteEvent[*corev1.Node], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 			log.G(ctx).Info("vnode deleted ", e.Object.Name)
+			brc.runtimeInfoStore.DeleteNode(e.Object.Name)
 			brc.shutdownVNode(utils.ExtractNodeIDFromNodeName(e.Object.Name))
-		},
-		GenericFunc: func(ctx context.Context, e event.TypedGenericEvent[*corev1.Node], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-			log.G(ctx).Info("vnode generic ", e.Object.Name)
 		},
 	}
 
 	vnodeRequirement, _ := labels.NewRequirement(model.LabelKeyOfComponent, selection.In, []string{model.ComponentVNode})
 	envRequirement, _ := labels.NewRequirement(model.LabelKeyOfEnv, selection.In, []string{brc.env})
 
-	if err = c.Watch(source.Kind(mgr.GetCache(), &corev1.Node{}, &nodeHandler, &VNodePredicate{
+	if err = c.Watch(source.Kind(mgr.GetCache(), &corev1.Node{}, &nodeHandler, &predicates.VNodePredicate{
 		VNodeLabelSelector: labels.NewSelector().Add(*vnodeRequirement, *envRequirement),
+	})); err != nil {
+		log.G(ctx).WithError(err).Error("unable to watch VNodes")
+		return err
+	}
+
+	leaseHandler := handler.TypedFuncs[*v1.Lease, reconcile.Request]{
+		CreateFunc: func(ctx context.Context, e event.TypedCreateEvent[*v1.Lease], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			brc.runtimeInfoStore.PutVNodeLeaseLatestUpdateTime(e.Object.Name, e.Object.Spec.RenewTime.Time)
+		},
+		UpdateFunc: func(ctx context.Context, e event.TypedUpdateEvent[*v1.Lease], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			// refresh the latest update time of node
+			brc.runtimeInfoStore.PutVNodeLeaseLatestUpdateTime(e.ObjectNew.Name, e.ObjectNew.Spec.RenewTime.Time)
+		},
+		DeleteFunc: func(ctx context.Context, e event.TypedDeleteEvent[*v1.Lease], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			brc.wakeUpVNode(ctx, utils.ExtractNodeIDFromNodeName(e.Object.Name))
+		},
+	}
+
+	vnodeLeaseRequirement, _ := labels.NewRequirement(model.LabelKeyOfComponent, selection.In, []string{model.ComponentVNodeLease})
+
+	if err = c.Watch(source.Kind(mgr.GetCache(), &v1.Lease{}, &leaseHandler, &predicates.VNodeLeasePredicate{
+		LabelSelector: labels.NewSelector().Add(*vnodeLeaseRequirement, *envRequirement),
 	})); err != nil {
 		log.G(ctx).WithError(err).Error("unable to watch VNodes")
 		return err
@@ -181,7 +199,6 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 		if syncd {
 			// restart virtual kubelet for previous node
 			componentRequirement, _ := labels.NewRequirement(model.LabelKeyOfComponent, selection.In, []string{model.ComponentVNode})
-			envRequirement, _ := labels.NewRequirement(model.LabelKeyOfEnv, selection.In, []string{brc.env})
 
 			nodeList := &corev1.NodeList{}
 			err = brc.client.List(ctx, nodeList, &client.ListOptions{
@@ -191,19 +208,34 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 				log.G(ctx).WithError(err).Error("failed to list nodes")
 				return
 			}
-			brc.discoverPreviousNodes(ctx, nodeList)
-			// sync pods from kubernetes
-			podComponentRequirement, _ := labels.NewRequirement(model.LabelKeyOfComponent, selection.In, []string{brc.vPodIdentity})
 
-			podList := &corev1.PodList{}
-			err = brc.client.List(ctx, podList, &client.ListOptions{
-				LabelSelector: labels.NewSelector().Add(*podComponentRequirement),
-			})
-			if err != nil {
-				log.G(ctx).WithError(err).Error("failed to list pods")
-				return
+			for _, node := range nodeList.Items {
+				brc.runtimeInfoStore.PutNode(node.Name)
 			}
-			brc.discoverPreviousPods(ctx, podList)
+
+			brc.discoverPreviousNodes(nodeList)
+
+			go utils.TimedTaskWithInterval(ctx, time.Millisecond*500, func(ctx context.Context) {
+				outdatedVNodeNameList := brc.runtimeInfoStore.GetLeaseOutdatedVNodeName(time.Second * model.NodeLeaseDurationSeconds)
+				for _, nodeName := range outdatedVNodeNameList {
+					brc.wakeUpVNode(ctx, utils.ExtractNodeIDFromNodeName(nodeName))
+				}
+			})
+
+			go utils.TimedTaskWithInterval(ctx, time.Second, func(ctx context.Context) {
+				notReachableNodeInfos := brc.runtimeInfoStore.GetNotReachableNodeInfos(time.Second * model.NodeLeaseDurationSeconds)
+				for _, nodeInfo := range notReachableNodeInfos {
+					vNode := brc.runtimeInfoStore.GetVNode(nodeInfo.NodeID)
+					if vNode == nil {
+						continue
+					}
+
+					if vNode.IsLeader() {
+						vNode.Tunnel.OnNodeNotReady(ctx, nodeInfo)
+					}
+				}
+			})
+
 			close(brc.ready)
 		} else {
 			log.G(ctx).Error("cache sync failed")
@@ -212,12 +244,10 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 
 	log.G(ctx).Info("register controller ready")
 
-	go utils.TimedTaskWithInterval(ctx, time.Second, brc.checkAndModifyOfflineNode)
-
 	return nil
 }
 
-func (brc *VNodeController) discoverPreviousNodes(ctx context.Context, nodeList *corev1.NodeList) {
+func (brc *VNodeController) discoverPreviousNodes(nodeList *corev1.NodeList) {
 	tmpTunnelMap := make(map[string]tunnel.Tunnel)
 
 	for _, t := range brc.tunnels {
@@ -253,16 +283,8 @@ func (brc *VNodeController) discoverPreviousNodes(ctx context.Context, nodeList 
 	}
 }
 
-func (brc *VNodeController) discoverPreviousPods(ctx context.Context, podList *corev1.PodList) {
+func (brc *VNodeController) discoverPreviousPods(ctx context.Context, vn *vnode.VNode, podList *corev1.PodList) {
 	for _, pod := range podList.Items {
-		nodeName := pod.Spec.NodeName
-		// check node name in local storage
-		vn := brc.runtimeInfoStore.GetVNodeByNodeName(nodeName)
-		if vn == nil {
-			// node not exist
-			continue
-		}
-
 		key := utils.GetPodKey(&pod)
 		vn.PodStore(key, &pod)
 		// sync container states
@@ -302,9 +324,11 @@ func (brc *VNodeController) onNodeStatusDataArrived(nodeID string, data model.No
 	if vNode == nil {
 		return
 	}
-	brc.runtimeInfoStore.NodeMsgArrived(nodeID)
 
-	vNode.SyncNodeStatus(data)
+	if vNode.IsLeader() {
+		brc.runtimeInfoStore.NodeMsgArrived(nodeID)
+		vNode.SyncNodeStatus(data)
+	}
 }
 
 func (brc *VNodeController) onQueryAllContainerStatusDataArrived(nodeID string, data []model.ContainerStatusData) {
@@ -312,9 +336,11 @@ func (brc *VNodeController) onQueryAllContainerStatusDataArrived(nodeID string, 
 	if vNode == nil {
 		return
 	}
-	brc.runtimeInfoStore.NodeMsgArrived(nodeID)
 
-	vNode.SyncAllContainerInfo(context.TODO(), data)
+	if vNode.IsLeader() {
+		brc.runtimeInfoStore.NodeMsgArrived(nodeID)
+		vNode.SyncContainerInfo(context.TODO(), data)
+	}
 }
 
 func (brc *VNodeController) onContainerStatusChanged(nodeID string, data model.ContainerStatusData) {
@@ -322,16 +348,16 @@ func (brc *VNodeController) onContainerStatusChanged(nodeID string, data model.C
 	if vNode == nil {
 		return
 	}
-	brc.runtimeInfoStore.NodeMsgArrived(nodeID)
 
-	vNode.SyncSingleContainerInfo(context.TODO(), data)
+	if vNode.IsLeader() {
+		brc.runtimeInfoStore.NodeMsgArrived(nodeID)
+		vNode.SyncContainerInfo(context.TODO(), []model.ContainerStatusData{data})
+	}
 }
 
 func (brc *VNodeController) podCreateHandler(ctx context.Context, podFromKubernetes *corev1.Pod) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	ctx, span := trace.StartSpan(ctx, "CreateFunc")
-	defer span.End()
 
 	nodeName := podFromKubernetes.Spec.NodeName
 	// check node name in local storage
@@ -340,6 +366,14 @@ func (brc *VNodeController) podCreateHandler(ctx context.Context, podFromKuberne
 		// node not exist, invalid add req
 		return
 	}
+
+	if !vn.IsLeader() {
+		// not leader, just return
+		return
+	}
+
+	ctx, span := trace.StartSpan(ctx, "CreateFunc")
+	defer span.End()
 
 	// At this point we know that something in .metadata or .spec has changed, so we must proceed to sync the pod.
 	key := utils.GetPodKey(podFromKubernetes)
@@ -352,8 +386,6 @@ func (brc *VNodeController) podCreateHandler(ctx context.Context, podFromKuberne
 func (brc *VNodeController) podUpdateHandler(ctx context.Context, oldPodFromKubernetes, newPodFromKubernetes *corev1.Pod) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	ctx, span := trace.StartSpan(ctx, "UpdateFunc")
-	defer span.End()
 
 	nodeName := newPodFromKubernetes.Spec.NodeName
 	// check node name in local storage
@@ -362,6 +394,13 @@ func (brc *VNodeController) podUpdateHandler(ctx context.Context, oldPodFromKube
 		// node not exist, invalid add req
 		return
 	}
+
+	if !vn.IsLeader() {
+		// not leader, just return
+		return
+	}
+	ctx, span := trace.StartSpan(ctx, "UpdateFunc")
+	defer span.End()
 
 	// At this point we know that something in .metadata or .spec has changed, so we must proceed to sync the pod.
 	key := utils.GetPodKey(newPodFromKubernetes)
@@ -383,10 +422,6 @@ func (brc *VNodeController) podUpdateHandler(ctx context.Context, oldPodFromKube
 func (brc *VNodeController) podDeleteHandler(ctx context.Context, podFromKubernetes *corev1.Pod) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	ctx, span := trace.StartSpan(ctx, "DeleteFunc")
-	defer span.End()
-
-	key := utils.GetPodKey(podFromKubernetes)
 
 	nodeName := podFromKubernetes.Spec.NodeName
 	// check node name in local storage
@@ -395,27 +430,21 @@ func (brc *VNodeController) podDeleteHandler(ctx context.Context, podFromKuberne
 		// node not exist, invalid add req
 		return
 	}
+
+	if !vn.IsLeader() {
+		// not leader, just return
+		return
+	}
+	ctx, span := trace.StartSpan(ctx, "DeleteFunc")
+	defer span.End()
+
+	key := utils.GetPodKey(podFromKubernetes)
+
 	ctx = span.WithField(ctx, "key", key)
 	vn.SyncPodsFromKubernetesEnqueue(ctx, key)
 	// If this pod was in the deletion queue, forget about it
 	key = fmt.Sprintf("%v/%v", key, podFromKubernetes.UID)
 	vn.DeletePodsFromKubernetesForget(ctx, key)
-}
-
-func (brc *VNodeController) checkAndModifyOfflineNode(_ context.Context) {
-	offlineNodes := brc.runtimeInfoStore.GetOfflineNodes(1000 * 40)
-	for _, nodeID := range offlineNodes {
-		brc.onNodeStatusDataArrived(nodeID, model.NodeStatusData{
-			CustomConditions: []corev1.NodeCondition{
-				{
-					Type:    corev1.NodeReady,
-					Status:  corev1.ConditionFalse,
-					Reason:  "NodeOffline",
-					Message: "It has been more than 20 seconds since the message from Node was received, please check",
-				},
-			},
-		})
-	}
 }
 
 func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t tunnel.Tunnel) {
@@ -430,12 +459,6 @@ func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t
 		// already exist, return
 		return
 	}
-
-	defer func() {
-		if err != nil {
-			logrus.WithError(err).Errorf("failed to start node %s", nodeID)
-		}
-	}()
 
 	vn, err := vnode.NewVNode(&model.BuildVNodeConfig{
 		Client:       brc.client,
@@ -458,59 +481,128 @@ func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t
 	vnCtx := context.WithValue(context.Background(), "nodeID", nodeID)
 	vnCtx, vnCancel := context.WithCancel(vnCtx)
 
-	go vn.Run(vnCtx)
-
-	if err = vn.WaitReady(time.Minute); err != nil {
-		err = errpkg.Wrap(err, "Error waiting vnode ready")
-		vnCancel()
-		return
-	}
-
-	t.OnNodeStart(vnCtx, nodeID)
-
-	go utils.TimedTaskWithInterval(vnCtx, time.Second*9, func(ctx context.Context) {
-		err = t.FetchHealthData(ctx, nodeID)
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("Failed to fetch node health info from %s", nodeID)
-		}
-	})
-
-	go utils.TimedTaskWithInterval(vnCtx, time.Second*5, func(ctx context.Context) {
-		err = t.QueryAllContainerStatusData(ctx, nodeID)
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("Failed to query containers info from %s", nodeID)
-		}
-	})
-
-	// record first msg arrived time
-	brc.runtimeInfoStore.NodeMsgArrived(nodeID)
-
 	go func() {
+		needRestart := false
 		select {
 		case <-vn.Done():
 			logrus.WithError(vn.Err()).Infof("node exit %s", nodeID)
-		case <-vnCtx.Done():
-			logrus.WithError(vnCtx.Err()).Infof("node exit %s", nodeID)
+		case <-vn.ExitWhenLeaderChanged():
+			logrus.Infof("node leader changed %s", nodeID)
+			needRestart = true
 		}
 		vnCancel()
 		brc.runtimeInfoStore.DeleteVNode(nodeID)
+		if needRestart {
+			brc.startVNode(nodeID, initData, t)
+		}
 	}()
+
+	// leader election
+	go func() {
+		success := brc.vnodeLeaderElection(vnCtx, vn)
+		if !success {
+			// leader election failed, by node exit
+			return
+		}
+
+		go vn.RenewLease(vnCtx, brc.clientID)
+
+		go vn.Run(vnCtx)
+
+		if err = vn.WaitReady(vnCtx, time.Minute); err != nil {
+			err = errpkg.Wrap(err, "Error waiting vnode ready")
+			vnCancel()
+			return
+		}
+
+		brc.runtimeInfoStore.NodeRunning(nodeID)
+
+		go utils.TimedTaskWithInterval(vnCtx, time.Second*9, func(ctx context.Context) {
+			err = t.FetchHealthData(vnCtx, nodeID)
+			if err != nil {
+				log.G(vnCtx).WithError(err).Errorf("Failed to fetch node health info from %s", nodeID)
+			}
+		})
+
+		go utils.TimedTaskWithInterval(vnCtx, time.Second*5, func(ctx context.Context) {
+			err = t.QueryAllContainerStatusData(vnCtx, nodeID)
+			if err != nil {
+				log.G(vnCtx).WithError(err).Errorf("Failed to query containers info from %s", nodeID)
+			}
+		})
+
+		// discover previous pods relate to current vnode
+		listOpts := []client.ListOption{
+			client.MatchingFields{"spec.nodeName": utils.FormatNodeName(nodeID, brc.env)},
+			client.MatchingLabels{model.LabelKeyOfComponent: brc.vPodIdentity},
+		}
+		podList := &corev1.PodList{}
+		err = brc.client.List(vnCtx, podList, listOpts...)
+		if err != nil {
+			log.G(vnCtx).WithError(err).Error("failed to list pods")
+			return
+		}
+		brc.discoverPreviousPods(vnCtx, vn, podList)
+	}()
+}
+
+func (brc *VNodeController) workloadLevel() int {
+	if brc.runtimeInfoStore.AllNodeNum() == 0 {
+		return 0
+	}
+	return brc.runtimeInfoStore.RunningNodeNum() * brc.workloadMaxLevel / (brc.runtimeInfoStore.AllNodeNum() + 1)
+}
+
+func (brc *VNodeController) delayWithWorkload(ctx context.Context) {
+	if !brc.isCluster {
+		// not cluster deployment, do not delay
+		return
+	}
+	timer := time.NewTimer(100 * time.Millisecond * time.Duration(brc.workloadLevel()))
+	select {
+	case <-ctx.Done():
+		return
+	case <-timer.C:
+		return
+	}
+}
+
+func (brc *VNodeController) vnodeLeaderElection(ctx context.Context, vn *vnode.VNode) (success bool) {
+	// try to create lease at start
+	success = vn.CreateNodeLease(ctx, brc.clientID)
+	if success {
+		// create successfully
+		return success
+	}
+
+	// if create failed, retry create lease when last lease deleted
+	for !success {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-vn.ShouldRetryLease():
+			brc.delayWithWorkload(ctx)
+			// retry create lease
+			success = vn.CreateNodeLease(ctx, brc.clientID)
+		}
+	}
+	return true
 }
 
 func (brc *VNodeController) shutdownVNode(nodeID string) {
 	vNode := brc.runtimeInfoStore.GetVNode(nodeID)
 	if vNode == nil {
-		// exited
 		return
 	}
 	vNode.Shutdown()
+	brc.runtimeInfoStore.NodeShutdown(nodeID)
 }
 
-func (brc *VNodeController) setVNodeUnready(nodeID string) {
+func (brc *VNodeController) wakeUpVNode(ctx context.Context, nodeID string) {
 	vNode := brc.runtimeInfoStore.GetVNode(nodeID)
 	if vNode == nil {
-		// exited
 		return
 	}
-	vNode.Shutdown()
+	log.G(ctx).Info("vnode lease outdated, wake vnode up :", nodeID)
+	vNode.RetryLease()
 }

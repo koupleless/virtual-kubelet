@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"os"
 	"strings"
 	"time"
@@ -26,17 +27,7 @@ func DefaultRateLimiter(retryTimes int) time.Duration {
 }
 
 func TimedTaskWithInterval(ctx context.Context, interval time.Duration, task func(context.Context)) {
-	task(ctx)
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			task(ctx)
-		case <-ctx.Done():
-			return
-		}
-	}
+	wait.UntilWithContext(ctx, task, interval)
 }
 
 func CheckAndFinallyCall(ctx context.Context, checkFunc func() bool, timeout, interval time.Duration, finally, timeoutCall func()) {
@@ -144,8 +135,8 @@ func PodsEqual(pod1, pod2 *corev1.Pod) bool {
 		cmp.Equal(pod1.ObjectMeta.Finalizers, pod2.Finalizers)
 }
 
-func FormatNodeName(nodeID string) string {
-	return fmt.Sprintf("%s.%s", model.VNodePrefix, nodeID)
+func FormatNodeName(nodeID, env string) string {
+	return fmt.Sprintf("%s.%s.%s", model.VNodePrefix, nodeID, env)
 }
 
 func ExtractNodeIDFromNodeName(nodeName string) string {
@@ -153,7 +144,7 @@ func ExtractNodeIDFromNodeName(nodeName string) string {
 	if len(split) == 1 {
 		return ""
 	}
-	return strings.Join(split[1:], ".")
+	return strings.Join(split[1:len(split)-1], ".")
 }
 
 func TranslateContainerStatusFromTunnelToContainerStatus(container corev1.Container, data *model.ContainerStatusData) corev1.ContainerStatus {
@@ -220,4 +211,11 @@ func SplitMetaNamespaceKey(key string) (namespace, name string, err error) {
 	}
 
 	return "", "", fmt.Errorf("unexpected key format: %q", key)
+}
+
+func IsContainerStatusDataEqual(dataA, dataB *model.ContainerStatusData) bool {
+	if dataA == nil || dataB == nil {
+		return false
+	}
+	return dataA.State == dataB.State && dataA.Reason == dataB.Reason && dataA.Message == dataB.Message && dataA.PodKey == dataB.PodKey
 }

@@ -116,21 +116,32 @@ func (r *RuntimeInfoStore) GetPods() []*corev1.Pod {
 	return ret
 }
 
-func (r *RuntimeInfoStore) PutContainerInfo(containerInfo model.ContainerStatusData) {
+func (r *RuntimeInfoStore) PutContainerStatus(containerInfo model.ContainerStatusData) (updated bool) {
 	r.Lock()
 	defer r.Unlock()
 
+	oldData, has := r.latestContainerInfosFromNode[containerInfo.Key]
+	// check change time valid
+	if has && oldData != nil {
+		if oldData.ChangeTime.After(containerInfo.ChangeTime) {
+			// old message, not process
+			return
+		}
+		if !utils.IsContainerStatusDataEqual(oldData, &containerInfo) {
+			updated = true
+		}
+	} else {
+		updated = true
+	}
 	r.latestContainerInfosFromNode[containerInfo.Key] = &containerInfo
+	return
 }
 
-func (r *RuntimeInfoStore) SyncContainerInfo(containerInfos []model.ContainerStatusData) {
+func (r *RuntimeInfoStore) ClearContainerStatus(containerKey string) {
 	r.Lock()
 	defer r.Unlock()
 
-	r.latestContainerInfosFromNode = map[string]*model.ContainerStatusData{}
-	for _, containerInfo := range containerInfos {
-		r.latestContainerInfosFromNode[containerInfo.Key] = &containerInfo
-	}
+	delete(r.latestContainerInfosFromNode, containerKey)
 }
 
 func (r *RuntimeInfoStore) GetLatestContainerInfos() []*model.ContainerStatusData {

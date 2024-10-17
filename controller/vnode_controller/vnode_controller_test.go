@@ -8,7 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"testing"
+	"time"
 )
 
 func TestNewVNodeController_NoConfig(t *testing.T) {
@@ -31,6 +33,7 @@ func TestNewVNodeController_ConfigNoIdentity(t *testing.T) {
 func TestNewVNodeController_Success(t *testing.T) {
 	_, err := NewVNodeController(&model.BuildVNodeControllerConfig{
 		VPodIdentity: "suite",
+		IsCluster:    true,
 	}, []tunnel.Tunnel{
 		&tunnel.MockTunnel{},
 	})
@@ -44,7 +47,7 @@ func TestDiscoverPreviousNode(t *testing.T) {
 	}, []tunnel.Tunnel{
 		&mockTunnel,
 	})
-	vc.discoverPreviousNodes(context.TODO(), &corev1.NodeList{
+	vc.discoverPreviousNodes(&corev1.NodeList{
 		Items: []corev1.Node{
 			{
 				ObjectMeta: v1.ObjectMeta{
@@ -74,7 +77,7 @@ func TestDiscoverPreviousNode(t *testing.T) {
 			},
 		},
 	})
-	assert.Equal(t, len(vc.runtimeInfoStore.nodeIDLock), 1)
+	assert.Equal(t, len(vc.runtimeInfoStore.startLock), 1)
 }
 
 func TestDiscoverPreviousPods(t *testing.T) {
@@ -84,10 +87,11 @@ func TestDiscoverPreviousPods(t *testing.T) {
 	}, []tunnel.Tunnel{
 		&mockTunnel,
 	})
-	vc.runtimeInfoStore.PutVNode("test-node", &vnode.VNode{
+	vn := &vnode.VNode{
 		Tunnel: &mockTunnel,
-	})
-	vc.discoverPreviousPods(context.TODO(), &corev1.PodList{
+	}
+	vc.runtimeInfoStore.PutVNode("test-node", vn)
+	vc.discoverPreviousPods(context.TODO(), vn, &corev1.PodList{
 		Items: []corev1.Pod{
 			{
 				Spec: corev1.PodSpec{
@@ -122,4 +126,138 @@ func TestDiscoverPreviousPods(t *testing.T) {
 			},
 		},
 	})
+}
+
+func TestReconcile(t *testing.T) {
+	mockTunnel := tunnel.MockTunnel{}
+	vc, _ := NewVNodeController(&model.BuildVNodeControllerConfig{
+		VPodIdentity: "suite",
+	}, []tunnel.Tunnel{
+		&mockTunnel,
+	})
+
+	result, err := vc.Reconcile(nil, reconcile.Request{})
+	assert.Nil(t, err)
+	assert.Equal(t, reconcile.Result{}, result)
+}
+
+func TestCallBack_NoVnode(t *testing.T) {
+	mockTunnel := tunnel.MockTunnel{}
+	vc, _ := NewVNodeController(&model.BuildVNodeControllerConfig{
+		VPodIdentity: "suite",
+	}, []tunnel.Tunnel{
+		&mockTunnel,
+	})
+
+	vc.onNodeStatusDataArrived("test", model.NodeStatusData{})
+	vc.onQueryAllContainerStatusDataArrived("test", nil)
+	vc.onContainerStatusChanged("test", model.ContainerStatusData{})
+	vc.onNodeStatusDataArrived("test", model.NodeStatusData{})
+}
+
+func TestPodHandler_NoVnodeOrNotLeader(t *testing.T) {
+	mockTunnel := tunnel.MockTunnel{}
+	vc, _ := NewVNodeController(&model.BuildVNodeControllerConfig{
+		VPodIdentity: "suite",
+	}, []tunnel.Tunnel{
+		&mockTunnel,
+	})
+
+	ctx := context.TODO()
+
+	vc.podCreateHandler(ctx, &corev1.Pod{
+		Spec: corev1.PodSpec{
+			NodeName: "vnode.test-node.env",
+		},
+	})
+	vc.podUpdateHandler(ctx, &corev1.Pod{
+		Spec: corev1.PodSpec{
+			NodeName: "vnode.test-node.env",
+		},
+	}, &corev1.Pod{
+		Spec: corev1.PodSpec{
+			NodeName: "vnode.test-node.env",
+		},
+	})
+	vc.podDeleteHandler(ctx, &corev1.Pod{
+		Spec: corev1.PodSpec{
+			NodeName: "vnode.test-node.env",
+		},
+	})
+
+	vc.runtimeInfoStore.PutVNode("test-node", &vnode.VNode{})
+	vc.podCreateHandler(ctx, &corev1.Pod{
+		Spec: corev1.PodSpec{
+			NodeName: "vnode.test-node.env",
+		},
+	})
+	vc.podUpdateHandler(ctx, &corev1.Pod{
+		Spec: corev1.PodSpec{
+			NodeName: "vnode.test-node.env",
+		},
+	}, &corev1.Pod{
+		Spec: corev1.PodSpec{
+			NodeName: "vnode.test-node.env",
+		},
+	})
+	vc.podDeleteHandler(ctx, &corev1.Pod{
+		Spec: corev1.PodSpec{
+			NodeName: "vnode.test-node.env",
+		},
+	})
+}
+
+func TestWorkloadLevel(t *testing.T) {
+	mockTunnel := tunnel.MockTunnel{}
+	vc, _ := NewVNodeController(&model.BuildVNodeControllerConfig{
+		VPodIdentity: "suite",
+	}, []tunnel.Tunnel{
+		&mockTunnel,
+	})
+
+	level := vc.workloadLevel()
+	assert.Equal(t, 0, level)
+	vc.runtimeInfoStore.PutNode("test-node")
+	level = vc.workloadLevel()
+	assert.Equal(t, 0, level)
+}
+
+func TestDelayWithWorkload(t *testing.T) {
+	mockTunnel := tunnel.MockTunnel{}
+	vc, _ := NewVNodeController(&model.BuildVNodeControllerConfig{
+		VPodIdentity: "suite",
+	}, []tunnel.Tunnel{
+		&mockTunnel,
+	})
+	now := time.Now()
+	vc.delayWithWorkload(context.TODO())
+	vc.isCluster = true
+	vc.delayWithWorkload(context.TODO())
+	end := time.Now()
+	ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Millisecond*20)
+	cancelFunc()
+	vc.runtimeInfoStore.NodeRunning("test-node")
+	vc.runtimeInfoStore.PutNode("test-node")
+	vc.delayWithWorkload(ctx)
+	assert.True(t, end.Sub(now) < time.Millisecond*100)
+}
+
+func TestShutdownNonExistVNode(t *testing.T) {
+	mockTunnel := tunnel.MockTunnel{}
+	vc, _ := NewVNodeController(&model.BuildVNodeControllerConfig{
+		VPodIdentity: "suite",
+	}, []tunnel.Tunnel{
+		&mockTunnel,
+	})
+	vc.shutdownVNode("test-node")
+}
+
+func TestWakeUpNonExistVNode(t *testing.T) {
+	mockTunnel := tunnel.MockTunnel{}
+	vc, _ := NewVNodeController(&model.BuildVNodeControllerConfig{
+		VPodIdentity: "suite",
+	}, []tunnel.Tunnel{
+		&mockTunnel,
+	})
+	vc.wakeUpVNode(context.TODO(), "test-node")
 }

@@ -44,7 +44,8 @@ const (
 )
 
 const (
-	ComponentVNode = "vnode"
+	ComponentVNode      = "vnode"
+	ComponentVNodeLease = "vnode-lease"
 )
 
 type ErrorCode string
@@ -84,3 +85,9 @@ const (
 
 // PodKeyAll present container status will share to all pods
 const PodKeyAll = "all"
+
+const (
+	NodeLeaseDurationSeconds     = 40
+	NodeLeaseUpdatePeriodSeconds = 18
+	NodeLeaseMaxRetryTimes       = 5
+)

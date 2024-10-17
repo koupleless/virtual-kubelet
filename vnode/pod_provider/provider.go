@@ -66,24 +66,6 @@ func NewVPodProvider(namespace, localIP, nodeID string, client client.Client, t 
 	return provider
 }
 
-func (b *VPodProvider) Run(ctx context.Context) {
-	go utils.TimedTaskWithInterval(ctx, time.Minute, b.syncAllPodStatus)
-}
-
-func (b *VPodProvider) syncAllPodStatus(ctx context.Context) {
-	logger := log.G(ctx)
-	pods := b.runtimeInfoStore.GetPods()
-	// sort by create time
-	sort.Slice(pods, func(i, j int) bool {
-		return pods[i].CreationTimestamp.UnixMilli() > pods[j].CreationTimestamp.UnixMilli()
-	})
-	for _, pod := range pods {
-		if err := b.updatePodStatusToKubernetes(ctx, pod); err != nil {
-			logger.WithError(err).Error("update pod status error")
-		}
-	}
-}
-
 func (b *VPodProvider) syncRelatedPodStatus(ctx context.Context, podKey, containerName string) {
 	logger := log.G(ctx)
 	if podKey != model.PodKeyAll {
@@ -128,21 +110,17 @@ func (b *VPodProvider) updatePodStatusToKubernetes(ctx context.Context, pod *cor
 }
 
 func (b *VPodProvider) SyncContainerInfo(ctx context.Context, containerInfos []model.ContainerStatusData) {
-	b.runtimeInfoStore.SyncContainerInfo(containerInfos)
-	b.syncAllPodStatus(ctx)
-}
-
-func (b *VPodProvider) SyncSingleContainerInfo(ctx context.Context, info model.ContainerStatusData) {
-	b.runtimeInfoStore.PutContainerInfo(info)
-	b.syncRelatedPodStatus(ctx, info.PodKey, info.Name)
+	for _, containerInfo := range containerInfos {
+		updated := b.runtimeInfoStore.PutContainerStatus(containerInfo)
+		if updated {
+			// only when container status updated, update related pod status
+			b.syncRelatedPodStatus(ctx, containerInfo.PodKey, containerInfo.Name)
+		}
+	}
 }
 
 func (b *VPodProvider) InitContainerInfo(info model.ContainerStatusData) {
-	b.runtimeInfoStore.PutContainerInfo(info)
-}
-
-func (b *VPodProvider) queryAllContainerStatus(_ context.Context) []*model.ContainerStatusData {
-	return b.runtimeInfoStore.GetLatestContainerInfos()
+	b.runtimeInfoStore.PutContainerStatus(info)
 }
 
 func (b *VPodProvider) queryContainerStatus(_ context.Context, podKey string, container *corev1.Container) *model.ContainerStatusData {
@@ -151,6 +129,9 @@ func (b *VPodProvider) queryContainerStatus(_ context.Context, podKey string, co
 }
 
 func (b *VPodProvider) startContainer(ctx context.Context, podKey string, container *corev1.Container) error {
+	// clear local container status cache
+	containerKey := b.tunnel.GetContainerUniqueKey(podKey, container)
+	b.runtimeInfoStore.ClearContainerStatus(containerKey)
 	return b.tunnel.StartContainer(ctx, b.nodeID, podKey, container)
 }
 
@@ -170,7 +151,7 @@ func (b *VPodProvider) handleContainerStart(ctx context.Context, pod *corev1.Pod
 	}
 
 	for _, container := range containers {
-		err := tracker.G().FuncTrack(labelMap[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventContainerShutdown, labelMap, func() (error, model.ErrorCode) {
+		err := tracker.G().FuncTrack(labelMap[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventContainerStart, labelMap, func() (error, model.ErrorCode) {
 			err := utils.CallWithRetry(ctx, func(_ int) (bool, error) {
 				innerErr := b.startContainer(ctx, podKey, &container)
 
@@ -306,11 +287,6 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 		return nil
 	}
 
-	if pod.DeletionGracePeriodSeconds == nil || *pod.DeletionGracePeriodSeconds == 0 {
-		// force delete, just return, skip check and delete
-		return nil
-	}
-
 	localPod := b.runtimeInfoStore.GetPodByKey(podKey)
 	if localPod == nil {
 		// has been deleted or not managed by current provider, just return
@@ -321,6 +297,12 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 	b.runtimeInfoStore.DeletePod(podKey)
 
 	go b.handleContainerShutdown(ctx, pod, pod.Spec.Containers)
+
+	if pod.DeletionGracePeriodSeconds == nil || *pod.DeletionGracePeriodSeconds == 0 {
+		// force delete, just return, skip check and delete
+		logger.Warnf("Pod force delete")
+		return nil
+	}
 
 	// check all containers shutdown successfully
 	deletePod := func() {

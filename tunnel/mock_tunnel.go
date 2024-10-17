@@ -24,9 +24,11 @@ type MockTunnel struct {
 
 	containerStorage map[string]map[string]model.ContainerStatusData
 	nodeStorage      map[string]Node
+	NodeNotReady     map[string]bool
 }
 
 func (m *MockTunnel) OnNodeNotReady(ctx context.Context, info model.UnreachableNodeInfo) {
+	m.NodeNotReady[info.NodeID] = true
 	return
 }
 
@@ -65,6 +67,7 @@ func (m *MockTunnel) Key() string {
 func (m *MockTunnel) Start(ctx context.Context, clientID string, env string) error {
 	m.containerStorage = map[string]map[string]model.ContainerStatusData{}
 	m.nodeStorage = map[string]Node{}
+	m.NodeNotReady = map[string]bool{}
 	return nil
 }
 

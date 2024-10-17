@@ -71,6 +71,13 @@ var _ = Describe("VNode Lifecycle Test", func() {
 			Expect(existTestTaint).To(BeTrue())
 		})
 
+		It("node not ready should send not ready to mock tunnel", func() {
+			tl.DeleteNode(nodeID)
+			Eventually(func() bool {
+				return tl.NodeNotReady[nodeID]
+			}, time.Second*50, time.Second).Should(BeTrue())
+		})
+
 		It("node offline with deactive message and finally exit", func() {
 			nodeInfo.NodeInfo.Metadata.Status = model.NodeStatusDeactivated
 			tl.PutNode(ctx, nodeID, nodeInfo)

@@ -23,6 +23,7 @@ import (
 	"github.com/koupleless/virtual-kubelet/tunnel"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet/nodeutil"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sort"
@@ -345,12 +346,14 @@ func (b *VPodProvider) GetPodStatus(ctx context.Context, namespace, name string)
 		podStatus.Phase = corev1.PodSucceeded
 		podStatus.Conditions = []corev1.PodCondition{
 			{
-				Type:   "Ready",
-				Status: corev1.ConditionFalse,
+				Type:          "Ready",
+				Status:        corev1.ConditionFalse,
+				LastProbeTime: metav1.NewTime(time.Now()),
 			},
 			{
-				Type:   "ContainersReady",
-				Status: corev1.ConditionFalse,
+				Type:          "ContainersReady",
+				Status:        corev1.ConditionFalse,
+				LastProbeTime: metav1.NewTime(time.Now()),
 			},
 		}
 		return podStatus, nil
@@ -383,12 +386,14 @@ func (b *VPodProvider) GetPodStatus(ctx context.Context, namespace, name string)
 		podStatus.Phase = corev1.PodRunning
 		podStatus.Conditions = []corev1.PodCondition{
 			{
-				Type:   "Ready",
-				Status: corev1.ConditionTrue,
+				Type:          "Ready",
+				Status:        corev1.ConditionTrue,
+				LastProbeTime: metav1.NewTime(time.Now()),
 			},
 			{
-				Type:   "ContainersReady",
-				Status: corev1.ConditionTrue,
+				Type:          "ContainersReady",
+				Status:        corev1.ConditionTrue,
+				LastProbeTime: metav1.NewTime(time.Now()),
 			},
 		}
 	}
@@ -397,12 +402,14 @@ func (b *VPodProvider) GetPodStatus(ctx context.Context, namespace, name string)
 		podStatus.Phase = corev1.PodRunning
 		podStatus.Conditions = []corev1.PodCondition{
 			{
-				Type:   "Ready",
-				Status: corev1.ConditionFalse,
+				Type:          "Ready",
+				Status:        corev1.ConditionFalse,
+				LastProbeTime: metav1.NewTime(time.Now()),
 			},
 			{
-				Type:   "ContainersReady",
-				Status: corev1.ConditionFalse,
+				Type:          "ContainersReady",
+				Status:        corev1.ConditionFalse,
+				LastProbeTime: metav1.NewTime(time.Now()),
 			},
 		}
 	}

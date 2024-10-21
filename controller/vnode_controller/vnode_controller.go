@@ -279,6 +279,9 @@ func (brc *VNodeController) discoverPreviousNodes(nodeList *corev1.NodeList) {
 				NodeIP:   nodeIP,
 				HostName: nodeHostname,
 			},
+			CustomLabels:      node.Labels,
+			CustomAnnotations: node.Annotations,
+			CustomTaints:      node.Spec.Taints,
 		}, t)
 	}
 }
@@ -509,7 +512,7 @@ func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t
 
 		go vn.RenewLease(vnCtx, brc.clientID)
 
-		go vn.Run(vnCtx)
+		go vn.Run(vnCtx, initData)
 
 		if err = vn.WaitReady(vnCtx, time.Minute); err != nil {
 			err = errpkg.Wrap(err, "Error waiting vnode ready")
@@ -519,14 +522,14 @@ func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t
 
 		brc.runtimeInfoStore.NodeRunning(nodeID)
 
-		go utils.TimedTaskWithInterval(vnCtx, time.Second*9, func(ctx context.Context) {
+		go utils.TimedTaskWithInterval(vnCtx, time.Second*10, func(ctx context.Context) {
 			err = t.FetchHealthData(vnCtx, nodeID)
 			if err != nil {
 				log.G(vnCtx).WithError(err).Errorf("Failed to fetch node health info from %s", nodeID)
 			}
 		})
 
-		go utils.TimedTaskWithInterval(vnCtx, time.Second*5, func(ctx context.Context) {
+		go utils.TimedTaskWithInterval(vnCtx, time.Second*15, func(ctx context.Context) {
 			err = t.QueryAllContainerStatusData(vnCtx, nodeID)
 			if err != nil {
 				log.G(vnCtx).WithError(err).Errorf("Failed to query containers info from %s", nodeID)

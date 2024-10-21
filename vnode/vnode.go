@@ -34,6 +34,7 @@ type VNode struct {
 	node         *nodeutil.Node
 
 	exit                  chan struct{}
+	ready                 chan struct{}
 	exitWhenLeaderChanged chan struct{}
 	shouldRetryLease      chan struct{}
 	done                  chan struct{}
@@ -45,7 +46,7 @@ type VNode struct {
 	err error
 }
 
-func (n *VNode) Run(ctx context.Context) {
+func (n *VNode) Run(ctx context.Context, initData model.NodeInfo) {
 	var err error
 
 	// process vkNode run and bpc run, catching error
@@ -60,8 +61,10 @@ func (n *VNode) Run(ctx context.Context) {
 
 	n.isLeader = true
 	n.exitWhenLeaderChanged = make(chan struct{})
-	go n.OnNodeStart(ctx, n.nodeID)
+	n.OnNodeStart(ctx, n.nodeID, initData)
 	defer n.OnNodeStop(ctx, n.nodeID)
+
+	close(n.ready)
 
 	select {
 	case <-ctx.Done():
@@ -147,6 +150,15 @@ func (n *VNode) WaitReady(ctx context.Context, timeout time.Duration) error {
 			Name: utils.FormatNodeName(n.nodeID, n.env),
 		}, vnode)
 		return err == nil
+	}, timeout, time.Millisecond*200, func() {}, func() {})
+
+	utils.CheckAndFinallyCall(ctx, func() bool {
+		select {
+		case <-n.ready:
+			return true
+		default:
+			return false
+		}
 	}, timeout, time.Millisecond*200, func() {}, func() {})
 
 	return err
@@ -386,6 +398,7 @@ func NewVNode(config *model.BuildVNodeConfig, t tunnel.Tunnel) (kn *VNode, err e
 		Tunnel:                t,
 		node:                  cm,
 		exit:                  make(chan struct{}),
+		ready:                 make(chan struct{}),
 		done:                  make(chan struct{}),
 		exitWhenLeaderChanged: make(chan struct{}),
 		shouldRetryLease:      make(chan struct{}),

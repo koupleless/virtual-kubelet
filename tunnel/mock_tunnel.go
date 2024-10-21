@@ -86,7 +86,7 @@ func (m *MockTunnel) RegisterCallback(
 	m.OnSingleContainerStatusChanged = onSingleContainerStatusChanged
 }
 
-func (m *MockTunnel) OnNodeStart(ctx context.Context, nodeID string) {
+func (m *MockTunnel) OnNodeStart(ctx context.Context, nodeID string, initData model.NodeInfo) {
 	return
 }
 

@@ -32,7 +32,7 @@ type Tunnel interface {
 	RegisterCallback(OnNodeDiscovered, OnNodeStatusDataArrived, OnQueryAllContainerStatusDataArrived, OnSingleContainerStatusChanged)
 
 	// OnNodeStart is the func call when a vnode start successfully, you can implement it on demand
-	OnNodeStart(ctx context.Context, nodeID string)
+	OnNodeStart(ctx context.Context, nodeID string, initData model.NodeInfo)
 
 	// OnNodeStop is the func call when a vnode shutdown successfully, you can implement it on demand
 	OnNodeStop(ctx context.Context, nodeID string)

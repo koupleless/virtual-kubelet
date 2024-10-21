@@ -85,6 +85,9 @@ func (n *VNode) Run(ctx context.Context, initData model.NodeInfo) {
 }
 
 func (n *VNode) RenewLease(ctx context.Context, clientID string) {
+	// first lease update delay NodeLeaseUpdatePeriodSeconds
+	time.Sleep(time.Second * model.NodeLeaseUpdatePeriodSeconds)
+
 	utils.TimedTaskWithInterval(ctx, time.Second*model.NodeLeaseUpdatePeriodSeconds, func(ctx context.Context) {
 		n.retryUpdateLease(ctx, clientID)
 	})

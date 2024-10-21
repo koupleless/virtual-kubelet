@@ -461,15 +461,17 @@ func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t
 	}
 
 	vn, err := vnode.NewVNode(&model.BuildVNodeConfig{
-		Client:       brc.client,
-		KubeCache:    brc.cache,
-		NodeID:       nodeID,
-		Env:          brc.env,
-		NodeIP:       initData.NetworkInfo.NodeIP,
-		NodeHostname: initData.NetworkInfo.HostName,
-		NodeName:     initData.Metadata.Name,
-		NodeVersion:  initData.Metadata.Version,
-		CustomTaints: initData.CustomTaints,
+		Client:            brc.client,
+		KubeCache:         brc.cache,
+		NodeID:            nodeID,
+		Env:               brc.env,
+		NodeIP:            initData.NetworkInfo.NodeIP,
+		NodeHostname:      initData.NetworkInfo.HostName,
+		NodeName:          initData.Metadata.Name,
+		NodeVersion:       initData.Metadata.Version,
+		CustomTaints:      initData.CustomTaints,
+		CustomLabels:      initData.CustomLabels,
+		CustomAnnotations: initData.CustomAnnotations,
 	}, t)
 	if err != nil {
 		err = errpkg.Wrap(err, "Error creating vnode")

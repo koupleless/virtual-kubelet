@@ -345,12 +345,14 @@ func NewVNode(config *model.BuildVNodeConfig, t tunnel.Tunnel) (kn *VNode, err e
 		utils.FormatNodeName(config.NodeID, config.Env),
 		func(cfg nodeutil.ProviderConfig) (nodeutil.Provider, virtual_kubelet.NodeProvider, error) {
 			nodeProvider = node_provider.NewVirtualKubeletNode(model.BuildVNodeProviderConfig{
-				NodeIP:       config.NodeIP,
-				NodeHostname: config.NodeHostname,
-				Version:      config.NodeVersion,
-				Name:         config.NodeName,
-				Env:          config.Env,
-				CustomTaints: config.CustomTaints,
+				NodeIP:            config.NodeIP,
+				NodeHostname:      config.NodeHostname,
+				Version:           config.NodeVersion,
+				Name:              config.NodeName,
+				Env:               config.Env,
+				CustomTaints:      config.CustomTaints,
+				CustomAnnotations: config.CustomAnnotations,
+				CustomLabels:      config.CustomLabels,
 			})
 			// initialize node spec on bootstrap
 			podProvider = pod_provider.NewVPodProvider(cfg.Node.Namespace, config.NodeIP, config.NodeID, config.Client, t)

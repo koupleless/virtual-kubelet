@@ -94,16 +94,9 @@ func (n *VNode) retryUpdateLease(ctx context.Context, clientID string) {
 			Name:      utils.FormatNodeName(n.nodeID, n.env),
 			Namespace: corev1.NamespaceNodeLease,
 		}, lease)
-		if apierrors.IsNotFound(err) {
-			// for disconnect then connect, lease may have been deleted, create again
-			success := n.CreateNodeLease(ctx, clientID)
-			if !success {
-				// create failed, exit current node but not delete
-				n.leaderChanged()
-			}
-			return
-		} else if err != nil {
+		if err != nil {
 			log.G(ctx).WithError(err).WithField("retries", i).Error("failed to get node lease when updating node lease")
+			time.Sleep(time.Millisecond * 200)
 			continue
 		}
 

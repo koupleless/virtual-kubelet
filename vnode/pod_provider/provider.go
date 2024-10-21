@@ -67,7 +67,7 @@ func NewVPodProvider(namespace, localIP, nodeID string, client client.Client, t 
 	return provider
 }
 
-func (b *VPodProvider) syncRelatedPodStatus(ctx context.Context, podKey, containerName string) {
+func (b *VPodProvider) syncRelatedPodStatus(ctx context.Context, podKey, containerKey string) {
 	logger := log.G(ctx)
 	if podKey != model.PodKeyAll {
 		pod := b.runtimeInfoStore.GetPodByKey(podKey)
@@ -79,16 +79,12 @@ func (b *VPodProvider) syncRelatedPodStatus(ctx context.Context, podKey, contain
 			logger.WithError(err).Error("update pod status error")
 		}
 	} else {
-		podKeys := b.runtimeInfoStore.GetRelatedPodKeysByContainerName(containerName)
+		podKeys := b.runtimeInfoStore.GetRelatedPodKeysByContainerKey(containerKey)
 		pods := make([]*corev1.Pod, 0)
 		for _, key := range podKeys {
 			pod := b.runtimeInfoStore.GetPodByKey(key)
 			pods = append(pods, pod)
 		}
-		// sort by create time
-		sort.Slice(pods, func(i, j int) bool {
-			return pods[i].CreationTimestamp.UnixMilli() > pods[j].CreationTimestamp.UnixMilli()
-		})
 		for _, pod := range pods {
 			if err := b.updatePodStatusToKubernetes(ctx, pod); err != nil {
 				logger.WithError(err).Error("update pod status error")
@@ -110,13 +106,54 @@ func (b *VPodProvider) updatePodStatusToKubernetes(ctx context.Context, pod *cor
 	return nil
 }
 
-func (b *VPodProvider) SyncContainerInfo(ctx context.Context, containerInfos []model.ContainerStatusData) {
+func (b *VPodProvider) SyncAllContainerInfo(ctx context.Context, containerInfos []model.ContainerStatusData) {
+	containerInfoOfContainerKey := make(map[string]model.ContainerStatusData)
 	for _, containerInfo := range containerInfos {
-		updated := b.runtimeInfoStore.PutContainerStatus(containerInfo)
-		if updated {
-			// only when container status updated, update related pod status
-			b.syncRelatedPodStatus(ctx, containerInfo.PodKey, containerInfo.Name)
+		containerInfoOfContainerKey[containerInfo.Key] = containerInfo
+	}
+
+	pods := b.runtimeInfoStore.GetPods()
+	// sort by create time
+	sort.Slice(pods, func(i, j int) bool {
+		return pods[i].CreationTimestamp.UnixMilli() > pods[j].CreationTimestamp.UnixMilli()
+	})
+
+	updatedContainerInfos := make([]model.ContainerStatusData, 0)
+	now := time.Now()
+	for _, pod := range pods {
+		podKey := utils.GetPodKey(pod)
+		for _, container := range pod.Spec.Containers {
+			containerKey := b.tunnel.GetContainerUniqueKey(podKey, &container)
+			containerInfo, has := containerInfoOfContainerKey[containerKey]
+			if !has {
+				containerInfo = model.ContainerStatusData{
+					Key:        containerKey,
+					Name:       container.Name,
+					PodKey:     podKey,
+					State:      model.ContainerStateDeactivated,
+					ChangeTime: now,
+					Reason:     "ContainerNotExist",
+					Message:    "Container status data not fetched from tunnel",
+				}
+			}
+			updated := b.runtimeInfoStore.PutContainerStatus(containerInfo)
+			if updated {
+				updatedContainerInfos = append(updatedContainerInfos, containerInfo)
+			}
 		}
+	}
+
+	for _, containerInfo := range containerInfos {
+		b.syncRelatedPodStatus(ctx, containerInfo.PodKey, containerInfo.Key)
+	}
+
+}
+
+func (b *VPodProvider) SyncOneContainerInfo(ctx context.Context, containerInfo model.ContainerStatusData) {
+	updated := b.runtimeInfoStore.PutContainerStatus(containerInfo)
+	if updated {
+		// only when container status updated, update related pod status
+		b.syncRelatedPodStatus(ctx, containerInfo.PodKey, containerInfo.Key)
 	}
 }
 

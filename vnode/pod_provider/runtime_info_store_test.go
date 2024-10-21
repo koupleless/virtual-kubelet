@@ -64,7 +64,7 @@ func TestRuntimeInfoStore_GetRelatedPodKeysByContainerName(t *testing.T) {
 			},
 		},
 	})
-	podKeys := store.GetRelatedPodKeysByContainerName("container1")
+	podKeys := store.GetRelatedPodKeysByContainerKey("container1")
 	assert.Len(t, podKeys, 1)
 }
 

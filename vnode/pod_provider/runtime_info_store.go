@@ -26,9 +26,9 @@ import (
 type RuntimeInfoStore struct {
 	sync.RWMutex
 
-	podKeyToPod                  map[string]*corev1.Pod
-	containerNameToRelatedPodKey map[string]map[string]bool
-	containerKeyToContainer      map[string]*corev1.Container
+	podKeyToPod                 map[string]*corev1.Pod
+	containerKeyToRelatedPodKey map[string]map[string]bool
+	containerKeyToContainer     map[string]*corev1.Container
 
 	latestContainerInfosFromNode map[string]*model.ContainerStatusData
 }
@@ -37,7 +37,7 @@ func NewRuntimeInfoStore() *RuntimeInfoStore {
 	return &RuntimeInfoStore{
 		RWMutex:                      sync.RWMutex{},
 		podKeyToPod:                  make(map[string]*corev1.Pod),
-		containerNameToRelatedPodKey: make(map[string]map[string]bool),
+		containerKeyToRelatedPodKey:  make(map[string]map[string]bool),
 		containerKeyToContainer:      make(map[string]*corev1.Container),
 		latestContainerInfosFromNode: make(map[string]*model.ContainerStatusData),
 	}
@@ -53,12 +53,12 @@ func (r *RuntimeInfoStore) PutPod(pod *corev1.Pod) {
 	r.podKeyToPod[podKey] = pod
 	for _, container := range pod.Spec.Containers {
 		containerKey := utils.GetContainerKey(podKey, container.Name)
-		relatedPodKeyMap, has := r.containerNameToRelatedPodKey[container.Name]
+		relatedPodKeyMap, has := r.containerKeyToRelatedPodKey[containerKey]
 		if !has {
 			relatedPodKeyMap = make(map[string]bool)
 		}
 		relatedPodKeyMap[podKey] = true
-		r.containerNameToRelatedPodKey[container.Name] = relatedPodKeyMap
+		r.containerKeyToRelatedPodKey[containerKey] = relatedPodKeyMap
 		r.containerKeyToContainer[containerKey] = &container
 	}
 }
@@ -72,20 +72,20 @@ func (r *RuntimeInfoStore) DeletePod(podKey string) {
 	if has {
 		for _, container := range pod.Spec.Containers {
 			containerKey := utils.GetContainerKey(podKey, container.Name)
-			relatedPodKeyMap, has := r.containerNameToRelatedPodKey[container.Name]
+			relatedPodKeyMap, has := r.containerKeyToRelatedPodKey[containerKey]
 			if has {
 				delete(relatedPodKeyMap, podKey)
 			}
 			delete(r.containerKeyToContainer, containerKey)
-			r.containerNameToRelatedPodKey[container.Name] = relatedPodKeyMap
+			r.containerKeyToRelatedPodKey[containerKey] = relatedPodKeyMap
 		}
 	}
 }
 
-func (r *RuntimeInfoStore) GetRelatedPodKeysByContainerName(containerName string) []string {
+func (r *RuntimeInfoStore) GetRelatedPodKeysByContainerKey(containerKey string) []string {
 	r.Lock()
 	defer r.Unlock()
-	relatedPodKeyMap := r.containerNameToRelatedPodKey[containerName]
+	relatedPodKeyMap := r.containerKeyToRelatedPodKey[containerKey]
 	ret := make([]string, 0)
 	for podKey := range relatedPodKeyMap {
 		ret = append(ret, podKey)
@@ -123,7 +123,7 @@ func (r *RuntimeInfoStore) PutContainerStatus(containerInfo model.ContainerStatu
 	oldData, has := r.latestContainerInfosFromNode[containerInfo.Key]
 	// check change time valid
 	if has && oldData != nil {
-		if oldData.ChangeTime.After(containerInfo.ChangeTime) {
+		if !oldData.ChangeTime.Before(containerInfo.ChangeTime) {
 			// old message, not process
 			return
 		}

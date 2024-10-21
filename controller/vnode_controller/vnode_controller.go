@@ -342,7 +342,7 @@ func (brc *VNodeController) onQueryAllContainerStatusDataArrived(nodeID string, 
 
 	if vNode.IsLeader() {
 		brc.runtimeInfoStore.NodeMsgArrived(nodeID)
-		vNode.SyncContainerInfo(context.TODO(), data)
+		vNode.SyncAllContainerInfo(context.TODO(), data)
 	}
 }
 
@@ -354,7 +354,7 @@ func (brc *VNodeController) onContainerStatusChanged(nodeID string, data model.C
 
 	if vNode.IsLeader() {
 		brc.runtimeInfoStore.NodeMsgArrived(nodeID)
-		vNode.SyncContainerInfo(context.TODO(), []model.ContainerStatusData{data})
+		vNode.SyncOneContainerInfo(context.TODO(), data)
 	}
 }
 

@@ -246,9 +246,15 @@ func (n *VNode) SyncNodeStatus(data model.NodeStatusData) {
 	}
 }
 
-func (n *VNode) SyncContainerInfo(ctx context.Context, infos []model.ContainerStatusData) {
+func (n *VNode) SyncAllContainerInfo(ctx context.Context, infos []model.ContainerStatusData) {
 	if n.podProvider != nil {
-		go n.podProvider.SyncContainerInfo(ctx, infos)
+		go n.podProvider.SyncAllContainerInfo(ctx, infos)
+	}
+}
+
+func (n *VNode) SyncOneContainerInfo(ctx context.Context, info model.ContainerStatusData) {
+	if n.podProvider != nil {
+		go n.podProvider.SyncOneContainerInfo(ctx, info)
 	}
 }
 
@@ -352,7 +358,7 @@ func NewVNode(config *model.BuildVNodeConfig, t tunnel.Tunnel) (kn *VNode, err e
 	}
 
 	if config.NodeID == "" {
-		return nil, errors.New("node name cannot be empty")
+		return nil, errors.New("node id cannot be empty")
 	}
 	var nodeProvider *node_provider.VNodeProvider
 	var podProvider *pod_provider.VPodProvider

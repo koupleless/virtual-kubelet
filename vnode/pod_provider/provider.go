@@ -83,6 +83,9 @@ func (b *VPodProvider) syncRelatedPodStatus(ctx context.Context, podKey, contain
 		pods := make([]*corev1.Pod, 0)
 		for _, key := range podKeys {
 			pod := b.runtimeInfoStore.GetPodByKey(key)
+			if pod == nil {
+				continue
+			}
 			pods = append(pods, pod)
 		}
 		for _, pod := range pods {

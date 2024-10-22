@@ -34,6 +34,7 @@ type VNode struct {
 	node         *nodeutil.Node
 
 	exit                  chan struct{}
+	ready                 chan struct{}
 	exitWhenLeaderChanged chan struct{}
 	shouldRetryLease      chan struct{}
 	done                  chan struct{}
@@ -45,7 +46,7 @@ type VNode struct {
 	err error
 }
 
-func (n *VNode) Run(ctx context.Context) {
+func (n *VNode) Run(ctx context.Context, initData model.NodeInfo) {
 	var err error
 
 	// process vkNode run and bpc run, catching error
@@ -60,8 +61,10 @@ func (n *VNode) Run(ctx context.Context) {
 
 	n.isLeader = true
 	n.exitWhenLeaderChanged = make(chan struct{})
-	go n.OnNodeStart(ctx, n.nodeID)
+	n.OnNodeStart(ctx, n.nodeID, initData)
 	defer n.OnNodeStop(ctx, n.nodeID)
+
+	close(n.ready)
 
 	select {
 	case <-ctx.Done():
@@ -82,6 +85,9 @@ func (n *VNode) Run(ctx context.Context) {
 }
 
 func (n *VNode) RenewLease(ctx context.Context, clientID string) {
+	// first lease update delay NodeLeaseUpdatePeriodSeconds
+	time.Sleep(time.Second * model.NodeLeaseUpdatePeriodSeconds)
+
 	utils.TimedTaskWithInterval(ctx, time.Second*model.NodeLeaseUpdatePeriodSeconds, func(ctx context.Context) {
 		n.retryUpdateLease(ctx, clientID)
 	})
@@ -94,16 +100,9 @@ func (n *VNode) retryUpdateLease(ctx context.Context, clientID string) {
 			Name:      utils.FormatNodeName(n.nodeID, n.env),
 			Namespace: corev1.NamespaceNodeLease,
 		}, lease)
-		if apierrors.IsNotFound(err) {
-			// for disconnect then connect, lease may have been deleted, create again
-			success := n.CreateNodeLease(ctx, clientID)
-			if !success {
-				// create failed, exit current node but not delete
-				n.leaderChanged()
-			}
-			return
-		} else if err != nil {
+		if err != nil {
 			log.G(ctx).WithError(err).WithField("retries", i).Error("failed to get node lease when updating node lease")
+			time.Sleep(time.Millisecond * 200)
 			continue
 		}
 
@@ -154,6 +153,15 @@ func (n *VNode) WaitReady(ctx context.Context, timeout time.Duration) error {
 			Name: utils.FormatNodeName(n.nodeID, n.env),
 		}, vnode)
 		return err == nil
+	}, timeout, time.Millisecond*200, func() {}, func() {})
+
+	utils.CheckAndFinallyCall(ctx, func() bool {
+		select {
+		case <-n.ready:
+			return true
+		default:
+			return false
+		}
 	}, timeout, time.Millisecond*200, func() {}, func() {})
 
 	return err
@@ -238,9 +246,15 @@ func (n *VNode) SyncNodeStatus(data model.NodeStatusData) {
 	}
 }
 
-func (n *VNode) SyncContainerInfo(ctx context.Context, infos []model.ContainerStatusData) {
+func (n *VNode) SyncAllContainerInfo(ctx context.Context, infos []model.ContainerStatusData) {
 	if n.podProvider != nil {
-		go n.podProvider.SyncContainerInfo(ctx, infos)
+		go n.podProvider.SyncAllContainerInfo(ctx, infos)
+	}
+}
+
+func (n *VNode) SyncOneContainerInfo(ctx context.Context, info model.ContainerStatusData) {
+	if n.podProvider != nil {
+		go n.podProvider.SyncOneContainerInfo(ctx, info)
 	}
 }
 
@@ -344,7 +358,7 @@ func NewVNode(config *model.BuildVNodeConfig, t tunnel.Tunnel) (kn *VNode, err e
 	}
 
 	if config.NodeID == "" {
-		return nil, errors.New("node name cannot be empty")
+		return nil, errors.New("node id cannot be empty")
 	}
 	var nodeProvider *node_provider.VNodeProvider
 	var podProvider *pod_provider.VPodProvider
@@ -352,12 +366,14 @@ func NewVNode(config *model.BuildVNodeConfig, t tunnel.Tunnel) (kn *VNode, err e
 		utils.FormatNodeName(config.NodeID, config.Env),
 		func(cfg nodeutil.ProviderConfig) (nodeutil.Provider, virtual_kubelet.NodeProvider, error) {
 			nodeProvider = node_provider.NewVirtualKubeletNode(model.BuildVNodeProviderConfig{
-				NodeIP:       config.NodeIP,
-				NodeHostname: config.NodeHostname,
-				Version:      config.NodeVersion,
-				Name:         config.NodeName,
-				Env:          config.Env,
-				CustomTaints: config.CustomTaints,
+				NodeIP:            config.NodeIP,
+				NodeHostname:      config.NodeHostname,
+				Version:           config.NodeVersion,
+				Name:              config.NodeName,
+				Env:               config.Env,
+				CustomTaints:      config.CustomTaints,
+				CustomAnnotations: config.CustomAnnotations,
+				CustomLabels:      config.CustomLabels,
 			})
 			// initialize node spec on bootstrap
 			podProvider = pod_provider.NewVPodProvider(cfg.Node.Namespace, config.NodeIP, config.NodeID, config.Client, t)
@@ -372,7 +388,7 @@ func NewVNode(config *model.BuildVNodeConfig, t tunnel.Tunnel) (kn *VNode, err e
 			cfg.NodeSpec.Status.NodeInfo.Architecture = runtime.GOARCH
 			cfg.NodeSpec.Status.NodeInfo.OperatingSystem = runtime.GOOS
 
-			cfg.NumWorkers = 1
+			cfg.NumWorkers = config.WorkerNum
 			return nil
 		},
 		nodeutil.WithClient(config.Client),
@@ -391,6 +407,7 @@ func NewVNode(config *model.BuildVNodeConfig, t tunnel.Tunnel) (kn *VNode, err e
 		Tunnel:                t,
 		node:                  cm,
 		exit:                  make(chan struct{}),
+		ready:                 make(chan struct{}),
 		done:                  make(chan struct{}),
 		exitWhenLeaderChanged: make(chan struct{}),
 		shouldRetryLease:      make(chan struct{}),

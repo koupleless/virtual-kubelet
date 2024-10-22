@@ -40,6 +40,8 @@ type VNodeController struct {
 
 	workloadMaxLevel int
 
+	vNodeWorkerNum int
+
 	tunnels []tunnel.Tunnel
 
 	client client.Client
@@ -72,12 +74,17 @@ func NewVNodeController(config *model.BuildVNodeControllerConfig, tunnels []tunn
 		config.WorkloadMaxLevel = 3
 	}
 
+	if config.VNodeWorkerNum == 0 {
+		config.VNodeWorkerNum = 1
+	}
+
 	return &VNodeController{
 		clientID:         config.ClientID,
 		env:              config.Env,
 		vPodIdentity:     config.VPodIdentity,
 		isCluster:        config.IsCluster,
 		workloadMaxLevel: config.WorkloadMaxLevel,
+		vNodeWorkerNum:   config.VNodeWorkerNum,
 		tunnels:          tunnels,
 		runtimeInfoStore: NewRuntimeInfoStore(),
 		ready:            make(chan struct{}),
@@ -279,6 +286,9 @@ func (brc *VNodeController) discoverPreviousNodes(nodeList *corev1.NodeList) {
 				NodeIP:   nodeIP,
 				HostName: nodeHostname,
 			},
+			CustomLabels:      node.Labels,
+			CustomAnnotations: node.Annotations,
+			CustomTaints:      node.Spec.Taints,
 		}, t)
 	}
 }
@@ -339,7 +349,7 @@ func (brc *VNodeController) onQueryAllContainerStatusDataArrived(nodeID string, 
 
 	if vNode.IsLeader() {
 		brc.runtimeInfoStore.NodeMsgArrived(nodeID)
-		vNode.SyncContainerInfo(context.TODO(), data)
+		vNode.SyncAllContainerInfo(context.TODO(), data)
 	}
 }
 
@@ -351,7 +361,7 @@ func (brc *VNodeController) onContainerStatusChanged(nodeID string, data model.C
 
 	if vNode.IsLeader() {
 		brc.runtimeInfoStore.NodeMsgArrived(nodeID)
-		vNode.SyncContainerInfo(context.TODO(), []model.ContainerStatusData{data})
+		vNode.SyncOneContainerInfo(context.TODO(), data)
 	}
 }
 
@@ -461,15 +471,18 @@ func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t
 	}
 
 	vn, err := vnode.NewVNode(&model.BuildVNodeConfig{
-		Client:       brc.client,
-		KubeCache:    brc.cache,
-		NodeID:       nodeID,
-		Env:          brc.env,
-		NodeIP:       initData.NetworkInfo.NodeIP,
-		NodeHostname: initData.NetworkInfo.HostName,
-		NodeName:     initData.Metadata.Name,
-		NodeVersion:  initData.Metadata.Version,
-		CustomTaints: initData.CustomTaints,
+		Client:            brc.client,
+		KubeCache:         brc.cache,
+		NodeID:            nodeID,
+		Env:               brc.env,
+		NodeIP:            initData.NetworkInfo.NodeIP,
+		NodeHostname:      initData.NetworkInfo.HostName,
+		NodeName:          initData.Metadata.Name,
+		NodeVersion:       initData.Metadata.Version,
+		CustomTaints:      initData.CustomTaints,
+		CustomLabels:      initData.CustomLabels,
+		CustomAnnotations: initData.CustomAnnotations,
+		WorkerNum:         brc.vNodeWorkerNum,
 	}, t)
 	if err != nil {
 		err = errpkg.Wrap(err, "Error creating vnode")
@@ -507,7 +520,7 @@ func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t
 
 		go vn.RenewLease(vnCtx, brc.clientID)
 
-		go vn.Run(vnCtx)
+		go vn.Run(vnCtx, initData)
 
 		if err = vn.WaitReady(vnCtx, time.Minute); err != nil {
 			err = errpkg.Wrap(err, "Error waiting vnode ready")
@@ -517,14 +530,14 @@ func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t
 
 		brc.runtimeInfoStore.NodeRunning(nodeID)
 
-		go utils.TimedTaskWithInterval(vnCtx, time.Second*9, func(ctx context.Context) {
+		go utils.TimedTaskWithInterval(vnCtx, time.Second*10, func(ctx context.Context) {
 			err = t.FetchHealthData(vnCtx, nodeID)
 			if err != nil {
 				log.G(vnCtx).WithError(err).Errorf("Failed to fetch node health info from %s", nodeID)
 			}
 		})
 
-		go utils.TimedTaskWithInterval(vnCtx, time.Second*5, func(ctx context.Context) {
+		go utils.TimedTaskWithInterval(vnCtx, time.Second*15, func(ctx context.Context) {
 			err = t.QueryAllContainerStatusData(vnCtx, nodeID)
 			if err != nil {
 				log.G(vnCtx).WithError(err).Errorf("Failed to query containers info from %s", nodeID)

@@ -17,6 +17,7 @@ package pod_provider
 import (
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
+	"github.com/koupleless/virtual-kubelet/tunnel"
 	"sync"
 
 	corev1 "k8s.io/api/core/v1"
@@ -26,24 +27,24 @@ import (
 type RuntimeInfoStore struct {
 	sync.RWMutex
 
-	podKeyToPod                  map[string]*corev1.Pod
-	containerNameToRelatedPodKey map[string]map[string]bool
-	containerKeyToContainer      map[string]*corev1.Container
+	podKeyToPod                          map[string]*corev1.Pod
+	containerUniqueKeyKeyToRelatedPodKey map[string]map[string]bool
+	containerKeyToContainer              map[string]*corev1.Container
 
 	latestContainerInfosFromNode map[string]*model.ContainerStatusData
 }
 
 func NewRuntimeInfoStore() *RuntimeInfoStore {
 	return &RuntimeInfoStore{
-		RWMutex:                      sync.RWMutex{},
-		podKeyToPod:                  make(map[string]*corev1.Pod),
-		containerNameToRelatedPodKey: make(map[string]map[string]bool),
-		containerKeyToContainer:      make(map[string]*corev1.Container),
-		latestContainerInfosFromNode: make(map[string]*model.ContainerStatusData),
+		RWMutex:                              sync.RWMutex{},
+		podKeyToPod:                          make(map[string]*corev1.Pod),
+		containerUniqueKeyKeyToRelatedPodKey: make(map[string]map[string]bool),
+		containerKeyToContainer:              make(map[string]*corev1.Container),
+		latestContainerInfosFromNode:         make(map[string]*model.ContainerStatusData),
 	}
 }
 
-func (r *RuntimeInfoStore) PutPod(pod *corev1.Pod) {
+func (r *RuntimeInfoStore) PutPod(pod *corev1.Pod, t tunnel.Tunnel) {
 	r.Lock()
 	defer r.Unlock()
 
@@ -53,17 +54,18 @@ func (r *RuntimeInfoStore) PutPod(pod *corev1.Pod) {
 	r.podKeyToPod[podKey] = pod
 	for _, container := range pod.Spec.Containers {
 		containerKey := utils.GetContainerKey(podKey, container.Name)
-		relatedPodKeyMap, has := r.containerNameToRelatedPodKey[container.Name]
+		containerUniqueKey := t.GetContainerUniqueKey(podKey, &container)
+		relatedPodKeyMap, has := r.containerUniqueKeyKeyToRelatedPodKey[containerUniqueKey]
 		if !has {
 			relatedPodKeyMap = make(map[string]bool)
 		}
 		relatedPodKeyMap[podKey] = true
-		r.containerNameToRelatedPodKey[container.Name] = relatedPodKeyMap
+		r.containerUniqueKeyKeyToRelatedPodKey[containerUniqueKey] = relatedPodKeyMap
 		r.containerKeyToContainer[containerKey] = &container
 	}
 }
 
-func (r *RuntimeInfoStore) DeletePod(podKey string) {
+func (r *RuntimeInfoStore) DeletePod(podKey string, t tunnel.Tunnel) {
 	r.Lock()
 	defer r.Unlock()
 
@@ -72,20 +74,21 @@ func (r *RuntimeInfoStore) DeletePod(podKey string) {
 	if has {
 		for _, container := range pod.Spec.Containers {
 			containerKey := utils.GetContainerKey(podKey, container.Name)
-			relatedPodKeyMap, has := r.containerNameToRelatedPodKey[container.Name]
+			containerUniqueKey := t.GetContainerUniqueKey(podKey, &container)
+			relatedPodKeyMap, has := r.containerUniqueKeyKeyToRelatedPodKey[containerUniqueKey]
 			if has {
 				delete(relatedPodKeyMap, podKey)
 			}
 			delete(r.containerKeyToContainer, containerKey)
-			r.containerNameToRelatedPodKey[container.Name] = relatedPodKeyMap
+			r.containerUniqueKeyKeyToRelatedPodKey[containerUniqueKey] = relatedPodKeyMap
 		}
 	}
 }
 
-func (r *RuntimeInfoStore) GetRelatedPodKeysByContainerName(containerName string) []string {
+func (r *RuntimeInfoStore) GetRelatedPodKeysByContainerKey(containerKey string) []string {
 	r.Lock()
 	defer r.Unlock()
-	relatedPodKeyMap := r.containerNameToRelatedPodKey[containerName]
+	relatedPodKeyMap := r.containerUniqueKeyKeyToRelatedPodKey[containerKey]
 	ret := make([]string, 0)
 	for podKey := range relatedPodKeyMap {
 		ret = append(ret, podKey)
@@ -123,7 +126,7 @@ func (r *RuntimeInfoStore) PutContainerStatus(containerInfo model.ContainerStatu
 	oldData, has := r.latestContainerInfosFromNode[containerInfo.Key]
 	// check change time valid
 	if has && oldData != nil {
-		if oldData.ChangeTime.After(containerInfo.ChangeTime) {
+		if !oldData.ChangeTime.Before(containerInfo.ChangeTime) {
 			// old message, not process
 			return
 		}

@@ -107,12 +107,23 @@ func NewVirtualKubeletNode(config model.BuildVNodeProviderConfig) *VNodeProvider
 func (v *VNodeProvider) BuildVirtualNode(node *corev1.Node, tunnelKey string) {
 	config := *v.nodeConfig
 	// custom labels
+	node.Labels = v.nodeConfig.CustomLabels
+	if node.Labels == nil {
+		node.Labels = make(map[string]string)
+	}
+
+	// necessary labels, will cover the value of custom labels
 	node.Labels[model.LabelKeyOfVNodeVersion] = config.Version
 	node.Labels[model.LabelKeyOfVNodeName] = config.Name
-	// necessary labels
 	node.Labels[model.LabelKeyOfEnv] = config.Env
 	node.Labels[model.LabelKeyOfComponent] = model.ComponentVNode
 	node.Labels[model.LabelKeyOfVnodeTunnel] = tunnelKey
+
+	node.Annotations = v.nodeConfig.CustomAnnotations
+	if node.Annotations == nil {
+		node.Annotations = make(map[string]string)
+	}
+
 	node.Spec.Taints = append([]corev1.Taint{
 		{
 			Key:    model.TaintKeyOfVnode,

@@ -86,7 +86,7 @@ func (m *MockTunnel) RegisterCallback(
 	m.OnSingleContainerStatusChanged = onSingleContainerStatusChanged
 }
 
-func (m *MockTunnel) OnNodeStart(ctx context.Context, nodeID string) {
+func (m *MockTunnel) OnNodeStart(ctx context.Context, nodeID string, initData model.NodeInfo) {
 	return
 }
 
@@ -143,6 +143,7 @@ func (m *MockTunnel) ShutdownContainer(ctx context.Context, nodeID, podKey strin
 	delete(containerMap, key)
 	m.containerStorage[nodeID] = containerMap
 	data.State = model.ContainerStateDeactivated
+	data.ChangeTime = time.Now()
 	m.OnSingleContainerStatusChanged(nodeID, data)
 	return nil
 }

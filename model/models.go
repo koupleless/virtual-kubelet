@@ -26,9 +26,11 @@ type NodeMetadata struct {
 
 // NodeInfo is the data of node info.
 type NodeInfo struct {
-	Metadata     NodeMetadata
-	NetworkInfo  NetworkInfo
-	CustomTaints []v1.Taint
+	Metadata          NodeMetadata
+	NetworkInfo       NetworkInfo
+	CustomTaints      []v1.Taint
+	CustomLabels      map[string]string
+	CustomAnnotations map[string]string
 }
 
 // NodeResource is the data of node resource
@@ -77,6 +79,12 @@ type BuildVNodeProviderConfig struct {
 
 	// CustomTaints is the taints set by tunnel
 	CustomTaints []v1.Taint
+
+	// CustomLabels is the init labels set by tunnel
+	CustomLabels map[string]string
+
+	// CustomAnnotations is the init annotations set by tunnel
+	CustomAnnotations map[string]string
 }
 
 type BuildVNodeConfig struct {
@@ -106,6 +114,15 @@ type BuildVNodeConfig struct {
 
 	// CustomTaints is the taint set by tunnel
 	CustomTaints []v1.Taint
+
+	// CustomLabels is the init labels set by tunnel
+	CustomLabels map[string]string
+
+	// CustomAnnotations is the init annotations set by tunnel
+	CustomAnnotations map[string]string
+
+	// Worker num, if num is 1, means execute Container events serially
+	WorkerNum int
 }
 
 type BuildVNodeControllerConfig struct {
@@ -120,6 +137,9 @@ type BuildVNodeControllerConfig struct {
 	IsCluster bool
 
 	WorkloadMaxLevel int
+
+	// vnode container event processor worker num, default 1, means execute Container events serially
+	VNodeWorkerNum int
 }
 
 type UnreachableNodeInfo struct {

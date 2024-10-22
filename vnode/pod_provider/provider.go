@@ -67,7 +67,7 @@ func NewVPodProvider(namespace, localIP, nodeID string, client client.Client, t 
 	return provider
 }
 
-func (b *VPodProvider) syncRelatedPodStatus(ctx context.Context, podKey, containerKey string) {
+func (b *VPodProvider) syncRelatedPodStatus(ctx context.Context, podKey, containerUniqueKey string) {
 	logger := log.G(ctx)
 	if podKey != model.PodKeyAll {
 		pod := b.runtimeInfoStore.GetPodByKey(podKey)
@@ -79,7 +79,7 @@ func (b *VPodProvider) syncRelatedPodStatus(ctx context.Context, podKey, contain
 			logger.WithError(err).Error("update pod status error")
 		}
 	} else {
-		podKeys := b.runtimeInfoStore.GetRelatedPodKeysByContainerKey(containerKey)
+		podKeys := b.runtimeInfoStore.GetRelatedPodKeysByContainerKey(containerUniqueKey)
 		pods := make([]*corev1.Pod, 0)
 		for _, key := range podKeys {
 			pod := b.runtimeInfoStore.GetPodByKey(key)
@@ -241,7 +241,7 @@ func (b *VPodProvider) CreatePod(ctx context.Context, pod *corev1.Pod) error {
 
 	// update the baseline info so the async handle logic can see them first
 	podCopy := pod.DeepCopy()
-	b.runtimeInfoStore.PutPod(podCopy)
+	b.runtimeInfoStore.PutPod(podCopy, b.tunnel)
 	go b.handleContainerStart(ctx, podCopy, podCopy.Spec.Containers)
 
 	return nil
@@ -287,7 +287,7 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 		go b.handleContainerShutdown(ctx, oldPod, containersShouldStop)
 	}
 
-	b.runtimeInfoStore.PutPod(newPod.DeepCopy())
+	b.runtimeInfoStore.PutPod(newPod.DeepCopy(), b.tunnel)
 
 	// only start new containers and changed containers
 	startNewContainer := func() {
@@ -332,7 +332,7 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 	}
 
 	// delete from curr provider
-	b.runtimeInfoStore.DeletePod(podKey)
+	b.runtimeInfoStore.DeletePod(podKey, b.tunnel)
 
 	go b.handleContainerShutdown(ctx, pod, pod.Spec.Containers)
 

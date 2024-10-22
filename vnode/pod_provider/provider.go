@@ -72,41 +72,34 @@ func (b *VPodProvider) syncRelatedPodStatus(ctx context.Context, podKey, contain
 	if podKey != model.PodKeyAll {
 		pod := b.runtimeInfoStore.GetPodByKey(podKey)
 		if pod == nil {
-			logger.Error("update non-exist pod status")
+			logger.Error("skip updating non-exist pod status")
 			return
 		}
-		if err := b.updatePodStatusToKubernetes(ctx, pod); err != nil {
-			logger.WithError(err).Error("update pod status error")
-		}
+		b.updatePodStatusToKubernetes(ctx, pod)
 	} else {
 		podKeys := b.runtimeInfoStore.GetRelatedPodKeysByContainerKey(containerUniqueKey)
 		pods := make([]*corev1.Pod, 0)
 		for _, key := range podKeys {
 			pod := b.runtimeInfoStore.GetPodByKey(key)
 			if pod == nil {
+				logger.Error("skip updating non-exist pod status")
 				continue
 			}
 			pods = append(pods, pod)
 		}
 		for _, pod := range pods {
-			if err := b.updatePodStatusToKubernetes(ctx, pod); err != nil {
-				logger.WithError(err).Error("update pod status error")
-			}
+			b.updatePodStatusToKubernetes(ctx, pod)
 		}
 	}
 
 }
 
-func (b *VPodProvider) updatePodStatusToKubernetes(ctx context.Context, pod *corev1.Pod) error {
-	podStatus, err := b.GetPodStatus(ctx, pod.Namespace, pod.Name)
-	if err != nil {
-		return err
-	}
+func (b *VPodProvider) updatePodStatusToKubernetes(ctx context.Context, pod *corev1.Pod) {
+	podStatus, _ := b.GetPodStatus(ctx, pod.Namespace, pod.Name)
 
 	podInfo := pod.DeepCopy()
 	podStatus.DeepCopyInto(&podInfo.Status)
 	b.notify(podInfo)
-	return nil
 }
 
 func (b *VPodProvider) SyncAllContainerInfo(ctx context.Context, containerInfos []model.ContainerStatusData) {
@@ -149,7 +142,6 @@ func (b *VPodProvider) SyncAllContainerInfo(ctx context.Context, containerInfos 
 	for _, containerInfo := range containerInfos {
 		b.syncRelatedPodStatus(ctx, containerInfo.PodKey, containerInfo.Key)
 	}
-
 }
 
 func (b *VPodProvider) SyncOneContainerInfo(ctx context.Context, containerInfo model.ContainerStatusData) {

@@ -143,6 +143,7 @@ func (m *MockTunnel) ShutdownContainer(ctx context.Context, nodeID, podKey strin
 	delete(containerMap, key)
 	m.containerStorage[nodeID] = containerMap
 	data.State = model.ContainerStateDeactivated
+	data.ChangeTime = time.Now()
 	m.OnSingleContainerStatusChanged(nodeID, data)
 	return nil
 }

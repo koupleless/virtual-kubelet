@@ -120,6 +120,9 @@ type BuildVNodeConfig struct {
 
 	// CustomAnnotations is the init annotations set by tunnel
 	CustomAnnotations map[string]string
+
+	// Worker num, if num is 1, means execute Container events serially
+	WorkerNum int
 }
 
 type BuildVNodeControllerConfig struct {
@@ -134,6 +137,9 @@ type BuildVNodeControllerConfig struct {
 	IsCluster bool
 
 	WorkloadMaxLevel int
+
+	// vnode container event processor worker num, default 1, means execute Container events serially
+	VNodeWorkerNum int
 }
 
 type UnreachableNodeInfo struct {

@@ -40,6 +40,8 @@ type VNodeController struct {
 
 	workloadMaxLevel int
 
+	vNodeWorkerNum int
+
 	tunnels []tunnel.Tunnel
 
 	client client.Client
@@ -72,12 +74,17 @@ func NewVNodeController(config *model.BuildVNodeControllerConfig, tunnels []tunn
 		config.WorkloadMaxLevel = 3
 	}
 
+	if config.VNodeWorkerNum == 0 {
+		config.VNodeWorkerNum = 1
+	}
+
 	return &VNodeController{
 		clientID:         config.ClientID,
 		env:              config.Env,
 		vPodIdentity:     config.VPodIdentity,
 		isCluster:        config.IsCluster,
 		workloadMaxLevel: config.WorkloadMaxLevel,
+		vNodeWorkerNum:   config.VNodeWorkerNum,
 		tunnels:          tunnels,
 		runtimeInfoStore: NewRuntimeInfoStore(),
 		ready:            make(chan struct{}),
@@ -475,6 +482,7 @@ func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t
 		CustomTaints:      initData.CustomTaints,
 		CustomLabels:      initData.CustomLabels,
 		CustomAnnotations: initData.CustomAnnotations,
+		WorkerNum:         brc.vNodeWorkerNum,
 	}, t)
 	if err != nil {
 		err = errpkg.Wrap(err, "Error creating vnode")

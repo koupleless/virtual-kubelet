@@ -388,7 +388,7 @@ func NewVNode(config *model.BuildVNodeConfig, t tunnel.Tunnel) (kn *VNode, err e
 			cfg.NodeSpec.Status.NodeInfo.Architecture = runtime.GOARCH
 			cfg.NodeSpec.Status.NodeInfo.OperatingSystem = runtime.GOOS
 
-			cfg.NumWorkers = 4
+			cfg.NumWorkers = config.WorkerNum
 			return nil
 		},
 		nodeutil.WithClient(config.Client),

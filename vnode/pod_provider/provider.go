@@ -128,8 +128,6 @@ func (b *VPodProvider) SyncAllContainerInfo(ctx context.Context, containerInfos 
 					PodKey:     podKey,
 					State:      model.ContainerStateDeactivated,
 					ChangeTime: now,
-					Reason:     "ContainerNotExist",
-					Message:    "Container status data not fetched from tunnel",
 				}
 			}
 			updated := b.runtimeInfoStore.PutContainerStatus(containerInfo)

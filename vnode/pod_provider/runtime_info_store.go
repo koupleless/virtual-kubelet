@@ -136,7 +136,9 @@ func (r *RuntimeInfoStore) PutContainerStatus(containerInfo model.ContainerStatu
 	} else {
 		updated = true
 	}
-	r.latestContainerInfosFromNode[containerInfo.Key] = &containerInfo
+	if updated {
+		r.latestContainerInfosFromNode[containerInfo.Key] = &containerInfo
+	}
 	return
 }
 

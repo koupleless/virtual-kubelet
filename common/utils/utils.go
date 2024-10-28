@@ -225,5 +225,5 @@ func IsContainerStatusDataEqual(dataA, dataB *model.ContainerStatusData) bool {
 	if newMsgEmpty {
 		return true
 	}
-	return dataA.Reason != dataB.Reason || dataA.Message != dataB.Message
+	return dataA.Reason == dataB.Reason && dataA.Message == dataB.Message
 }

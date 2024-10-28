@@ -219,7 +219,7 @@ func IsContainerStatusDataEqual(dataA, dataB *model.ContainerStatusData) bool {
 	}
 	stateEqual := dataA.State == dataB.State && dataA.PodKey == dataB.PodKey
 	if !stateEqual {
-		return true
+		return false
 	}
 	newMsgEmpty := dataB.Reason == "" && dataB.Message == ""
 	if newMsgEmpty {

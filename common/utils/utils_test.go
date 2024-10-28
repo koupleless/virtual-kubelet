@@ -265,3 +265,38 @@ func TestDefaultRateLimiter(t *testing.T) {
 	assert.Equal(t, DefaultRateLimiter(30), 90*time.Second)
 	assert.Equal(t, DefaultRateLimiter(100), 1000*time.Second)
 }
+
+func TestIsContainerStatusDataEqual(t *testing.T) {
+	assert.False(t, IsContainerStatusDataEqual(nil, nil))
+	assert.False(t, IsContainerStatusDataEqual(&model.ContainerStatusData{}, nil))
+	assert.False(t, IsContainerStatusDataEqual(&model.ContainerStatusData{
+		State: model.ContainerStateActivated,
+	}, &model.ContainerStatusData{
+		State: model.ContainerStateResolved,
+	}))
+	assert.False(t, IsContainerStatusDataEqual(&model.ContainerStatusData{
+		State:  model.ContainerStateActivated,
+		PodKey: "test",
+	}, &model.ContainerStatusData{
+		State:  model.ContainerStateActivated,
+		PodKey: "test2",
+	}))
+	assert.True(t, IsContainerStatusDataEqual(&model.ContainerStatusData{
+		State:  model.ContainerStateActivated,
+		PodKey: "test",
+	}, &model.ContainerStatusData{
+		State:  model.ContainerStateActivated,
+		PodKey: "test",
+	}))
+	assert.True(t, IsContainerStatusDataEqual(&model.ContainerStatusData{
+		State:   model.ContainerStateActivated,
+		PodKey:  "test",
+		Reason:  "test",
+		Message: "test",
+	}, &model.ContainerStatusData{
+		State:   model.ContainerStateActivated,
+		PodKey:  "test",
+		Reason:  "test",
+		Message: "test",
+	}))
+}

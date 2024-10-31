@@ -7,6 +7,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
+// Summary: This file defines a predicate for filtering corev1.Node events based on label selectors.
+
 var _ predicate.TypedPredicate[*corev1.Node] = &VNodePredicate{}
 
 type VNodePredicate struct {

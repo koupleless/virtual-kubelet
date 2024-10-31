@@ -15,23 +15,24 @@
 package pod_provider
 
 import (
+	"sync"
+
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/tunnel"
-	"sync"
 
 	corev1 "k8s.io/api/core/v1"
 )
 
-// RuntimeInfoStore provide the in memory runtime information.
+// RuntimeInfoStore provides in-memory runtime information.
 type RuntimeInfoStore struct {
-	sync.RWMutex
+	sync.RWMutex // This mutex is used for thread-safe access to the store.
 
-	podKeyToPod                          map[string]*corev1.Pod
-	containerUniqueKeyKeyToRelatedPodKey map[string]map[string]bool
-	containerKeyToContainer              map[string]*corev1.Container
+	podKeyToPod                          map[string]*corev1.Pod       // Maps pod keys to their corresponding pods.
+	containerUniqueKeyKeyToRelatedPodKey map[string]map[string]bool   // Maps container unique keys to their related pod keys.
+	containerKeyToContainer              map[string]*corev1.Container // Maps container keys to their corresponding containers.
 
-	latestContainerInfosFromNode map[string]*model.ContainerStatusData
+	latestContainerInfosFromNode map[string]*model.ContainerStatusData // Stores the latest container status data from nodes.
 }
 
 func NewRuntimeInfoStore() *RuntimeInfoStore {
@@ -44,6 +45,7 @@ func NewRuntimeInfoStore() *RuntimeInfoStore {
 	}
 }
 
+// PutPod function updates or adds a pod to the RuntimeInfoStore.
 func (r *RuntimeInfoStore) PutPod(pod *corev1.Pod, t tunnel.Tunnel) {
 	r.Lock()
 	defer r.Unlock()
@@ -65,6 +67,7 @@ func (r *RuntimeInfoStore) PutPod(pod *corev1.Pod, t tunnel.Tunnel) {
 	}
 }
 
+// DeletePod function removes a pod from the RuntimeInfoStore.
 func (r *RuntimeInfoStore) DeletePod(podKey string, t tunnel.Tunnel) {
 	r.Lock()
 	defer r.Unlock()
@@ -85,6 +88,7 @@ func (r *RuntimeInfoStore) DeletePod(podKey string, t tunnel.Tunnel) {
 	}
 }
 
+// GetRelatedPodKeysByContainerKey function retrieves a list of pod keys related to a given container key.
 func (r *RuntimeInfoStore) GetRelatedPodKeysByContainerKey(containerKey string) []string {
 	r.Lock()
 	defer r.Unlock()
@@ -96,18 +100,21 @@ func (r *RuntimeInfoStore) GetRelatedPodKeysByContainerKey(containerKey string) 
 	return ret
 }
 
+// GetContainer function retrieves a container by its key.
 func (r *RuntimeInfoStore) GetContainer(containerKey string) *corev1.Container {
 	r.RLock()
 	defer r.RUnlock()
 	return r.containerKeyToContainer[containerKey]
 }
 
+// GetPodByKey function retrieves a pod by its key.
 func (r *RuntimeInfoStore) GetPodByKey(podKey string) *corev1.Pod {
 	r.RLock()
 	defer r.RUnlock()
 	return r.podKeyToPod[podKey]
 }
 
+// GetPods function retrieves all pods in the RuntimeInfoStore.
 func (r *RuntimeInfoStore) GetPods() []*corev1.Pod {
 	r.RLock()
 	defer r.RUnlock()
@@ -119,6 +126,7 @@ func (r *RuntimeInfoStore) GetPods() []*corev1.Pod {
 	return ret
 }
 
+// PutContainerStatus function updates the status of a container in the RuntimeInfoStore.
 func (r *RuntimeInfoStore) PutContainerStatus(containerInfo model.ContainerStatusData) (updated bool) {
 	r.Lock()
 	defer r.Unlock()
@@ -142,6 +150,7 @@ func (r *RuntimeInfoStore) PutContainerStatus(containerInfo model.ContainerStatu
 	return
 }
 
+// ClearContainerStatus function removes the status of a container from the RuntimeInfoStore.
 func (r *RuntimeInfoStore) ClearContainerStatus(containerKey string) {
 	r.Lock()
 	defer r.Unlock()
@@ -149,6 +158,7 @@ func (r *RuntimeInfoStore) ClearContainerStatus(containerKey string) {
 	delete(r.latestContainerInfosFromNode, containerKey)
 }
 
+// GetLatestContainerInfos function retrieves all the latest container status information.
 func (r *RuntimeInfoStore) GetLatestContainerInfos() []*model.ContainerStatusData {
 	r.Lock()
 	defer r.Unlock()
@@ -159,6 +169,7 @@ func (r *RuntimeInfoStore) GetLatestContainerInfos() []*model.ContainerStatusDat
 	return containerInfos
 }
 
+// GetLatestContainerInfoByContainerKey function retrieves the latest status information of a container by its key.
 func (r *RuntimeInfoStore) GetLatestContainerInfoByContainerKey(containerKey string) *model.ContainerStatusData {
 	r.Lock()
 	defer r.Unlock()

@@ -7,6 +7,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
+// Summary: This file defines a predicate for filtering corev1.Pod events based on label selectors.
+
 var _ predicate.TypedPredicate[*corev1.Pod] = &VPodPredicate{}
 
 type VPodPredicate struct {

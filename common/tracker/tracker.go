@@ -1,10 +1,11 @@
 package tracker
 
 import (
-	"github.com/koupleless/virtual-kubelet/model"
-	"github.com/sirupsen/logrus"
 	"os"
 	"time"
+
+	"github.com/koupleless/virtual-kubelet/model"
+	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -25,6 +26,7 @@ type Tracker interface {
 	ErrorReport(string, string, string, string, map[string]string, model.ErrorCode)
 }
 
+// Set the custom tracker
 func SetTracker(t Tracker) {
 	if t == nil {
 		logrus.Info("custom tracker is nil")
@@ -34,6 +36,7 @@ func SetTracker(t Tracker) {
 	T.Init()
 }
 
+// Get the current tracker
 func GetTracker() Tracker {
 	return T
 }

@@ -7,6 +7,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
+// Summary: This file defines a predicate for filtering v1.Lease events based on label selectors.
+
 var _ predicate.TypedPredicate[*v1.Lease] = &VNodeLeasePredicate{}
 
 type VNodeLeasePredicate struct {

@@ -5,47 +5,54 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/koupleless/virtual-kubelet/common/utils"
-	"github.com/koupleless/virtual-kubelet/model"
-	"github.com/sirupsen/logrus"
 	"io"
-	"k8s.io/apimachinery/pkg/util/yaml"
 	"log"
 	"net/http"
 	"os"
 	"path"
 	"time"
+
+	"github.com/koupleless/virtual-kubelet/common/utils"
+	"github.com/koupleless/virtual-kubelet/model"
+	"github.com/sirupsen/logrus"
+	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
+// Constants for default configuration path and event types
 const (
 	DefaultConfigPath = "config/default_tracker_config.yaml"
 	EventSuccess      = "success"
 	EventFail         = "fail"
 )
 
+// DefaultTracker is a struct that implements the Tracker interface
 var _ Tracker = &DefaultTracker{}
 
+// defaultTrackerConfig is a struct to hold configuration for the DefaultTracker
 type defaultTrackerConfig struct {
-	LogDir      string   `yaml:"logDir"`
-	ReportLevel string   `yaml:"reportLevel"`
-	ReportLinks []string `yaml:"reportLinks"`
+	LogDir      string   `yaml:"logDir"`      // Directory path for log files
+	ReportLevel string   `yaml:"reportLevel"` // Level of reporting, can be "debug" or "error"
+	ReportLinks []string `yaml:"reportLinks"` // List of URLs to report events to
 }
 
+// isDebug checks if the report level is set to "debug"
 func (c defaultTrackerConfig) isDebug() bool {
 	return c.ReportLevel == "debug"
 }
 
+// logData is a struct to hold data for logging and reporting events
 type logData struct {
-	TraceID  string            `json:"traceID"`
-	Scene    string            `json:"scene"`
-	Event    string            `json:"event"`
-	TimeUsed int64             `json:"timeUsed,omitempty"`
-	Result   string            `json:"result"`
-	Message  string            `json:"message"`
-	Code     model.ErrorCode   `json:"code"`
-	Labels   map[string]string `json:"labels"`
+	TraceID  string            `json:"traceID"`            // Unique identifier for the event
+	Scene    string            `json:"scene"`              // Scene or context of the event
+	Event    string            `json:"event"`              // Event type, can be "success" or "fail"
+	TimeUsed int64             `json:"timeUsed,omitempty"` // Time taken for the event in milliseconds
+	Result   string            `json:"result"`             // Result of the event, can be "success" or "fail"
+	Message  string            `json:"message"`            // Message or description of the event
+	Code     model.ErrorCode   `json:"code"`               // Error code for the event
+	Labels   map[string]string `json:"labels"`             // Additional labels or metadata for the event
 }
 
+// formatText formats the logData into a string suitable for text logging
 func (d logData) formatText() string {
 	labelBytes, _ := json.Marshal(d.Labels)
 	return fmt.Sprintf("[%s], [%s], [%s], [%s], [%d], [%s], [%s], [%s], [%s]\n",
@@ -61,16 +68,19 @@ func (d logData) formatText() string {
 	)
 }
 
+// formatJson formats the logData into a JSON string suitable for reporting
 func (d logData) formatJson() string {
 	jsonBytes, _ := json.Marshal(d)
 	return string(jsonBytes)
 }
 
+// DefaultTracker is a struct that implements the Tracker interface
 type DefaultTracker struct {
-	config    defaultTrackerConfig
-	logWriter io.Writer
+	config    defaultTrackerConfig // Configuration for the tracker
+	logWriter io.Writer            // Writer for logging events
 }
 
+// Init initializes the DefaultTracker with configuration and sets up the log writer
 func (t *DefaultTracker) Init() {
 	configPath := utils.GetEnv("TRACKER_CONFIG_PATH", DefaultConfigPath)
 	configContent, err := os.ReadFile(configPath)
@@ -96,6 +106,7 @@ func (t *DefaultTracker) Init() {
 	}
 }
 
+// ErrorReport reports an error event to the configured links and logs it
 func (t *DefaultTracker) ErrorReport(traceID, scene, event, message string, labels map[string]string, code model.ErrorCode) {
 	// send error report to links in config
 	data := logData{
@@ -111,6 +122,7 @@ func (t *DefaultTracker) ErrorReport(traceID, scene, event, message string, labe
 	t.recordEvent(data)
 }
 
+// FuncTrack tracks the execution of a function and reports the result
 func (t *DefaultTracker) FuncTrack(traceID, scene, event string, labels map[string]string, f func() (error, model.ErrorCode)) error {
 	startTime := time.Now()
 	err, code := f()
@@ -134,6 +146,7 @@ func (t *DefaultTracker) FuncTrack(traceID, scene, event string, labels map[stri
 	return err
 }
 
+// Eventually tracks an event that may timeout and reports the result
 func (t *DefaultTracker) Eventually(traceID, scene, event string, labels map[string]string, timeoutErrorCode model.ErrorCode, checkFunc func() bool, timeout time.Duration, interval time.Duration, checkPassed func(), timeoutCall func()) {
 	startTime := time.Now()
 	data := logData{
@@ -164,12 +177,12 @@ func (t *DefaultTracker) Eventually(traceID, scene, event string, labels map[str
 	t.recordEvent(data)
 }
 
-// record event to local log file
+// recordEvent records the event to the local log file
 func (t *DefaultTracker) recordEvent(data logData) {
 	t.logWriter.Write([]byte(data.formatText()))
 }
 
-// report event to links
+// reportEvent reports the event to the configured links
 func (t *DefaultTracker) reportEvent(data logData) {
 	for _, link := range t.config.ReportLinks {
 		_, err := http.Post(link, "application/json", bytes.NewBufferString(data.formatJson()))

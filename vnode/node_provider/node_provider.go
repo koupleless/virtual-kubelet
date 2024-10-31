@@ -16,31 +16,36 @@ package node_provider
 
 import (
 	"context"
+	"sync"
+
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"sync"
 )
 
+// The following line ensures that VNodeProvider implements the NodeProvider interface.
 var _ virtual_kubelet.NodeProvider = &VNodeProvider{}
 
+// VNodeProvider is a struct that implements the NodeProvider interface.
 type VNodeProvider struct {
 	sync.Mutex
 
-	nodeConfig *model.BuildVNodeProviderConfig
+	nodeConfig *model.BuildVNodeProviderConfig // Configuration for building a virtual node provider.
 
-	nodeInfo *corev1.Node
+	nodeInfo *corev1.Node // Information about the node.
 
-	latestNodeStatusData model.NodeStatusData
+	latestNodeStatusData model.NodeStatusData // The latest status data of the node.
 
-	notify func(*corev1.Node)
+	notify func(*corev1.Node) // Function to notify about node status changes.
 }
 
+// constructVNode constructs a virtual node based on the latest node status data.
 func (v *VNodeProvider) constructVNode() *corev1.Node {
-	vnodeCopy := v.nodeInfo.DeepCopy()
-	// node status
+	vnodeCopy := v.nodeInfo.DeepCopy() // Create a deep copy of the node info.
+	// Set the node status to running.
 	vnodeCopy.Status.Phase = corev1.NodeRunning
+	// Initialize a map to hold node conditions.
 	conditionMap := map[corev1.NodeConditionType]corev1.NodeCondition{
 		corev1.NodeReady: {
 			Type:   corev1.NodeReady,
@@ -64,26 +69,31 @@ func (v *VNodeProvider) constructVNode() *corev1.Node {
 		},
 	}
 
+	// Add custom conditions to the condition map.
 	for _, customCondition := range v.latestNodeStatusData.CustomConditions {
 		conditionMap[customCondition.Type] = customCondition
 	}
 
+	// Convert the condition map to a slice of conditions.
 	conditions := make([]corev1.NodeCondition, 0)
 	for _, condition := range conditionMap {
 		conditions = append(conditions, condition)
 	}
-	vnodeCopy.Status.Conditions = conditions
-	vnodeCopy.Annotations = v.latestNodeStatusData.CustomAnnotations
+	vnodeCopy.Status.Conditions = conditions                         // Set the conditions on the vnode copy.
+	vnodeCopy.Annotations = v.latestNodeStatusData.CustomAnnotations // Set custom annotations.
+	// Set custom labels.
 	for key, value := range v.latestNodeStatusData.CustomLabels {
 		vnodeCopy.Labels[key] = value
 	}
+	// Set resource capacities and allocatable amounts.
 	for resourceName, status := range v.latestNodeStatusData.Resources {
 		vnodeCopy.Status.Capacity[resourceName] = status.Capacity
 		vnodeCopy.Status.Allocatable[resourceName] = status.Allocatable
 	}
-	return vnodeCopy
+	return vnodeCopy // Return the constructed vnode.
 }
 
+// Notify updates the latest node status data and notifies about the change.
 func (v *VNodeProvider) Notify(data model.NodeStatusData) {
 	v.Lock()
 	defer v.Unlock()
@@ -92,38 +102,43 @@ func (v *VNodeProvider) Notify(data model.NodeStatusData) {
 	v.notify(vnodeCopy)
 }
 
+// CurrNodeInfo returns the current node information.
 func (v *VNodeProvider) CurrNodeInfo() *corev1.Node {
 	v.Lock()
 	defer v.Unlock()
 	return v.constructVNode()
 }
 
+// NewVirtualKubeletNode creates a new VNodeProvider instance.
 func NewVirtualKubeletNode(config model.BuildVNodeProviderConfig) *VNodeProvider {
 	return &VNodeProvider{
 		nodeConfig: &config,
 	}
 }
 
+// BuildVirtualNode builds a virtual node based on the provided configuration.
 func (v *VNodeProvider) BuildVirtualNode(node *corev1.Node, tunnelKey string) {
-	config := *v.nodeConfig
-	// custom labels
+	config := *v.nodeConfig // Copy the node configuration.
+	// Set custom labels on the node.
 	node.Labels = v.nodeConfig.CustomLabels
 	if node.Labels == nil {
-		node.Labels = make(map[string]string)
+		node.Labels = make(map[string]string) // Initialize labels if not present.
 	}
 
-	// necessary labels, will cover the value of custom labels
+	// Set necessary labels on the node.
 	node.Labels[model.LabelKeyOfVNodeVersion] = config.Version
 	node.Labels[model.LabelKeyOfVNodeName] = config.Name
 	node.Labels[model.LabelKeyOfEnv] = config.Env
 	node.Labels[model.LabelKeyOfComponent] = model.ComponentVNode
 	node.Labels[model.LabelKeyOfVnodeTunnel] = tunnelKey
 
+	// Set custom annotations on the node.
 	node.Annotations = v.nodeConfig.CustomAnnotations
 	if node.Annotations == nil {
-		node.Annotations = make(map[string]string)
+		node.Annotations = make(map[string]string) // Initialize annotations if not present.
 	}
 
+	// Add taints to the node.
 	node.Spec.Taints = append([]corev1.Taint{
 		{
 			Key:    model.TaintKeyOfVnode,
@@ -136,6 +151,8 @@ func (v *VNodeProvider) BuildVirtualNode(node *corev1.Node, tunnelKey string) {
 			Effect: corev1.TaintEffectNoExecute,
 		},
 	}, config.CustomTaints...)
+
+	// Set the node status.
 	node.Status = corev1.NodeStatus{
 		Phase: corev1.NodePending,
 		Addresses: []corev1.NodeAddress{
@@ -163,6 +180,7 @@ func (v *VNodeProvider) BuildVirtualNode(node *corev1.Node, tunnelKey string) {
 	}
 }
 
+// Register registers a node with the provider.
 func (v *VNodeProvider) Register(node *corev1.Node, tunnelKey string) error {
 	v.BuildVirtualNode(node, tunnelKey)
 	v.Lock()
@@ -171,10 +189,12 @@ func (v *VNodeProvider) Register(node *corev1.Node, tunnelKey string) error {
 	return nil
 }
 
+// Ping checks the health of the node provider.
 func (v *VNodeProvider) Ping(_ context.Context) error {
 	return nil
 }
 
+// NotifyNodeStatus sets a callback function to notify about node status changes.
 func (v *VNodeProvider) NotifyNodeStatus(_ context.Context, cb func(*corev1.Node)) {
 	v.notify = cb
 }

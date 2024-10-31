@@ -3,6 +3,10 @@ package utils
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/google/go-cmp/cmp"
 	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/model"
@@ -11,11 +15,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"os"
-	"strings"
-	"time"
 )
 
+// DefaultRateLimiter calculates the duration for retry based on the number of retries.
 func DefaultRateLimiter(retryTimes int) time.Duration {
 	if retryTimes < 30 {
 		return time.Duration(retryTimes) * 100 * time.Millisecond
@@ -26,10 +28,12 @@ func DefaultRateLimiter(retryTimes int) time.Duration {
 	}
 }
 
+// TimedTaskWithInterval runs a task at a specified interval until the context is cancelled.
 func TimedTaskWithInterval(ctx context.Context, interval time.Duration, task func(context.Context)) {
 	wait.UntilWithContext(ctx, task, interval)
 }
 
+// CheckAndFinallyCall checks a condition at a specified interval until it's true or a timeout occurs.
 func CheckAndFinallyCall(ctx context.Context, checkFunc func() bool, timeout, interval time.Duration, finally, timeoutCall func()) {
 	checkTicker := time.NewTicker(interval)
 
@@ -50,6 +54,7 @@ func CheckAndFinallyCall(ctx context.Context, checkFunc func() bool, timeout, in
 	}
 }
 
+// CallWithRetry attempts to call a function with retries based on a custom rate limiter.
 func CallWithRetry(ctx context.Context, call func(retryTimes int) (shouldRetry bool, err error), retryRateLimiter func(retryTimes int) time.Duration) error {
 	logger := log.G(ctx)
 	retryTimes := 0
@@ -79,6 +84,7 @@ func CallWithRetry(ctx context.Context, call func(retryTimes int) (shouldRetry b
 	return err
 }
 
+// ConvertByteNumToResourceQuantity converts a byte number to a resource quantity.
 func ConvertByteNumToResourceQuantity(byteNum int64) resource.Quantity {
 	resourceStr := ""
 	byteNum /= 1024
@@ -89,6 +95,7 @@ func ConvertByteNumToResourceQuantity(byteNum int64) resource.Quantity {
 	return resource.MustParse(resourceStr)
 }
 
+// GetEnv retrieves an environment variable or returns a default value if not set.
 func GetEnv(key, defaultValue string) string {
 	value, found := os.LookupEnv(key)
 	if found {
@@ -97,24 +104,27 @@ func GetEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
+// GetPodKey constructs a pod key from a pod object.
 func GetPodKey(pod *corev1.Pod) string {
 	return pod.Namespace + "/" + pod.Name
 }
 
+// GetPodKeyFromContainerKey extracts the pod key from a container key.
 func GetPodKeyFromContainerKey(containerKey string) string {
 	return strings.Join(strings.Split(containerKey, "/")[:2], "/")
 }
 
+// GetContainerNameFromContainerKey extracts the container name from a container key.
 func GetContainerNameFromContainerKey(containerKey string) string {
 	return strings.Join(strings.Split(containerKey, "/")[2:], "/")
 }
 
+// GetContainerKey constructs a container key from a pod key and container name.
 func GetContainerKey(podKey, containerName string) string {
 	return podKey + "/" + containerName
 }
 
-// PodsEqual checks if two pods are equal according to the fields we know that are allowed
-// to be modified after startup time.
+// PodsEqual checks if two pods are equal based on specific fields that can be modified after startup.
 func PodsEqual(pod1, pod2 *corev1.Pod) bool {
 	// Pod Update Only Permits update of:
 	// - `spec.containers[*].image`
@@ -135,10 +145,12 @@ func PodsEqual(pod1, pod2 *corev1.Pod) bool {
 		cmp.Equal(pod1.ObjectMeta.Finalizers, pod2.Finalizers)
 }
 
+// FormatNodeName constructs a node name based on node ID and environment.
 func FormatNodeName(nodeID, env string) string {
 	return fmt.Sprintf("%s.%s.%s", model.VNodePrefix, nodeID, env)
 }
 
+// ExtractNodeIDFromNodeName extracts the node ID from a node name.
 func ExtractNodeIDFromNodeName(nodeName string) string {
 	split := strings.Split(nodeName, ".")
 	if len(split) == 1 {
@@ -147,10 +159,12 @@ func ExtractNodeIDFromNodeName(nodeName string) string {
 	return strings.Join(split[1:len(split)-1], ".")
 }
 
+// TranslateContainerStatusFromTunnelToContainerStatus translates tunnel container status to Kubernetes container status.
 func TranslateContainerStatusFromTunnelToContainerStatus(container corev1.Container, data *model.ContainerStatusData) corev1.ContainerStatus {
-	started :=
-		data != nil && data.State == model.ContainerStateActivated
+	// Determine if the container has started based on the data state
+	started := data != nil && data.State == model.ContainerStateActivated
 
+	// Initialize the return value with common fields
 	ret := corev1.ContainerStatus{
 		Name:        container.Name,
 		ContainerID: container.Name,
@@ -161,6 +175,7 @@ func TranslateContainerStatusFromTunnelToContainerStatus(container corev1.Contai
 		ImageID:     container.Image,
 	}
 
+	// Handle the case where data is nil, indicating the container is pending
 	if data == nil {
 		ret.State.Waiting = &corev1.ContainerStateWaiting{
 			Reason:  "ContainerPending",
@@ -169,23 +184,27 @@ func TranslateContainerStatusFromTunnelToContainerStatus(container corev1.Contai
 		return ret
 	}
 
+	// Handle the case where the container is in the resolved state, indicating it's starting
 	if data.State == model.ContainerStateResolved {
-		// starting
 		ret.State.Waiting = &corev1.ContainerStateWaiting{
 			Reason:  data.Reason,
 			Message: data.Message,
+			// Note: This state indicates the container is in the process of starting
 		}
 		return ret
 	}
 
+	// Handle the case where the container is in the activated state, indicating it's running
 	if data.State == model.ContainerStateActivated {
 		ret.State.Running = &corev1.ContainerStateRunning{
 			StartedAt: metav1.Time{
 				Time: data.ChangeTime,
 			},
+			// Note: This state indicates the container is currently running
 		}
 	}
 
+	// Handle the case where the container is in the deactivated state, indicating it's terminated
 	if data.State == model.ContainerStateDeactivated {
 		ret.State.Terminated = &corev1.ContainerStateTerminated{
 			ExitCode: 1,
@@ -194,11 +213,13 @@ func TranslateContainerStatusFromTunnelToContainerStatus(container corev1.Contai
 			FinishedAt: metav1.Time{
 				Time: data.ChangeTime,
 			},
+			// Note: This state indicates the container has been terminated
 		}
 	}
 	return ret
 }
 
+// SplitMetaNamespaceKey splits a key into namespace and name.
 func SplitMetaNamespaceKey(key string) (namespace, name string, err error) {
 	parts := strings.Split(key, "/")
 	switch len(parts) {
@@ -213,17 +234,22 @@ func SplitMetaNamespaceKey(key string) (namespace, name string, err error) {
 	return "", "", fmt.Errorf("unexpected key format: %q", key)
 }
 
+// IsContainerStatusDataEqual checks if two container status data are equal.
 func IsContainerStatusDataEqual(dataA, dataB *model.ContainerStatusData) bool {
+	// Check if either dataA or dataB is nil, if so, return false as they cannot be equal
 	if dataA == nil || dataB == nil {
 		return false
 	}
+	// Compare the State and PodKey of dataA and dataB, if they are not equal, return false
 	stateEqual := dataA.State == dataB.State && dataA.PodKey == dataB.PodKey
 	if !stateEqual {
 		return false
 	}
+	// Check if the Reason and Message of dataB are both empty, if so, return true as dataA and dataB are considered equal
 	newMsgEmpty := dataB.Reason == "" && dataB.Message == ""
 	if newMsgEmpty {
 		return true
 	}
+	// If none of the above conditions are met, compare the Reason and Message of dataA and dataB, return true if they are equal
 	return dataA.Reason == dataB.Reason && dataA.Message == dataB.Message
 }

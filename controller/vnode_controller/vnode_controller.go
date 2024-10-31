@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/common/trace"
 	"github.com/koupleless/virtual-kubelet/common/utils"
@@ -26,37 +28,40 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-	"time"
 )
 
+// VNodeController is the main controller for the virtual node
 type VNodeController struct {
-	clientID string
+	clientID string // The client ID for the controller
 
-	env string
+	env string // The environment for the controller
 
-	vPodIdentity string
+	vPodIdentity string // The identity of the virtual pod
 
-	isCluster bool
+	isCluster bool // Whether the controller is in a cluster
 
-	workloadMaxLevel int
+	workloadMaxLevel int // The maximum level of workload for the controller
 
-	vNodeWorkerNum int
+	vNodeWorkerNum int // The number of worker nodes for the controller
 
-	tunnels []tunnel.Tunnel
+	tunnels []tunnel.Tunnel // The tunnels for the controller
 
-	client client.Client
-	cache  cache.Cache
+	client client.Client // The client for the controller
 
-	ready chan struct{}
+	cache cache.Cache // The cache for the controller
 
-	runtimeInfoStore *RuntimeInfoStore
+	ready chan struct{} // The channel for the controller to be ready
+
+	runtimeInfoStore *RuntimeInfoStore // The runtime info store for the controller
 }
 
+// Reconcile is the main reconcile function for the controller
 func (brc *VNodeController) Reconcile(_ context.Context, _ reconcile.Request) (reconcile.Result, error) {
 	// do nothing here
 	return reconcile.Result{}, nil
 }
 
+// NewVNodeController creates a new VNodeController
 func NewVNodeController(config *model.BuildVNodeControllerConfig, tunnels []tunnel.Tunnel) (*VNodeController, error) {
 	if config == nil {
 		return nil, errors.New("config must not be nil")
@@ -91,6 +96,7 @@ func NewVNodeController(config *model.BuildVNodeControllerConfig, tunnels []tunn
 	}, nil
 }
 
+// SetupWithManager sets up the controller with the manager
 func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Manager) (err error) {
 	// init all tunnels
 	for _, t := range brc.tunnels {
@@ -204,7 +210,7 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 
 		syncd := brc.cache.WaitForCacheSync(ctx)
 		if syncd {
-			// restart virtual kubelet for previous node
+			// This section is responsible for restarting the virtual kubelet for previous nodes.
 			componentRequirement, _ := labels.NewRequirement(model.LabelKeyOfComponent, selection.In, []string{model.ComponentVNode})
 
 			nodeList := &corev1.NodeList{}
@@ -216,12 +222,15 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 				return
 			}
 
+			// Iterate through the list of nodes to update their status in the runtime info store.
 			for _, node := range nodeList.Items {
 				brc.runtimeInfoStore.PutNode(node.Name)
 			}
 
+			// Discover and process previous nodes to ensure they are properly registered.
 			brc.discoverPreviousNodes(nodeList)
 
+			// Periodically check for outdated virtual nodes and wake them up if necessary.
 			go utils.TimedTaskWithInterval(ctx, time.Millisecond*500, func(ctx context.Context) {
 				outdatedVNodeNameList := brc.runtimeInfoStore.GetLeaseOutdatedVNodeName(time.Second * model.NodeLeaseDurationSeconds)
 				for _, nodeName := range outdatedVNodeNameList {
@@ -229,6 +238,7 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 				}
 			})
 
+			// Periodically check for nodes that are not reachable and notify their leader virtual nodes.
 			go utils.TimedTaskWithInterval(ctx, time.Second, func(ctx context.Context) {
 				notReachableNodeInfos := brc.runtimeInfoStore.GetNotReachableNodeInfos(time.Second * model.NodeLeaseDurationSeconds)
 				for _, nodeInfo := range notReachableNodeInfos {
@@ -243,6 +253,7 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 				}
 			})
 
+			// Signal that the controller is ready.
 			close(brc.ready)
 		} else {
 			log.G(ctx).Error("cache sync failed")
@@ -254,21 +265,30 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 	return nil
 }
 
+// This function discovers and processes previous nodes to ensure they are properly registered.
 func (brc *VNodeController) discoverPreviousNodes(nodeList *corev1.NodeList) {
+	// Create a temporary map to store tunnels for quick lookup by key.
 	tmpTunnelMap := make(map[string]tunnel.Tunnel)
 
+	// Populate the temporary tunnel map with existing tunnels.
 	for _, t := range brc.tunnels {
 		tmpTunnelMap[t.Key()] = t
 	}
 
+	// Iterate through the list of nodes to process each node.
 	for _, node := range nodeList.Items {
+		// Extract the tunnel key from the node's labels.
 		tunnelKey := node.Labels[model.LabelKeyOfVnodeTunnel]
+		// Attempt to find the tunnel associated with the node.
 		t, ok := tmpTunnelMap[tunnelKey]
 		if !ok {
+			// If the tunnel is not found, skip to the next node.
 			continue
 		}
+		// Initialize node IP and hostname with default values.
 		nodeIP := "127.0.0.1"
 		nodeHostname := node.Name
+		// Iterate through the node's addresses to find the internal IP and hostname.
 		for _, addr := range node.Status.Addresses {
 			if addr.Type == corev1.NodeInternalIP {
 				nodeIP = addr.Address
@@ -276,6 +296,7 @@ func (brc *VNodeController) discoverPreviousNodes(nodeList *corev1.NodeList) {
 				nodeHostname = addr.Address
 			}
 		}
+		// Start the virtual node with the extracted information.
 		brc.startVNode(utils.ExtractNodeIDFromNodeName(node.Name), model.NodeInfo{
 			Metadata: model.NodeMetadata{
 				Name:    node.Labels[model.LabelKeyOfVNodeName],
@@ -293,20 +314,27 @@ func (brc *VNodeController) discoverPreviousNodes(nodeList *corev1.NodeList) {
 	}
 }
 
+// This function discovers and processes previous pods to ensure they are properly registered.
 func (brc *VNodeController) discoverPreviousPods(ctx context.Context, vn *vnode.VNode, podList *corev1.PodList) {
+	// Iterate through the list of pods to process each pod.
 	for _, pod := range podList.Items {
+		// Generate a unique key for the pod.
 		key := utils.GetPodKey(&pod)
+		// Store the pod in the virtual node.
 		vn.PodStore(key, &pod)
-		// sync container states
+		// Initialize a map to store container statuses.
 		containerNameToStatus := make(map[string]corev1.ContainerStatus)
+		// Populate the map with container statuses.
 		for _, containerStatus := range pod.Status.ContainerStatuses {
 			containerNameToStatus[containerStatus.Name] = containerStatus
 		}
 
+		// Iterate through the pod's containers to process each container.
 		for _, container := range pod.Spec.Containers {
+			// Get the status of the container.
 			containerStatus, has := containerNameToStatus[container.Name]
+			// If the container is running, initialize the container info in the virtual node.
 			if has && containerStatus.State.Running != nil {
-				// means container has been ready before start
 				vn.InitContainerInfo(model.ContainerStatusData{
 					Key:        vn.Tunnel.GetContainerUniqueKey(key, &container),
 					Name:       container.Name,
@@ -317,10 +345,16 @@ func (brc *VNodeController) discoverPreviousPods(ctx context.Context, vn *vnode.
 			}
 		}
 
+		// Sync the pods from Kubernetes to the virtual node.
 		vn.SyncPodsFromKubernetesEnqueue(ctx, key)
 	}
 }
 
+// The following functions are event handlers for various node and pod events.
+// They are used to manage the state of the virtual nodes and synchronize the node and pod information.
+
+// onNodeDiscovered is an event handler for when a new node is discovered.
+// It starts a virtual node if the node's status is activated, otherwise it shuts down the virtual node.
 func (brc *VNodeController) onNodeDiscovered(nodeID string, data model.NodeInfo, t tunnel.Tunnel) {
 	if data.Metadata.Status == model.NodeStatusActivated {
 		brc.startVNode(nodeID, data, t)
@@ -329,6 +363,8 @@ func (brc *VNodeController) onNodeDiscovered(nodeID string, data model.NodeInfo,
 	}
 }
 
+// onNodeStatusDataArrived is an event handler for when status data is received for a node.
+// It updates the node's status in the virtual node.
 func (brc *VNodeController) onNodeStatusDataArrived(nodeID string, data model.NodeStatusData) {
 	vNode := brc.runtimeInfoStore.GetVNode(nodeID)
 	if vNode == nil {
@@ -341,6 +377,8 @@ func (brc *VNodeController) onNodeStatusDataArrived(nodeID string, data model.No
 	}
 }
 
+// onQueryAllContainerStatusDataArrived is an event handler for when status data is received for all containers in a node.
+// It updates the status of all containers in the virtual node.
 func (brc *VNodeController) onQueryAllContainerStatusDataArrived(nodeID string, data []model.ContainerStatusData) {
 	vNode := brc.runtimeInfoStore.GetVNode(nodeID)
 	if vNode == nil {
@@ -353,6 +391,8 @@ func (brc *VNodeController) onQueryAllContainerStatusDataArrived(nodeID string, 
 	}
 }
 
+// onContainerStatusChanged is an event handler for when the status of a container in a node changes.
+// It updates the status of the container in the virtual node.
 func (brc *VNodeController) onContainerStatusChanged(nodeID string, data model.ContainerStatusData) {
 	vNode := brc.runtimeInfoStore.GetVNode(nodeID)
 	if vNode == nil {
@@ -365,6 +405,8 @@ func (brc *VNodeController) onContainerStatusChanged(nodeID string, data model.C
 	}
 }
 
+// podCreateHandler is an event handler for when a new pod is created.
+// It syncs the pod from Kubernetes to the virtual node.
 func (brc *VNodeController) podCreateHandler(ctx context.Context, podFromKubernetes *corev1.Pod) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -393,6 +435,7 @@ func (brc *VNodeController) podCreateHandler(ctx context.Context, podFromKuberne
 	vn.SyncPodsFromKubernetesEnqueue(ctx, key)
 }
 
+// This function handles pod updates by checking if the pod is new or if its status has changed.
 func (brc *VNodeController) podUpdateHandler(ctx context.Context, oldPodFromKubernetes, newPodFromKubernetes *corev1.Pod) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -429,6 +472,7 @@ func (brc *VNodeController) podUpdateHandler(ctx context.Context, oldPodFromKube
 	}
 }
 
+// This function handles pod deletions by removing the pod from the virtual node's state.
 func (brc *VNodeController) podDeleteHandler(ctx context.Context, podFromKubernetes *corev1.Pod) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -457,6 +501,7 @@ func (brc *VNodeController) podDeleteHandler(ctx context.Context, podFromKuberne
 	vn.DeletePodsFromKubernetesForget(ctx, key)
 }
 
+// This function starts a new virtual node with the given node ID, initialization data, and tunnel.
 func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t tunnel.Tunnel) {
 	var err error
 	// first apply for local lock
@@ -489,47 +534,64 @@ func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t
 		return
 	}
 
+	// Store the VNode in the runtime info store
 	brc.runtimeInfoStore.PutVNode(nodeID, vn)
 
+	// Create a new context with the nodeID as a value
 	vnCtx := context.WithValue(context.Background(), "nodeID", nodeID)
+	// Create a new context with a cancel function
 	vnCtx, vnCancel := context.WithCancel(vnCtx)
 
+	// Start a new goroutine
 	go func() {
+		// Initialize the needRestart variable
 		needRestart := false
+		// Start a select statement
 		select {
+		// If the VNode is done, log an error and set needRestart to true
 		case <-vn.Done():
 			logrus.WithError(vn.Err()).Infof("node exit %s", nodeID)
+		// If the leader has changed, log a message and set needRestart to true
 		case <-vn.ExitWhenLeaderChanged():
 			logrus.Infof("node leader changed %s", nodeID)
 			needRestart = true
 		}
+		// Cancel the context
 		vnCancel()
+		// Delete the VNode from the runtime info store
 		brc.runtimeInfoStore.DeleteVNode(nodeID)
+		// If needRestart is true, start a new VNode
 		if needRestart {
 			brc.startVNode(nodeID, initData, t)
 		}
 	}()
 
-	// leader election
+	// Start a new goroutine for leader election
 	go func() {
+		// Try to elect a leader
 		success := brc.vnodeLeaderElection(vnCtx, vn)
+		// If leader election fails, return
 		if !success {
-			// leader election failed, by node exit
 			return
 		}
 
+		// Start a new goroutine to renew the lease
 		go vn.RenewLease(vnCtx, brc.clientID)
 
+		// Start a new goroutine to run the VNode
 		go vn.Run(vnCtx, initData)
 
+		// If the VNode is not ready after a minute, log an error and cancel the context
 		if err = vn.WaitReady(vnCtx, time.Minute); err != nil {
 			err = errpkg.Wrap(err, "Error waiting vnode ready")
 			vnCancel()
 			return
 		}
 
+		// Mark the node as running in the runtime info store
 		brc.runtimeInfoStore.NodeRunning(nodeID)
 
+		// Start a new goroutine to fetch node health data every 10 seconds
 		go utils.TimedTaskWithInterval(vnCtx, time.Second*10, func(ctx context.Context) {
 			err = t.FetchHealthData(vnCtx, nodeID)
 			if err != nil {
@@ -537,6 +599,7 @@ func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t
 			}
 		})
 
+		// Start a new goroutine to query all container status data every 15 seconds
 		go utils.TimedTaskWithInterval(vnCtx, time.Second*15, func(ctx context.Context) {
 			err = t.QueryAllContainerStatusData(vnCtx, nodeID)
 			if err != nil {
@@ -544,7 +607,7 @@ func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t
 			}
 		})
 
-		// discover previous pods relate to current vnode
+		// Discover previous pods related to the current VNode
 		listOpts := []client.ListOption{
 			client.MatchingFields{"spec.nodeName": utils.FormatNodeName(nodeID, brc.env)},
 			client.MatchingLabels{model.LabelKeyOfComponent: brc.vPodIdentity},
@@ -559,6 +622,7 @@ func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t
 	}()
 }
 
+// This function calculates the workload level based on the number of running nodes and the total number of nodes.
 func (brc *VNodeController) workloadLevel() int {
 	if brc.runtimeInfoStore.AllNodeNum() == 0 {
 		return 0
@@ -566,6 +630,7 @@ func (brc *VNodeController) workloadLevel() int {
 	return brc.runtimeInfoStore.RunningNodeNum() * brc.workloadMaxLevel / (brc.runtimeInfoStore.AllNodeNum() + 1)
 }
 
+// This function introduces a delay based on the workload level in a cluster deployment.
 func (brc *VNodeController) delayWithWorkload(ctx context.Context) {
 	if !brc.isCluster {
 		// not cluster deployment, do not delay
@@ -580,6 +645,7 @@ func (brc *VNodeController) delayWithWorkload(ctx context.Context) {
 	}
 }
 
+// This function attempts to elect a VNode leader by creating a lease. If the initial attempt fails, it retries after a delay.
 func (brc *VNodeController) vnodeLeaderElection(ctx context.Context, vn *vnode.VNode) (success bool) {
 	// try to create lease at start
 	success = vn.CreateNodeLease(ctx, brc.clientID)
@@ -602,6 +668,7 @@ func (brc *VNodeController) vnodeLeaderElection(ctx context.Context, vn *vnode.V
 	return true
 }
 
+// This function shuts down a VNode by calling its Shutdown method and updating the runtime info store.
 func (brc *VNodeController) shutdownVNode(nodeID string) {
 	vNode := brc.runtimeInfoStore.GetVNode(nodeID)
 	if vNode == nil {
@@ -611,6 +678,7 @@ func (brc *VNodeController) shutdownVNode(nodeID string) {
 	brc.runtimeInfoStore.NodeShutdown(nodeID)
 }
 
+// This function wakes up a VNode by retrying its lease if it has become outdated.
 func (brc *VNodeController) wakeUpVNode(ctx context.Context, nodeID string) {
 	vNode := brc.runtimeInfoStore.GetVNode(nodeID)
 	if vNode == nil {

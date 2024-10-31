@@ -16,6 +16,9 @@ package pod_provider
 
 import (
 	"context"
+	"sort"
+	"time"
+
 	"github.com/google/go-cmp/cmp"
 	"github.com/koupleless/virtual-kubelet/common/tracker"
 	"github.com/koupleless/virtual-kubelet/common/utils"
@@ -26,16 +29,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sort"
-	"time"
 
 	"github.com/koupleless/virtual-kubelet/common/log"
 	corev1 "k8s.io/api/core/v1"
 )
 
+// Define the VPodProvider struct
 var _ nodeutil.Provider = &VPodProvider{}
 var _ virtual_kubelet.PodNotifier = &VPodProvider{}
 
+// VPodProvider is a struct that implements the nodeutil.Provider and virtual_kubelet.PodNotifier interfaces
 type VPodProvider struct {
 	Namespace        string
 	nodeID           string
@@ -50,10 +53,12 @@ type VPodProvider struct {
 	notify func(pod *corev1.Pod)
 }
 
+// NotifyPods is a method of VPodProvider that sets the notify function
 func (b *VPodProvider) NotifyPods(_ context.Context, cb func(*corev1.Pod)) {
 	b.notify = cb
 }
 
+// NewVPodProvider is a function that creates a new VPodProvider instance
 func NewVPodProvider(namespace, localIP, nodeID string, client client.Client, t tunnel.Tunnel) *VPodProvider {
 	provider := &VPodProvider{
 		Namespace:        namespace,
@@ -67,6 +72,7 @@ func NewVPodProvider(namespace, localIP, nodeID string, client client.Client, t 
 	return provider
 }
 
+// syncRelatedPodStatus is a method of VPodProvider that synchronizes the status of related pods
 func (b *VPodProvider) syncRelatedPodStatus(ctx context.Context, podKey, containerUniqueKey string) {
 	logger := log.G(ctx)
 	if podKey != model.PodKeyAll {
@@ -94,6 +100,7 @@ func (b *VPodProvider) syncRelatedPodStatus(ctx context.Context, podKey, contain
 
 }
 
+// updatePodStatusToKubernetes is a method of VPodProvider that updates the status of a pod to Kubernetes
 func (b *VPodProvider) updatePodStatusToKubernetes(ctx context.Context, pod *corev1.Pod) {
 	podStatus, _ := b.GetPodStatus(ctx, pod.Namespace, pod.Name)
 
@@ -102,6 +109,7 @@ func (b *VPodProvider) updatePodStatusToKubernetes(ctx context.Context, pod *cor
 	b.notify(podInfo)
 }
 
+// SyncAllContainerInfo is a method of VPodProvider that synchronizes the information of all containers
 func (b *VPodProvider) SyncAllContainerInfo(ctx context.Context, containerInfos []model.ContainerStatusData) {
 	containerInfoOfContainerKey := make(map[string]model.ContainerStatusData)
 	for _, containerInfo := range containerInfos {
@@ -114,13 +122,21 @@ func (b *VPodProvider) SyncAllContainerInfo(ctx context.Context, containerInfos 
 		return pods[i].CreationTimestamp.UnixMilli() > pods[j].CreationTimestamp.UnixMilli()
 	})
 
+	// Initialize an empty slice to store updated container information
 	updatedContainerInfos := make([]model.ContainerStatusData, 0)
+	// Get the current time to use for change time
 	now := time.Now()
+	// Iterate through each pod
 	for _, pod := range pods {
+		// Get the key of the pod
 		podKey := utils.GetPodKey(pod)
+		// Iterate through each container in the pod
 		for _, container := range pod.Spec.Containers {
+			// Get the unique key of the container
 			containerKey := b.tunnel.GetContainerUniqueKey(podKey, &container)
+			// Check if container information exists for the container key
 			containerInfo, has := containerInfoOfContainerKey[containerKey]
+			// If container information does not exist, create a new instance
 			if !has {
 				containerInfo = model.ContainerStatusData{
 					Key:        containerKey,
@@ -130,18 +146,22 @@ func (b *VPodProvider) SyncAllContainerInfo(ctx context.Context, containerInfos 
 					ChangeTime: now,
 				}
 			}
+			// Attempt to update the container status
 			updated := b.runtimeInfoStore.PutContainerStatus(containerInfo)
+			// If the update was successful, add the container information to the updated list
 			if updated {
 				updatedContainerInfos = append(updatedContainerInfos, containerInfo)
 			}
 		}
 	}
 
+	// Iterate through the provided container information and sync the related pod status
 	for _, containerInfo := range containerInfos {
 		b.syncRelatedPodStatus(ctx, containerInfo.PodKey, containerInfo.Key)
 	}
 }
 
+// SyncOneContainerInfo is a method of VPodProvider that synchronizes the information of a single container
 func (b *VPodProvider) SyncOneContainerInfo(ctx context.Context, containerInfo model.ContainerStatusData) {
 	updated := b.runtimeInfoStore.PutContainerStatus(containerInfo)
 	if updated {
@@ -150,15 +170,18 @@ func (b *VPodProvider) SyncOneContainerInfo(ctx context.Context, containerInfo m
 	}
 }
 
+// InitContainerInfo is a method of VPodProvider that initializes the information of a container
 func (b *VPodProvider) InitContainerInfo(info model.ContainerStatusData) {
 	b.runtimeInfoStore.PutContainerStatus(info)
 }
 
+// queryContainerStatus is a method of VPodProvider that queries the status of a container
 func (b *VPodProvider) queryContainerStatus(_ context.Context, podKey string, container *corev1.Container) *model.ContainerStatusData {
 	containerUniqueKey := b.tunnel.GetContainerUniqueKey(podKey, container)
 	return b.runtimeInfoStore.GetLatestContainerInfoByContainerKey(containerUniqueKey)
 }
 
+// startContainer is a method of VPodProvider that starts a container
 func (b *VPodProvider) startContainer(ctx context.Context, podKey string, container *corev1.Container) error {
 	// clear local container status cache
 	containerKey := b.tunnel.GetContainerUniqueKey(podKey, container)
@@ -166,10 +189,12 @@ func (b *VPodProvider) startContainer(ctx context.Context, podKey string, contai
 	return b.tunnel.StartContainer(ctx, b.nodeID, podKey, container)
 }
 
+// stopContainer is a method of VPodProvider that stops a container
 func (b *VPodProvider) stopContainer(ctx context.Context, podKey string, container *corev1.Container) error {
 	return b.tunnel.ShutdownContainer(ctx, b.nodeID, podKey, container)
 }
 
+// handleContainerStart is a method of VPodProvider that handles the start of a container
 func (b *VPodProvider) handleContainerStart(ctx context.Context, pod *corev1.Pod, containers []corev1.Container) {
 	podKey := utils.GetPodKey(pod)
 
@@ -199,6 +224,7 @@ func (b *VPodProvider) handleContainerStart(ctx context.Context, pod *corev1.Pod
 	}
 }
 
+// handleContainerShutdown is a method of VPodProvider that handles the shutdown of a container
 func (b *VPodProvider) handleContainerShutdown(ctx context.Context, pod *corev1.Pod, containers []corev1.Container) {
 	podKey := utils.GetPodKey(pod)
 
@@ -228,6 +254,7 @@ func (b *VPodProvider) handleContainerShutdown(ctx context.Context, pod *corev1.
 	}
 }
 
+// CreatePod is a method of VPodProvider that creates a pod
 func (b *VPodProvider) CreatePod(ctx context.Context, pod *corev1.Pod) error {
 	logger := log.G(ctx).WithField("podKey", utils.GetPodKey(pod))
 	logger.Info("CreatePodStarted")
@@ -240,6 +267,7 @@ func (b *VPodProvider) CreatePod(ctx context.Context, pod *corev1.Pod) error {
 	return nil
 }
 
+// UpdatePod is a method of VPodProvider that updates a pod
 func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 	podKey := utils.GetPodKey(pod)
 	logger := log.G(ctx).WithField("podKey", podKey)
@@ -309,6 +337,7 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 	return nil
 }
 
+// DeletePod is a method of VPodProvider that deletes a pod
 func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 	podKey := utils.GetPodKey(pod)
 	logger := log.G(ctx).WithField("podKey", podKey)
@@ -358,7 +387,8 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 	return nil
 }
 
-// GetPod this method is simply used to return the observed defaultPod by local
+// GetPod is a method of VPodProvider that gets a pod
+// This method is simply used to return the observed defaultPod by local
 //
 //	so the outer control loop can call CreatePod / UpdatePod / DeletePod accordingly
 //	just return the defaultPod from the local store
@@ -366,7 +396,8 @@ func (b *VPodProvider) GetPod(_ context.Context, namespace, name string) (*corev
 	return b.runtimeInfoStore.GetPodByKey(namespace + "/" + name), nil
 }
 
-// GetPodStatus this will be called repeatedly by virtual kubelet framework to get the defaultPod status
+// GetPodStatus is a method of VPodProvider that gets the status of a pod
+// This will be called repeatedly by virtual kubelet framework to get the defaultPod status
 // we should query the actual runtime info and translate them in to V1PodStatus accordingly
 func (b *VPodProvider) GetPodStatus(ctx context.Context, namespace, name string) (*corev1.PodStatus, error) {
 	podKey := namespace + "/" + name

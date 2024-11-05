@@ -14,11 +14,11 @@ import (
 
 func TestSyncRelatedPodStatus(t *testing.T) {
 	provider := NewVPodProvider("default", "127.0.0.1", "123", nil, &tunnel.MockTunnel{})
-	provider.syncRelatedPodStatus(context.TODO(), "default", "test")
+	provider.syncRelatedPodStatus(context.TODO(), "default")
 	provider.runtimeInfoStore.containerUniqueKeyKeyToRelatedPodKey["test"] = map[string]bool{
 		"test": true,
 	}
-	provider.syncRelatedPodStatus(context.TODO(), model.PodKeyAll, "test")
+	provider.syncRelatedPodStatus(context.TODO(), "test")
 }
 
 func TestSyncAllContainerInfo(t *testing.T) {

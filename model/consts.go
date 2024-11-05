@@ -99,9 +99,6 @@ const (
 	ContainerStateWaiting ContainerState = "WAITING"
 )
 
-// PodKeyAll present container status will share to all pods
-const PodKeyAll = "all"
-
 const (
 	// NodeLeaseDurationSeconds is the duration of a node lease in seconds.
 	NodeLeaseDurationSeconds = 40

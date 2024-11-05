@@ -253,3 +253,25 @@ func IsContainerStatusDataEqual(dataA, dataB *model.ContainerStatusData) bool {
 	// If none of the above conditions are met, compare the Reason and Message of dataA and dataB, return true if they are equal
 	return dataA.Reason == dataB.Reason && dataA.Message == dataB.Message
 }
+
+// GetBizVersionFromContainer extracts the biz version from a container's env vars
+func getBizVersionFromContainer(container *corev1.Container) string {
+	bizVersion := ""
+	for _, env := range container.Env {
+		if env.Name == "BIZ_VERSION" {
+			bizVersion = env.Value
+			break
+		}
+	}
+	return bizVersion
+}
+
+// GetBizIdentity creates a unique identifier from biz name and version
+func getBizIdentity(bizName, bizVersion string) string {
+	return bizName + ":" + bizVersion
+}
+
+// GetContainerUniqueKey returns a unique key for the container
+func GetContainerUniqueKey(container *corev1.Container) string {
+	return getBizIdentity(container.Name, getBizVersionFromContainer(container))
+}

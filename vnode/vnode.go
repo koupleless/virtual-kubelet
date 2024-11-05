@@ -285,13 +285,6 @@ func (n *VNode) SyncOneContainerInfo(ctx context.Context, info model.ContainerSt
 	}
 }
 
-// InitContainerInfo initializes the status of a container
-func (n *VNode) InitContainerInfo(info model.ContainerStatusData) {
-	if n.podProvider != nil {
-		n.podProvider.InitContainerInfo(info)
-	}
-}
-
 // Done returns a channel that will be closed when the vnode has exited.
 func (n *VNode) Done() <-chan struct{} {
 	return n.done

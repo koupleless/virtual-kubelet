@@ -73,31 +73,14 @@ func NewVPodProvider(namespace, localIP, nodeID string, client client.Client, t 
 }
 
 // syncRelatedPodStatus is a method of VPodProvider that synchronizes the status of related pods
-func (b *VPodProvider) syncRelatedPodStatus(ctx context.Context, podKey, containerUniqueKey string) {
+func (b *VPodProvider) syncRelatedPodStatus(ctx context.Context, podKey string) {
 	logger := log.G(ctx)
-	if podKey != model.PodKeyAll {
-		pod := b.runtimeInfoStore.GetPodByKey(podKey)
-		if pod == nil {
-			logger.Error("skip updating non-exist pod status")
-			return
-		}
-		b.updatePodStatusToKubernetes(ctx, pod)
-	} else {
-		podKeys := b.runtimeInfoStore.GetRelatedPodKeysByContainerKey(containerUniqueKey)
-		pods := make([]*corev1.Pod, 0)
-		for _, key := range podKeys {
-			pod := b.runtimeInfoStore.GetPodByKey(key)
-			if pod == nil {
-				logger.Error("skip updating non-exist pod status")
-				continue
-			}
-			pods = append(pods, pod)
-		}
-		for _, pod := range pods {
-			b.updatePodStatusToKubernetes(ctx, pod)
-		}
+	pod := b.runtimeInfoStore.GetPodByKey(podKey)
+	if pod == nil {
+		logger.Error("skip updating non-exist pod status")
+		return
 	}
-
+	b.updatePodStatusToKubernetes(ctx, pod)
 }
 
 // updatePodStatusToKubernetes is a method of VPodProvider that updates the status of a pod to Kubernetes
@@ -133,7 +116,7 @@ func (b *VPodProvider) SyncAllContainerInfo(ctx context.Context, containerInfos 
 		// Iterate through each container in the pod
 		for _, container := range pod.Spec.Containers {
 			// Get the unique key of the container
-			containerKey := b.tunnel.GetContainerUniqueKey(podKey, &container)
+			containerKey := utils.GetContainerUniqueKey(&container)
 			// Check if container information exists for the container key
 			containerInfo, has := containerInfoOfContainerKey[containerKey]
 			// If container information does not exist, create a new deactivated instance
@@ -147,7 +130,7 @@ func (b *VPodProvider) SyncAllContainerInfo(ctx context.Context, containerInfos 
 				}
 			}
 			// Attempt to update the container status
-			toUpdate := b.runtimeInfoStore.PutContainerStatus(containerInfo)
+			toUpdate := b.runtimeInfoStore.CheckContainerStatusNeedSync(containerInfo)
 			// If the update was successful, add the container information to the updated list
 			if toUpdate {
 				toUpdateContainerInfos = append(toUpdateContainerInfos, containerInfo)
@@ -159,35 +142,22 @@ func (b *VPodProvider) SyncAllContainerInfo(ctx context.Context, containerInfos 
 
 	// Iterate through the provided container information and sync the related pod status
 	for _, containerInfo := range containerInfos {
-		b.syncRelatedPodStatus(ctx, containerInfo.PodKey, containerInfo.Key)
+		b.syncRelatedPodStatus(ctx, containerInfo.PodKey)
 	}
 }
 
 // SyncOneContainerInfo is a method of VPodProvider that synchronizes the information of a single container
 func (b *VPodProvider) SyncOneContainerInfo(ctx context.Context, containerInfo model.ContainerStatusData) {
-	updated := b.runtimeInfoStore.PutContainerStatus(containerInfo)
-	if updated {
+	needSync := b.runtimeInfoStore.CheckContainerStatusNeedSync(containerInfo)
+	if needSync {
 		// only when container status updated, update related pod status
-		b.syncRelatedPodStatus(ctx, containerInfo.PodKey, containerInfo.Key)
+		b.syncRelatedPodStatus(ctx, containerInfo.PodKey)
 	}
-}
-
-// InitContainerInfo is a method of VPodProvider that initializes the information of a container
-func (b *VPodProvider) InitContainerInfo(info model.ContainerStatusData) {
-	b.runtimeInfoStore.PutContainerStatus(info)
-}
-
-// queryContainerStatus is a method of VPodProvider that queries the status of a container
-func (b *VPodProvider) queryContainerStatus(_ context.Context, podKey string, container *corev1.Container) *model.ContainerStatusData {
-	containerUniqueKey := b.tunnel.GetContainerUniqueKey(podKey, container)
-	return b.runtimeInfoStore.GetLatestContainerInfoByContainerKey(containerUniqueKey)
 }
 
 // startContainer is a method of VPodProvider that starts a container
 func (b *VPodProvider) startContainer(ctx context.Context, podKey string, container *corev1.Container) error {
 	// clear local container status cache
-	containerKey := b.tunnel.GetContainerUniqueKey(podKey, container)
-	b.runtimeInfoStore.ClearContainerStatus(containerKey)
 	return b.tunnel.StartContainer(ctx, b.nodeID, podKey, container)
 }
 
@@ -326,10 +296,13 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 	}
 
 	go tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodUpdate, pod.Labels, model.CodeContainerStartTimeout, func() bool {
+		nameToContainerStatus := make(map[string]corev1.ContainerStatus)
+		for _, containerStatus := range pod.Status.ContainerStatuses {
+			nameToContainerStatus[containerStatus.Name] = containerStatus
+		}
+
 		for _, oldContainer := range stopContainers {
-			oldPodKey := utils.GetPodKey(oldPod)
-			status := b.queryContainerStatus(ctx, oldPodKey, &oldContainer)
-			if status != nil && status.State != model.ContainerStateDeactivated {
+			if status, has := nameToContainerStatus[oldContainer.Name]; has && status.State.Terminated == nil {
 				return false
 			}
 		}
@@ -377,9 +350,12 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 	}
 
 	go tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodDelete, pod.Labels, model.CodeContainerStartTimeout, func() bool {
+		nameToContainerStatus := make(map[string]corev1.ContainerStatus)
+		for _, containerStatus := range pod.Status.ContainerStatuses {
+			nameToContainerStatus[containerStatus.Name] = containerStatus
+		}
 		for _, container := range pod.Spec.Containers {
-			status := b.queryContainerStatus(ctx, podKey, &container)
-			if status != nil && status.State != model.ContainerStateDeactivated {
+			if status, has := nameToContainerStatus[container.Name]; has && status.State.Terminated == nil {
 				return false
 			}
 		}
@@ -429,19 +405,24 @@ func (b *VPodProvider) GetPodStatus(ctx context.Context, namespace, name string)
 	podStatus.PodIPs = []corev1.PodIP{{IP: b.localIP}}
 
 	podStatus.ContainerStatuses = make([]corev1.ContainerStatus, 0)
+
+	nameToContainerStatus := make(map[string]corev1.ContainerStatus)
+	for _, containerStatus := range pod.Status.ContainerStatuses {
+		nameToContainerStatus[containerStatus.Name] = containerStatus
+	}
+
 	for _, container := range pod.Spec.Containers {
-		containerStatusFromTunnel := b.queryContainerStatus(ctx, podKey, &container)
-		containerStatus := utils.TranslateContainerStatusFromTunnelToContainerStatus(container, containerStatusFromTunnel)
+		if containerStatus, has := nameToContainerStatus[container.Name]; !has {
+			if !containerStatus.Ready {
+				isAllContainerReady = false
+			}
 
-		if !containerStatus.Ready {
-			isAllContainerReady = false
+			if containerStatus.State.Terminated != nil {
+				isSomeContainerFailed = true
+			}
+
+			podStatus.ContainerStatuses = append(podStatus.ContainerStatuses, containerStatus)
 		}
-
-		if containerStatus.State.Terminated != nil {
-			isSomeContainerFailed = true
-		}
-
-		podStatus.ContainerStatuses = append(podStatus.ContainerStatuses, containerStatus)
 	}
 
 	podStatus.Phase = corev1.PodPending

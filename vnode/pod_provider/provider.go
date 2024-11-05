@@ -123,7 +123,7 @@ func (b *VPodProvider) SyncAllContainerInfo(ctx context.Context, containerInfos 
 	})
 
 	// Initialize an empty slice to store updated container information
-	updatedContainerInfos := make([]model.ContainerStatusData, 0)
+	toUpdateContainerInfos := make([]model.ContainerStatusData, 0)
 	// Get the current time to use for change time
 	now := time.Now()
 	// Iterate through each pod
@@ -136,7 +136,7 @@ func (b *VPodProvider) SyncAllContainerInfo(ctx context.Context, containerInfos 
 			containerKey := b.tunnel.GetContainerUniqueKey(podKey, &container)
 			// Check if container information exists for the container key
 			containerInfo, has := containerInfoOfContainerKey[containerKey]
-			// If container information does not exist, create a new instance
+			// If container information does not exist, create a new deactivated instance
 			if !has {
 				containerInfo = model.ContainerStatusData{
 					Key:        containerKey,
@@ -147,11 +147,13 @@ func (b *VPodProvider) SyncAllContainerInfo(ctx context.Context, containerInfos 
 				}
 			}
 			// Attempt to update the container status
-			updated := b.runtimeInfoStore.PutContainerStatus(containerInfo)
+			toUpdate := b.runtimeInfoStore.PutContainerStatus(containerInfo)
 			// If the update was successful, add the container information to the updated list
-			if updated {
-				updatedContainerInfos = append(updatedContainerInfos, containerInfo)
+			if toUpdate {
+				toUpdateContainerInfos = append(toUpdateContainerInfos, containerInfo)
 			}
+
+			log.G(ctx).Infof("container %s/%s need update: %s", podKey, containerKey, toUpdate)
 		}
 	}
 

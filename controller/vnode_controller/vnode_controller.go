@@ -233,7 +233,9 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 			// Periodically check for outdated virtual nodes and wake them up if necessary.
 			go utils.TimedTaskWithInterval(ctx, time.Millisecond*500, func(ctx context.Context) {
 				outdatedVNodeNameList := brc.runtimeInfoStore.GetLeaseOutdatedVNodeName(time.Second * model.NodeLeaseDurationSeconds)
-				log.G(ctx).Info("check outdated vnode", outdatedVNodeNameList)
+				if outdatedVNodeNameList != nil && len(outdatedVNodeNameList) > 0 {
+					log.G(ctx).Info("check outdated vnode", outdatedVNodeNameList)
+				}
 				for _, nodeName := range outdatedVNodeNameList {
 					brc.wakeUpVNode(ctx, utils.ExtractNodeIDFromNodeName(nodeName))
 				}
@@ -242,7 +244,9 @@ func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Ma
 			// Periodically check for nodes that are not reachable and notify their leader virtual nodes.
 			go utils.TimedTaskWithInterval(ctx, time.Second, func(ctx context.Context) {
 				notReachableNodeInfos := brc.runtimeInfoStore.GetNotReachableNodeInfos(time.Second * model.NodeLeaseDurationSeconds)
-				log.G(ctx).Info("check not reachable vnode", notReachableNodeInfos)
+				if notReachableNodeInfos != nil && len(notReachableNodeInfos) > 0 {
+					log.G(ctx).Info("check not reachable vnode", notReachableNodeInfos)
+				}
 				for _, nodeInfo := range notReachableNodeInfos {
 					vNode := brc.runtimeInfoStore.GetVNode(nodeInfo.NodeID)
 					if vNode == nil {

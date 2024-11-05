@@ -328,29 +328,6 @@ func (brc *VNodeController) discoverPreviousPods(ctx context.Context, vn *vnode.
 		key := utils.GetPodKey(&pod)
 		// Store the pod in the virtual node.
 		vn.PodStore(key, &pod)
-		// Initialize a map to store container statuses.
-		containerNameToStatus := make(map[string]corev1.ContainerStatus)
-		// Populate the map with container statuses.
-		for _, containerStatus := range pod.Status.ContainerStatuses {
-			containerNameToStatus[containerStatus.Name] = containerStatus
-		}
-
-		// Iterate through the pod's containers to process each container.
-		for _, container := range pod.Spec.Containers {
-			// Get the status of the container.
-			containerStatus, has := containerNameToStatus[container.Name]
-			// If the container is running, initialize the container info in the virtual node.
-			if has && containerStatus.State.Running != nil {
-				vn.InitContainerInfo(model.ContainerStatusData{
-					Key:        vn.Tunnel.GetContainerUniqueKey(key, &container),
-					Name:       container.Name,
-					PodKey:     key,
-					State:      model.ContainerStateActivated,
-					ChangeTime: containerStatus.State.Running.StartedAt.Time,
-				})
-			}
-		}
-
 		// Sync the pods from Kubernetes to the virtual node.
 		vn.SyncPodsFromKubernetesEnqueue(ctx, key)
 	}

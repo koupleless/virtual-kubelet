@@ -15,6 +15,7 @@
 package pod_provider
 
 import (
+	"strings"
 	"sync"
 
 	"github.com/koupleless/virtual-kubelet/common/utils"
@@ -31,8 +32,6 @@ type RuntimeInfoStore struct {
 	podKeyToPod                          map[string]*corev1.Pod       // Maps pod keys to their corresponding pods.
 	containerUniqueKeyKeyToRelatedPodKey map[string]map[string]bool   // Maps container unique keys to their related pod keys.
 	containerKeyToContainer              map[string]*corev1.Container // Maps container keys to their corresponding containers.
-
-	latestContainerInfosFromNode map[string]*model.ContainerStatusData // Stores the latest container status data from nodes.
 }
 
 func NewRuntimeInfoStore() *RuntimeInfoStore {
@@ -41,7 +40,6 @@ func NewRuntimeInfoStore() *RuntimeInfoStore {
 		podKeyToPod:                          make(map[string]*corev1.Pod),
 		containerUniqueKeyKeyToRelatedPodKey: make(map[string]map[string]bool),
 		containerKeyToContainer:              make(map[string]*corev1.Container),
-		latestContainerInfosFromNode:         make(map[string]*model.ContainerStatusData),
 	}
 }
 
@@ -126,52 +124,47 @@ func (r *RuntimeInfoStore) GetPods() []*corev1.Pod {
 	return ret
 }
 
-// PutContainerStatus function updates the status of a container in the RuntimeInfoStore.
-func (r *RuntimeInfoStore) PutContainerStatus(containerInfo model.ContainerStatusData) (updated bool) {
+func (r *RuntimeInfoStore) CheckContainerStatusNeedSync(containerInfo model.ContainerStatusData) (needSync bool) {
 	r.Lock()
 	defer r.Unlock()
 
-	oldData, has := r.latestContainerInfosFromNode[containerInfo.Key]
+	var oldStatus *model.ContainerStatusData
+	if pod, found := r.podKeyToPod[containerInfo.PodKey]; found {
+		var matchedStatus *corev1.ContainerStatus
+		var matchedContainer *corev1.Container
+		for _, status := range pod.Status.ContainerStatuses {
+			if (status.Name == containerInfo.Name) && strings.Contains(status.Image, ".jar") {
+				matchedStatus = &status
+			}
+		}
+		for _, container := range pod.Spec.Containers {
+			if container.Name == containerInfo.Name {
+				matchedContainer = &container
+			}
+		}
+
+		if matchedStatus != nil && matchedContainer != nil {
+			oldStatus = &model.ContainerStatusData{
+				Key:        utils.GetContainerUniqueKey(matchedContainer),
+				Name:       matchedStatus.Name,
+				PodKey:     containerInfo.PodKey,
+				State:      model.ContainerStateActivated,
+				ChangeTime: matchedStatus.State.Running.StartedAt.Time,
+			}
+		}
+	}
+
 	// check change time valid
-	if has && oldData != nil {
-		if !oldData.ChangeTime.Before(containerInfo.ChangeTime) {
+	if oldStatus != nil {
+		if !oldStatus.ChangeTime.Before(containerInfo.ChangeTime) {
 			// old message, not process
 			return
 		}
-		if !utils.IsContainerStatusDataEqual(oldData, &containerInfo) {
-			updated = true
+		if !utils.IsContainerStatusDataEqual(oldStatus, &containerInfo) {
+			needSync = true
 		}
 	} else {
-		updated = true
+		needSync = true
 	}
-	if updated {
-		r.latestContainerInfosFromNode[containerInfo.Key] = &containerInfo
-	}
-	return
-}
-
-// ClearContainerStatus function removes the status of a container from the RuntimeInfoStore.
-func (r *RuntimeInfoStore) ClearContainerStatus(containerKey string) {
-	r.Lock()
-	defer r.Unlock()
-
-	delete(r.latestContainerInfosFromNode, containerKey)
-}
-
-// GetLatestContainerInfos function retrieves all the latest container status information.
-func (r *RuntimeInfoStore) GetLatestContainerInfos() []*model.ContainerStatusData {
-	r.Lock()
-	defer r.Unlock()
-	containerInfos := make([]*model.ContainerStatusData, 0)
-	for _, containerInfo := range r.latestContainerInfosFromNode {
-		containerInfos = append(containerInfos, containerInfo)
-	}
-	return containerInfos
-}
-
-// GetLatestContainerInfoByContainerKey function retrieves the latest status information of a container by its key.
-func (r *RuntimeInfoStore) GetLatestContainerInfoByContainerKey(containerKey string) *model.ContainerStatusData {
-	r.Lock()
-	defer r.Unlock()
-	return r.latestContainerInfosFromNode[containerKey]
+	return needSync
 }

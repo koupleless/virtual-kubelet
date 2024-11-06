@@ -85,7 +85,8 @@ func (b *VPodProvider) syncRelatedPodStatus(ctx context.Context, containerInfo m
 
 // updatePodStatusToKubernetes is a method of VPodProvider that updates the status of a pod to Kubernetes
 func (b *VPodProvider) updatePodStatusToKubernetes(ctx context.Context, pod *corev1.Pod, bizStatus model.ContainerStatusData) {
-	podStatus, _ := b.MergePodStatus(ctx, pod, bizStatus)
+	// merge pod status from k8s and biz status
+	podStatus, _ := b.GetPodStatus(ctx, pod, bizStatus)
 
 	podCopy := pod.DeepCopy()
 	podStatus.DeepCopyInto(&podCopy.Status)
@@ -374,10 +375,10 @@ func (b *VPodProvider) GetPod(_ context.Context, namespace, name string) (*corev
 	return b.runtimeInfoStore.GetPodByKey(namespace + "/" + name), nil
 }
 
-// MergePodStatus is a method of VPodProvider that gets the status of a pod
+// GetPodStatus is a method of VPodProvider that gets the status of a pod
 // This will be called repeatedly by virtual kubelet framework to get the defaultPod status
 // we should query the actual runtime info and translate them in to V1PodStatus accordingly
-func (b *VPodProvider) MergePodStatus(ctx context.Context, pod *corev1.Pod, bizState model.ContainerStatusData) (*corev1.PodStatus, error) {
+func (b *VPodProvider) GetPodStatus(ctx context.Context, pod *corev1.Pod, bizState model.ContainerStatusData) (*corev1.PodStatus, error) {
 	podStatus := &corev1.PodStatus{}
 	if pod == nil {
 		podStatus.Phase = corev1.PodSucceeded

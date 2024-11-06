@@ -62,11 +62,11 @@ type PodLifecycleHandler interface {
 	// to return a version after DeepCopy.
 	GetPod(ctx context.Context, namespace, name string) (*corev1.Pod, error)
 
-	// MergePodStatus retrieves the status of a pod by name from the provider.
+	// GetPodStatus retrieves the status of a pod by name from the provider.
 	// The PodStatus returned is expected to be immutable, and may be accessed
 	// concurrently outside of the calling goroutine. Therefore it is recommended
 	// to return a version after DeepCopy.
-	MergePodStatus(ctx context.Context, pod *corev1.Pod, bizStatus model.ContainerStatusData) (*corev1.PodStatus, error)
+	GetPodStatus(ctx context.Context, pod *corev1.Pod, bizStatus model.ContainerStatusData) (*corev1.PodStatus, error)
 
 	// GetPods retrieves a list of all pods running on the provider (can be cached).
 	// The Pods returned are expected to be immutable, and may be accessed
@@ -305,13 +305,7 @@ func (pc *PodController) LoadPod(key string) (any, bool) {
 }
 
 func (pc *PodController) ListPodFromKubernetes() ([]*corev1.Pod, bool) {
-	pods := make([]*corev1.Pod, 0)
-	pc.knownPods.Range(func(key, value any) bool {
-		if value != nil && value.(*knownPod).lastPodUsed != nil {
-			pods = append(pods, value.(*knownPod).lastPodUsed)
-		}
-		return true
-	})
+	pods, _ := pc.provider.GetPods(context.TODO())
 	return pods, true
 }
 

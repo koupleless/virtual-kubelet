@@ -73,23 +73,23 @@ func NewVPodProvider(namespace, localIP, nodeID string, client client.Client, t 
 }
 
 // syncRelatedPodStatus is a method of VPodProvider that synchronizes the status of related pods
-func (b *VPodProvider) syncRelatedPodStatus(ctx context.Context, podKey string) {
+func (b *VPodProvider) syncRelatedPodStatus(ctx context.Context, containerInfo model.ContainerStatusData) {
 	logger := log.G(ctx)
-	pod := b.runtimeInfoStore.GetPodByKey(podKey)
+	pod := b.runtimeInfoStore.GetPodByKey(containerInfo.PodKey)
 	if pod == nil {
-		logger.Errorf("skip updating non-exist pod status for %s", podKey)
+		logger.Errorf("skip updating non-exist pod status for biz %s pod %s", containerInfo.Key, containerInfo.PodKey)
 		return
 	}
-	b.updatePodStatusToKubernetes(ctx, pod)
+	b.updatePodStatusToKubernetes(ctx, pod, containerInfo)
 }
 
 // updatePodStatusToKubernetes is a method of VPodProvider that updates the status of a pod to Kubernetes
-func (b *VPodProvider) updatePodStatusToKubernetes(ctx context.Context, pod *corev1.Pod) {
-	podStatus, _ := b.GetPodStatus(ctx, pod.Namespace, pod.Name)
+func (b *VPodProvider) updatePodStatusToKubernetes(ctx context.Context, pod *corev1.Pod, bizStatus model.ContainerStatusData) {
+	podStatus, _ := b.MergePodStatus(ctx, pod, bizStatus)
 
-	podInfo := pod.DeepCopy()
-	podStatus.DeepCopyInto(&podInfo.Status)
-	b.notify(podInfo)
+	podCopy := pod.DeepCopy()
+	podStatus.DeepCopyInto(&podCopy.Status)
+	b.notify(podCopy)
 }
 
 // SyncAllContainerInfo is a method of VPodProvider that synchronizes the information of all containers
@@ -142,7 +142,7 @@ func (b *VPodProvider) SyncAllContainerInfo(ctx context.Context, containerInfos 
 
 	// Iterate through the provided container information and sync the related pod status
 	for _, containerInfo := range containerInfos {
-		b.syncRelatedPodStatus(ctx, containerInfo.PodKey)
+		b.syncRelatedPodStatus(ctx, containerInfo)
 	}
 }
 
@@ -151,7 +151,7 @@ func (b *VPodProvider) SyncOneContainerInfo(ctx context.Context, containerInfo m
 	needSync := b.runtimeInfoStore.CheckContainerStatusNeedSync(containerInfo)
 	if needSync {
 		// only when container status updated, update related pod status
-		b.syncRelatedPodStatus(ctx, containerInfo.PodKey)
+		b.syncRelatedPodStatus(ctx, containerInfo)
 	}
 }
 
@@ -374,12 +374,10 @@ func (b *VPodProvider) GetPod(_ context.Context, namespace, name string) (*corev
 	return b.runtimeInfoStore.GetPodByKey(namespace + "/" + name), nil
 }
 
-// GetPodStatus is a method of VPodProvider that gets the status of a pod
+// MergePodStatus is a method of VPodProvider that gets the status of a pod
 // This will be called repeatedly by virtual kubelet framework to get the defaultPod status
 // we should query the actual runtime info and translate them in to V1PodStatus accordingly
-func (b *VPodProvider) GetPodStatus(ctx context.Context, namespace, name string) (*corev1.PodStatus, error) {
-	podKey := namespace + "/" + name
-	pod := b.runtimeInfoStore.GetPodByKey(podKey)
+func (b *VPodProvider) MergePodStatus(ctx context.Context, pod *corev1.Pod, bizState model.ContainerStatusData) (*corev1.PodStatus, error) {
 	podStatus := &corev1.PodStatus{}
 	if pod == nil {
 		podStatus.Phase = corev1.PodSucceeded
@@ -406,23 +404,17 @@ func (b *VPodProvider) GetPodStatus(ctx context.Context, namespace, name string)
 
 	podStatus.ContainerStatuses = make([]corev1.ContainerStatus, 0)
 
-	nameToContainerStatus := make(map[string]corev1.ContainerStatus)
-	for _, containerStatus := range pod.Status.ContainerStatuses {
-		nameToContainerStatus[containerStatus.Name] = containerStatus
-	}
-
 	for _, container := range pod.Spec.Containers {
-		if containerStatus, has := nameToContainerStatus[container.Name]; !has {
-			if !containerStatus.Ready {
-				isAllContainerReady = false
-			}
-
-			if containerStatus.State.Terminated != nil {
-				isSomeContainerFailed = true
-			}
-
-			podStatus.ContainerStatuses = append(podStatus.ContainerStatuses, containerStatus)
+		containerStatus := utils.TranslateContainerStatusFromTunnelToContainerStatus(container, &bizState)
+		if !containerStatus.Ready {
+			isAllContainerReady = false
 		}
+
+		if containerStatus.State.Terminated != nil {
+			isSomeContainerFailed = true
+		}
+
+		podStatus.ContainerStatuses = append(podStatus.ContainerStatuses, containerStatus)
 	}
 
 	podStatus.Phase = corev1.PodPending

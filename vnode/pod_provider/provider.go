@@ -141,7 +141,7 @@ func (b *VPodProvider) SyncAllContainerInfo(ctx context.Context, containerInfos 
 	}
 
 	// Iterate through the provided container information and sync the related pod status
-	for _, containerInfo := range containerInfos {
+	for _, containerInfo := range toUpdateContainerInfos {
 		b.syncRelatedPodStatus(ctx, containerInfo)
 	}
 }

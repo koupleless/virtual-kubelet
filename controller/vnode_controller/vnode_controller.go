@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/koupleless/virtual-kubelet/common/log"
@@ -362,29 +363,61 @@ func (brc *VNodeController) onNodeStatusDataArrived(nodeID string, data model.No
 
 // onQueryAllContainerStatusDataArrived is an event handler for when status data is received for all containers in a node.
 // It updates the status of all containers in the virtual node.
-func (brc *VNodeController) onQueryAllContainerStatusDataArrived(nodeID string, data []model.ContainerStatusData) {
+func (brc *VNodeController) onQueryAllContainerStatusDataArrived(nodeID string, containerStatusDatas []model.ContainerStatusData) {
 	vNode := brc.runtimeInfoStore.GetVNode(nodeID)
 	if vNode == nil {
 		return
 	}
 
 	if vNode.IsLeader() {
+		pods, _ := vNode.ListPodFromController()
+		bizKeyToPodKey := make(map[string]string)
+		// 一个 vnode 上,  所有的 biz container name 是唯一的
+		for _, pod := range pods {
+			for _, container := range pod.Spec.Containers {
+				if strings.Contains(container.Image, ".jar") {
+					bizKeyToPodKey[utils.GetContainerUniqueKey(&container)] = utils.GetPodKey(pod)
+				}
+			}
+		}
+
+		for i, _ := range containerStatusDatas {
+			if podKey, ok := bizKeyToPodKey[containerStatusDatas[i].Key]; ok {
+				containerStatusDatas[i].PodKey = podKey
+			}
+		}
+
 		brc.runtimeInfoStore.NodeMsgArrived(nodeID)
-		vNode.SyncAllContainerInfo(context.TODO(), data)
+		vNode.SyncAllContainerInfo(context.TODO(), containerStatusDatas)
 	}
 }
 
 // onContainerStatusChanged is an event handler for when the status of a container in a node changes.
 // It updates the status of the container in the virtual node.
-func (brc *VNodeController) onContainerStatusChanged(nodeID string, data model.ContainerStatusData) {
+func (brc *VNodeController) onContainerStatusChanged(nodeID string, containerStatusData model.ContainerStatusData) {
 	vNode := brc.runtimeInfoStore.GetVNode(nodeID)
 	if vNode == nil {
 		return
 	}
 
 	if vNode.IsLeader() {
+		pods, _ := vNode.ListPodFromController()
+		bizKeyToPodKey := make(map[string]string)
+		// 一个 vnode 上,  所有的 biz container name 是唯一的
+		for _, pod := range pods {
+			for _, container := range pod.Spec.Containers {
+				if strings.Contains(container.Image, ".jar") {
+					bizKeyToPodKey[utils.GetContainerUniqueKey(&container)] = utils.GetPodKey(pod)
+				}
+			}
+		}
+
+		if podKey, ok := bizKeyToPodKey[containerStatusData.Key]; ok {
+			containerStatusData.PodKey = podKey
+		}
+
 		brc.runtimeInfoStore.NodeMsgArrived(nodeID)
-		vNode.SyncOneContainerInfo(context.TODO(), data)
+		vNode.SyncOneContainerInfo(context.TODO(), containerStatusData)
 	}
 }
 

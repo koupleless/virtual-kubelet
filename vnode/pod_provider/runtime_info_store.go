@@ -143,13 +143,15 @@ func (r *RuntimeInfoStore) CheckContainerStatusNeedSync(containerInfo model.Cont
 			}
 		}
 
-		if matchedStatus != nil && matchedContainer != nil {
+		if matchedContainer != nil {
 			oldStatus = &model.ContainerStatusData{
-				Key:        utils.GetContainerUniqueKey(matchedContainer),
-				Name:       matchedStatus.Name,
-				PodKey:     containerInfo.PodKey,
-				State:      model.ContainerStateActivated,
-				ChangeTime: matchedStatus.State.Running.StartedAt.Time,
+				Key:    utils.GetContainerUniqueKey(matchedContainer),
+				Name:   matchedContainer.Name,
+				PodKey: containerInfo.PodKey,
+			}
+			if matchedStatus != nil {
+				oldStatus.ChangeTime = matchedStatus.State.Running.StartedAt.Time
+				oldStatus.State = utils.GetBizStateFromContainerState(*matchedStatus)
 			}
 		}
 	}

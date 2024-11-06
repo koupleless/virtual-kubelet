@@ -303,6 +303,15 @@ func (pc *PodController) LoadPod(key string) (any, bool) {
 	return pc.knownPods.Load(key)
 }
 
+func (pc *PodController) ListPodFromKubernetes() ([]*corev1.Pod, bool) {
+	pods := make([]*corev1.Pod, 0)
+	pc.knownPods.Range(func(key, value any) bool {
+		pods = append(pods, value.(*knownPod).lastPodUsed)
+		return true
+	})
+	return pods, true
+}
+
 func (pc *PodController) DeletePod(key string) {
 	pc.knownPods.Delete(key)
 }

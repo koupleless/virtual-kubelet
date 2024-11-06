@@ -213,6 +213,10 @@ func TranslateContainerStatusFromTunnelToContainerStatus(container corev1.Contai
 			FinishedAt: metav1.Time{
 				Time: data.ChangeTime,
 			},
+			// TODO: set the start time of this biz?
+			StartedAt: metav1.Time{
+				Time: data.ChangeTime,
+			},
 			// Note: This state indicates the container has been terminated
 		}
 	}

@@ -150,7 +150,12 @@ func (r *RuntimeInfoStore) CheckContainerStatusNeedSync(containerInfo model.Cont
 				PodKey: containerInfo.PodKey,
 			}
 			if matchedStatus != nil {
-				oldStatus.ChangeTime = matchedStatus.State.Running.StartedAt.Time
+				if matchedStatus.State.Running != nil {
+					oldStatus.ChangeTime = matchedStatus.State.Running.StartedAt.Time
+				}
+				if matchedStatus.State.Terminated != nil {
+					oldStatus.ChangeTime = matchedStatus.State.Terminated.FinishedAt.Time
+				}
 				oldStatus.State = utils.GetBizStateFromContainerState(*matchedStatus)
 			}
 		}

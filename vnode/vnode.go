@@ -272,16 +272,16 @@ func (n *VNode) SyncNodeStatus(data model.NodeStatusData) {
 }
 
 // SyncAllContainerInfo syncs the status of all containers
-func (n *VNode) SyncAllContainerInfo(ctx context.Context, infos []model.ContainerStatusData) {
+func (n *VNode) SyncAllContainerInfo(ctx context.Context, infos []model.BizStatusData) {
 	if n.podProvider != nil {
 		go n.podProvider.SyncAllContainerInfo(ctx, infos)
 	}
 }
 
 // SyncOneContainerInfo syncs the status of a single container
-func (n *VNode) SyncOneContainerInfo(ctx context.Context, info model.ContainerStatusData) {
+func (n *VNode) SyncOneContainerInfo(ctx context.Context, bizStatusData model.BizStatusData) {
 	if n.podProvider != nil {
-		go n.podProvider.SyncOneContainerInfo(ctx, info)
+		go n.podProvider.SyncOneContainerInfo(ctx, bizStatusData)
 	}
 }
 

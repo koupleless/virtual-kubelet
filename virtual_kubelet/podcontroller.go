@@ -66,7 +66,7 @@ type PodLifecycleHandler interface {
 	// The PodStatus returned is expected to be immutable, and may be accessed
 	// concurrently outside of the calling goroutine. Therefore it is recommended
 	// to return a version after DeepCopy.
-	GetPodStatus(ctx context.Context, pod *corev1.Pod, bizStatus model.ContainerStatusData) (*corev1.PodStatus, error)
+	GetPodStatus(ctx context.Context, pod *corev1.Pod, bizStatus model.BizStatusData) (*corev1.PodStatus, error)
 
 	// GetPods retrieves a list of all pods running on the provider (can be cached).
 	// The Pods returned are expected to be immutable, and may be accessed
@@ -353,7 +353,7 @@ func (pc *PodController) syncPodFromKubernetesHandler(ctx context.Context, key s
 
 	// Add the current key as an attribute to the current span.
 	ctx = span.WithField(ctx, "key", key)
-	log.G(ctx).WithField("key", key).Debug("sync handled")
+	log.G(ctx).WithField("key", key).Info("start sync handling")
 
 	// Convert the namespace/name string into a distinct namespace and name.
 	namespace, name, err := utils.SplitMetaNamespaceKey(key)

@@ -64,11 +64,11 @@ var _ = Describe("VPod Lifecycle Test", func() {
 				podKey := utils.GetPodKey(&basicPod)
 				key := tl.GetContainerUniqueKey(podKey, &container)
 				time.Sleep(time.Second)
-				tl.PutContainer(ctx, nodeID, key, model.ContainerStatusData{
+				tl.PutContainer(ctx, nodeID, key, model.BizStatusData{
 					Key:        key,
 					Name:       container.Name,
 					PodKey:     podKey,
-					State:      model.ContainerStateActivated,
+					State:      string(model.BizStateActivated),
 					ChangeTime: time.Now(),
 				})
 			}
@@ -86,11 +86,11 @@ var _ = Describe("VPod Lifecycle Test", func() {
 			container := basicPod.Spec.Containers[0]
 			podKey := utils.GetPodKey(&basicPod)
 			key := tl.GetContainerUniqueKey(podKey, &container)
-			tl.PutContainer(ctx, nodeID, key, model.ContainerStatusData{
+			tl.PutContainer(ctx, nodeID, key, model.BizStatusData{
 				Key:        key,
 				Name:       container.Name,
 				PodKey:     podKey,
-				State:      model.ContainerStateDeactivated,
+				State:      string(model.BizStateDeactivated),
 				ChangeTime: time.Now(),
 			})
 			Eventually(func() bool {
@@ -107,11 +107,11 @@ var _ = Describe("VPod Lifecycle Test", func() {
 			container := basicPod.Spec.Containers[0]
 			podKey := utils.GetPodKey(&basicPod) + "-wrong"
 			key := tl.GetContainerUniqueKey(podKey, &container)
-			tl.PutContainer(ctx, nodeID, key, model.ContainerStatusData{
+			tl.PutContainer(ctx, nodeID, key, model.BizStatusData{
 				Key:        key,
 				Name:       container.Name,
 				PodKey:     podKey,
-				State:      model.ContainerStateActivated,
+				State:      string(model.BizStateActivated),
 				ChangeTime: time.Now(),
 			})
 			time.Sleep(time.Second)
@@ -129,11 +129,11 @@ var _ = Describe("VPod Lifecycle Test", func() {
 			container := basicPod.Spec.Containers[0]
 			podKey := utils.GetPodKey(&basicPod)
 			key := tl.GetContainerUniqueKey(podKey, &container)
-			tl.PutContainer(ctx, nodeID, key, model.ContainerStatusData{
+			tl.PutContainer(ctx, nodeID, key, model.BizStatusData{
 				Key:  key,
 				Name: container.Name,
 				//PodKey:     model.PodKeyAll,
-				State:      model.ContainerStateActivated,
+				State:      string(model.BizStateActivated),
 				ChangeTime: time.Now(),
 			})
 			time.Sleep(time.Second)

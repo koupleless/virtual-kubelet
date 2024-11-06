@@ -84,19 +84,23 @@ const (
 	NodeStatusDeactivated NodeStatus = "DEACTIVATED"
 )
 
-// ContainerState is the state of a container, will set to pod state and show on k8s
-type ContainerState string
+// BizState is the state of a container, will set to pod state and show on k8s
+type BizState string
 
-// ContainerStateActivated, ContainerStateResolved, ContainerStateDeactivated, and ContainerStateWaiting are constant ContainerState values representing different states of a container.
+// BizStateActivated, BizStateResolved, BizStateDeactivated, and ContainerStateWaiting are constant BizState values representing different states of a container.
 const (
-	// ContainerStateActivated means container ready
-	ContainerStateActivated ContainerState = "ACTIVATED"
-	// ContainerStateResolved means container starting
-	ContainerStateResolved ContainerState = "RESOLVED"
-	// ContainerStateDeactivated means container down or broken
-	ContainerStateDeactivated ContainerState = "DEACTIVATED"
-	// ContainerStatePending means container and pod is pending
-	ContainerStatePending ContainerState = "PENDING"
+	// BizStateResolved means container starting
+	BizStateResolved BizState = "RESOLVED" // Waiting
+	// BizStateUnResolved means uninstall succeed
+	BizStateUnResolved BizState = "UNRESOLVED" // -> Terminated
+	// BizStateActivated means container ready
+	BizStateActivated BizState = "ACTIVATED" // -> Running
+	// BizStateDeactivated means container down or broken
+	BizStateDeactivated BizState = "DEACTIVATED" // -> Waiting
+	// BizStateBroken means install or uninstall failed
+	BizStateBroken BizState = "BROKEN" // Waiting
+	// BizStateStopped means biz stopped
+	BizStateStopped BizState = "STOPPED" // Terminated
 )
 
 const (

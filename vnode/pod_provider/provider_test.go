@@ -14,7 +14,7 @@ import (
 
 func TestSyncRelatedPodStatus(t *testing.T) {
 	provider := NewVPodProvider("default", "127.0.0.1", "123", nil, &tunnel.MockTunnel{})
-	provider.syncRelatedPodStatus(context.TODO(), model.ContainerStatusData{
+	provider.syncRelatedPodStatus(context.TODO(), model.BizStatusData{
 		Key:        "test-biz-key",
 		Name:       "test-name",
 		PodKey:     "test-pod-key",
@@ -57,7 +57,7 @@ func TestSyncAllContainerInfo(t *testing.T) {
 			},
 		},
 	}
-	provider.SyncAllContainerInfo(context.TODO(), []model.ContainerStatusData{
+	provider.SyncAllContainerInfo(context.TODO(), []model.BizStatusData{
 		{
 			Key: tl.GetContainerUniqueKey(utils.GetPodKey(pod), &corev1.Container{
 				Name: "test-container",

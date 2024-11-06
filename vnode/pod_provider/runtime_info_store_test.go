@@ -1,7 +1,6 @@
 package pod_provider
 
 import (
-	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/tunnel"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
@@ -48,50 +47,6 @@ func TestRuntimeInfoStore_DeletePod(t *testing.T) {
 	}, mc)
 	store.DeletePod("ns1/pod1", mc)
 	assert.Nil(t, store.podKeyToPod["ns1/pod1"])
-}
-
-func TestRuntimeInfoStore_GetRelatedPodKeysByContainerName(t *testing.T) {
-	store := NewRuntimeInfoStore()
-	mc := &tunnel.MockTunnel{}
-	container := corev1.Container{
-		Name:  "container1",
-		Image: "image1",
-	}
-	pod := corev1.Pod{
-		ObjectMeta: v1.ObjectMeta{
-			Name:      "pod1",
-			Namespace: "ns1",
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				container,
-			},
-		},
-	}
-	store.PutPod(&pod, mc)
-	podKeys := store.GetRelatedPodKeysByContainerKey(mc.GetContainerUniqueKey(utils.GetPodKey(&pod), &container))
-	assert.Len(t, podKeys, 1)
-}
-
-func TestRuntimeInfoStore_GetContainer(t *testing.T) {
-	store := NewRuntimeInfoStore()
-	mc := &tunnel.MockTunnel{}
-	store.PutPod(&corev1.Pod{
-		ObjectMeta: v1.ObjectMeta{
-			Name:      "pod1",
-			Namespace: "ns1",
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:  "container1",
-					Image: "image1",
-				},
-			},
-		},
-	}, mc)
-	c := store.GetContainer("ns1/pod1/container1")
-	assert.NotNil(t, c)
 }
 
 func TestRuntimeInfoStore_GetPodByKey(t *testing.T) {

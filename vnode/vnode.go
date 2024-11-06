@@ -354,6 +354,11 @@ func (n *VNode) LoadPodFromController(key string) (any, bool) {
 	return n.node.PodController().LoadPod(key)
 }
 
+// ListPodFromController list all pods for this node from the kubernetes
+func (n *VNode) ListPodFromController() ([]*corev1.Pod, bool) {
+	return n.node.PodController().ListPodFromKubernetes()
+}
+
 // CheckAndUpdatePod checks and updates a pod in the node
 func (n *VNode) CheckAndUpdatePod(ctx context.Context, key string, obj interface{}, pod *corev1.Pod) {
 	if n.node != nil {

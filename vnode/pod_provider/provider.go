@@ -77,7 +77,7 @@ func (b *VPodProvider) syncRelatedPodStatus(ctx context.Context, podKey string) 
 	logger := log.G(ctx)
 	pod := b.runtimeInfoStore.GetPodByKey(podKey)
 	if pod == nil {
-		logger.Error("skip updating non-exist pod status")
+		logger.Errorf("skip updating non-exist pod status for %s", podKey)
 		return
 	}
 	b.updatePodStatusToKubernetes(ctx, pod)

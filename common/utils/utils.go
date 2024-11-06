@@ -275,3 +275,30 @@ func getBizIdentity(bizName, bizVersion string) string {
 func GetContainerUniqueKey(container *corev1.Container) string {
 	return getBizIdentity(container.Name, getBizVersionFromContainer(container))
 }
+
+// GetContainerStateFromBizState maps biz state to container state
+func GetContainerStateFromBizState(bizState string) model.ContainerState {
+	switch strings.ToLower(bizState) {
+	case "resolved":
+		return model.ContainerStateResolved
+	case "activated":
+		return model.ContainerStateActivated
+	case "deactivated":
+		return model.ContainerStateDeactivated
+	case "broken":
+		return model.ContainerStateDeactivated
+	}
+	return model.ContainerStatePending
+}
+
+func GetBizStateFromContainerState(containerStatus corev1.ContainerStatus) model.ContainerState {
+	if containerStatus.State.Running != nil {
+		return model.ContainerStateActivated
+	} else if containerStatus.State.Terminated != nil {
+		return model.ContainerStateDeactivated
+	} else if containerStatus.State.Waiting != nil {
+		return model.ContainerStateResolved
+	} else {
+		return model.ContainerStatePending
+	}
+}

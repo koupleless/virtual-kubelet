@@ -95,8 +95,8 @@ const (
 	ContainerStateResolved ContainerState = "RESOLVED"
 	// ContainerStateDeactivated means container down or broken
 	ContainerStateDeactivated ContainerState = "DEACTIVATED"
-	// ContainerStateWaiting means container is waiting for start
-	ContainerStateWaiting ContainerState = "WAITING"
+	// ContainerStatePending means container and pod is pending
+	ContainerStatePending ContainerState = "PENDING"
 )
 
 const (

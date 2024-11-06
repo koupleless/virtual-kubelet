@@ -17,6 +17,7 @@ package pod_provider
 import (
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
@@ -77,54 +78,48 @@ func (r *RuntimeInfoStore) GetPods() []*corev1.Pod {
 	return ret
 }
 
-func (r *RuntimeInfoStore) CheckContainerStatusNeedSync(containerInfo model.ContainerStatusData) (needSync bool) {
+func (r *RuntimeInfoStore) CheckContainerStatusNeedSync(bizStatusData model.BizStatusData) bool {
 	r.Lock()
 	defer r.Unlock()
 
-	var oldStatus *model.ContainerStatusData
-	if pod, found := r.podKeyToPod[containerInfo.PodKey]; found {
+	if pod, found := r.podKeyToPod[bizStatusData.PodKey]; found {
 		var matchedStatus *corev1.ContainerStatus
 		var matchedContainer *corev1.Container
 		for _, status := range pod.Status.ContainerStatuses {
-			if (status.Name == containerInfo.Name) && strings.Contains(status.Image, ".jar") {
+			if (status.Name == bizStatusData.Name) && strings.Contains(status.Image, ".jar") {
 				matchedStatus = &status
 			}
 		}
 		for _, container := range pod.Spec.Containers {
-			if container.Name == containerInfo.Name {
+			if container.Name == bizStatusData.Name {
 				matchedContainer = &container
 			}
 		}
 
+		// the earliest change time of the container status when no time
+		oldChangeTime := time.Time{}
 		if matchedContainer != nil {
-			oldStatus = &model.ContainerStatusData{
-				Key:    utils.GetContainerUniqueKey(matchedContainer),
-				Name:   matchedContainer.Name,
-				PodKey: containerInfo.PodKey,
-			}
 			if matchedStatus != nil {
 				if matchedStatus.State.Running != nil {
-					oldStatus.ChangeTime = matchedStatus.State.Running.StartedAt.Time
+					oldChangeTime = matchedStatus.State.Running.StartedAt.Time
 				}
 				if matchedStatus.State.Terminated != nil {
-					oldStatus.ChangeTime = matchedStatus.State.Terminated.FinishedAt.Time
+					oldChangeTime = matchedStatus.State.Terminated.FinishedAt.Time
 				}
-				oldStatus.State = utils.GetBizStateFromContainerState(*matchedStatus)
+				if matchedStatus.State.Waiting != nil && pod.Status.Conditions != nil && len(pod.Status.Conditions) > 0 {
+					oldChangeTime = pod.Status.Conditions[0].LastTransitionTime.Time
+				}
 			}
+		}
+
+		// TODO: 优化 bizStatusData.ChangeTime，只有 bizState 变化的时间才需要更新
+		if bizStatusData.ChangeTime.After(oldChangeTime) {
+			return true
+		} else {
+			return false
 		}
 	}
 
-	// check change time valid
-	if oldStatus != nil {
-		if !oldStatus.ChangeTime.Before(containerInfo.ChangeTime) {
-			// old message, not process
-			return
-		}
-		if !utils.IsContainerStatusDataEqual(oldStatus, &containerInfo) {
-			needSync = true
-		}
-	} else {
-		needSync = true
-	}
-	return needSync
+	// no pod found, no need to sync
+	return false
 }

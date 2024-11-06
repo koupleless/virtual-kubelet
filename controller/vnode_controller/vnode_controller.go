@@ -363,7 +363,7 @@ func (brc *VNodeController) onNodeStatusDataArrived(nodeID string, data model.No
 
 // onQueryAllContainerStatusDataArrived is an event handler for when status data is received for all containers in a node.
 // It updates the status of all containers in the virtual node.
-func (brc *VNodeController) onQueryAllContainerStatusDataArrived(nodeID string, containerStatusDatas []model.ContainerStatusData) {
+func (brc *VNodeController) onQueryAllContainerStatusDataArrived(nodeID string, bizStatusDatas []model.BizStatusData) {
 	vNode := brc.runtimeInfoStore.GetVNode(nodeID)
 	if vNode == nil {
 		return
@@ -381,20 +381,20 @@ func (brc *VNodeController) onQueryAllContainerStatusDataArrived(nodeID string, 
 			}
 		}
 
-		for i, _ := range containerStatusDatas {
-			if podKey, ok := bizKeyToPodKey[containerStatusDatas[i].Key]; ok {
-				containerStatusDatas[i].PodKey = podKey
+		for i, _ := range bizStatusDatas {
+			if podKey, ok := bizKeyToPodKey[bizStatusDatas[i].Key]; ok {
+				bizStatusDatas[i].PodKey = podKey
 			}
 		}
 
 		brc.runtimeInfoStore.NodeMsgArrived(nodeID)
-		vNode.SyncAllContainerInfo(context.TODO(), containerStatusDatas)
+		vNode.SyncAllContainerInfo(context.TODO(), bizStatusDatas)
 	}
 }
 
 // onContainerStatusChanged is an event handler for when the status of a container in a node changes.
 // It updates the status of the container in the virtual node.
-func (brc *VNodeController) onContainerStatusChanged(nodeID string, containerStatusData model.ContainerStatusData) {
+func (brc *VNodeController) onContainerStatusChanged(nodeID string, containerStatusData model.BizStatusData) {
 	vNode := brc.runtimeInfoStore.GetVNode(nodeID)
 	if vNode == nil {
 		return

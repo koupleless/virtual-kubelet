@@ -171,11 +171,11 @@ func TestTranslateContainerStatusFromTunnelToContainerStatus_RESOLVED(t *testing
 	status := TranslateContainerStatusFromTunnelToContainerStatus(corev1.Container{
 		Name:  "suite",
 		Image: "test_img",
-	}, &model.ContainerStatusData{
+	}, &model.BizStatusData{
 		Key:        "test_key",
 		Name:       "suite",
 		PodKey:     "pod_key",
-		State:      model.ContainerStateResolved,
+		State:      string(model.BizStateResolved),
 		ChangeTime: time.Now(),
 		Reason:     "resolved",
 		Message:    "resolved message",
@@ -189,11 +189,11 @@ func TestTranslateContainerStatusFromTunnelToContainerStatus_ACTIVATED(t *testin
 	status := TranslateContainerStatusFromTunnelToContainerStatus(corev1.Container{
 		Name:  "suite",
 		Image: "test_img",
-	}, &model.ContainerStatusData{
+	}, &model.BizStatusData{
 		Key:        "test_key",
 		Name:       "suite",
 		PodKey:     "pod_key",
-		State:      model.ContainerStateActivated,
+		State:      string(model.BizStateActivated),
 		ChangeTime: time.Now(),
 	})
 	assert.NotNil(t, status.State.Running)
@@ -203,11 +203,11 @@ func TestTranslateContainerStatusFromTunnelToContainerStatus_DEACTIVED(t *testin
 	status := TranslateContainerStatusFromTunnelToContainerStatus(corev1.Container{
 		Name:  "suite",
 		Image: "test_img",
-	}, &model.ContainerStatusData{
+	}, &model.BizStatusData{
 		Key:        "test_key",
 		Name:       "suite",
 		PodKey:     "pod_key",
-		State:      model.ContainerStateDeactivated,
+		State:      string(model.BizStateDeactivated),
 		ChangeTime: time.Now(),
 		Reason:     "deactivated",
 		Message:    "deactivated message",
@@ -264,39 +264,4 @@ func TestDefaultRateLimiter(t *testing.T) {
 	assert.Equal(t, DefaultRateLimiter(1), 100*time.Millisecond)
 	assert.Equal(t, DefaultRateLimiter(30), 90*time.Second)
 	assert.Equal(t, DefaultRateLimiter(100), 1000*time.Second)
-}
-
-func TestIsContainerStatusDataEqual(t *testing.T) {
-	assert.False(t, IsContainerStatusDataEqual(nil, nil))
-	assert.False(t, IsContainerStatusDataEqual(&model.ContainerStatusData{}, nil))
-	assert.False(t, IsContainerStatusDataEqual(&model.ContainerStatusData{
-		State: model.ContainerStateActivated,
-	}, &model.ContainerStatusData{
-		State: model.ContainerStateResolved,
-	}))
-	assert.False(t, IsContainerStatusDataEqual(&model.ContainerStatusData{
-		State:  model.ContainerStateActivated,
-		PodKey: "test",
-	}, &model.ContainerStatusData{
-		State:  model.ContainerStateActivated,
-		PodKey: "test2",
-	}))
-	assert.True(t, IsContainerStatusDataEqual(&model.ContainerStatusData{
-		State:  model.ContainerStateActivated,
-		PodKey: "test",
-	}, &model.ContainerStatusData{
-		State:  model.ContainerStateActivated,
-		PodKey: "test",
-	}))
-	assert.True(t, IsContainerStatusDataEqual(&model.ContainerStatusData{
-		State:   model.ContainerStateActivated,
-		PodKey:  "test",
-		Reason:  "test",
-		Message: "test",
-	}, &model.ContainerStatusData{
-		State:   model.ContainerStateActivated,
-		PodKey:  "test",
-		Reason:  "test",
-		Message: "test",
-	}))
 }

@@ -22,7 +22,7 @@ type MockTunnel struct {
 	OnSingleContainerStatusChanged
 	OnQueryAllContainerStatusDataArrived
 
-	containerStorage map[string]map[string]model.ContainerStatusData
+	containerStorage map[string]map[string]model.BizStatusData
 	nodeStorage      map[string]Node
 	NodeNotReady     map[string]bool
 }
@@ -47,13 +47,13 @@ func (m *MockTunnel) DeleteNode(nodeID string) {
 	delete(m.nodeStorage, nodeID)
 }
 
-func (m *MockTunnel) PutContainer(ctx context.Context, nodeID, containerKey string, data model.ContainerStatusData) {
+func (m *MockTunnel) PutContainer(ctx context.Context, nodeID, containerKey string, data model.BizStatusData) {
 	m.Lock()
 	defer m.Unlock()
 
 	containerMap, has := m.containerStorage[nodeID]
 	if !has {
-		containerMap = map[string]model.ContainerStatusData{}
+		containerMap = map[string]model.BizStatusData{}
 	}
 	containerMap[containerKey] = data
 	m.containerStorage[nodeID] = containerMap
@@ -65,7 +65,7 @@ func (m *MockTunnel) Key() string {
 }
 
 func (m *MockTunnel) Start(ctx context.Context, clientID string, env string) error {
-	m.containerStorage = map[string]map[string]model.ContainerStatusData{}
+	m.containerStorage = map[string]map[string]model.BizStatusData{}
 	m.nodeStorage = map[string]Node{}
 	m.NodeNotReady = map[string]bool{}
 	return nil
@@ -116,13 +116,13 @@ func (m *MockTunnel) StartContainer(ctx context.Context, nodeID, podKey string, 
 	key := m.GetContainerUniqueKey(podKey, container)
 	containerMap, has := m.containerStorage[nodeID]
 	if !has {
-		containerMap = map[string]model.ContainerStatusData{}
+		containerMap = map[string]model.BizStatusData{}
 	}
-	data := model.ContainerStatusData{
+	data := model.BizStatusData{
 		Key:        key,
 		Name:       container.Name,
 		PodKey:     podKey,
-		State:      model.ContainerStateResolved,
+		State:      string(model.BizStateResolved),
 		ChangeTime: time.Now(),
 		Reason:     "mock_resolved",
 		Message:    "mock resolved",
@@ -142,7 +142,7 @@ func (m *MockTunnel) ShutdownContainer(ctx context.Context, nodeID, podKey strin
 	data := containerMap[key]
 	delete(containerMap, key)
 	m.containerStorage[nodeID] = containerMap
-	data.State = model.ContainerStateDeactivated
+	data.State = string(model.BizStateDeactivated)
 	data.ChangeTime = time.Now()
 	m.OnSingleContainerStatusChanged(nodeID, data)
 	return nil
@@ -152,8 +152,8 @@ func (m *MockTunnel) GetContainerUniqueKey(podKey string, container *corev1.Cont
 	return podKey + container.Name
 }
 
-func translateContainerMap2ContainerList(containerMap map[string]model.ContainerStatusData) []model.ContainerStatusData {
-	ret := make([]model.ContainerStatusData, 0)
+func translateContainerMap2ContainerList(containerMap map[string]model.BizStatusData) []model.BizStatusData {
+	ret := make([]model.BizStatusData, 0)
 	for _, container := range containerMap {
 		ret = append(ret, container)
 	}

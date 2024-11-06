@@ -160,9 +160,9 @@ func ExtractNodeIDFromNodeName(nodeName string) string {
 }
 
 // TranslateContainerStatusFromTunnelToContainerStatus translates tunnel container status to Kubernetes container status.
-func TranslateContainerStatusFromTunnelToContainerStatus(container corev1.Container, data *model.ContainerStatusData) corev1.ContainerStatus {
+func TranslateContainerStatusFromTunnelToContainerStatus(container corev1.Container, data *model.BizStatusData) corev1.ContainerStatus {
 	// Determine if the container has started based on the data state
-	started := data != nil && data.State == model.ContainerStateActivated
+	started := data != nil && strings.EqualFold(data.State, string(model.BizStateActivated))
 
 	// Initialize the return value with common fields
 	ret := corev1.ContainerStatus{
@@ -176,16 +176,16 @@ func TranslateContainerStatusFromTunnelToContainerStatus(container corev1.Contai
 	}
 
 	// Handle the case where data is nil, indicating the container is pending
-	if data == nil {
-		ret.State.Waiting = &corev1.ContainerStateWaiting{
-			Reason:  "ContainerPending",
-			Message: "Container is waiting for start",
-		}
+	// no biz info yet
+	if data == nil || strings.EqualFold(data.State, string(model.BizStateUnResolved)) {
+		ret.State = corev1.ContainerState{}
 		return ret
 	}
 
 	// Handle the case where the container is in the resolved state, indicating it's starting
-	if data.State == model.ContainerStateResolved {
+	if strings.EqualFold(data.State, string(model.BizStateResolved)) ||
+		strings.EqualFold(data.State, string(model.BizStateBroken)) ||
+		strings.EqualFold(data.State, string(model.BizStateDeactivated)) {
 		ret.State.Waiting = &corev1.ContainerStateWaiting{
 			Reason:  data.Reason,
 			Message: data.Message,
@@ -195,7 +195,7 @@ func TranslateContainerStatusFromTunnelToContainerStatus(container corev1.Contai
 	}
 
 	// Handle the case where the container is in the activated state, indicating it's running
-	if data.State == model.ContainerStateActivated {
+	if strings.EqualFold(data.State, string(model.BizStateActivated)) {
 		ret.State.Running = &corev1.ContainerStateRunning{
 			StartedAt: metav1.Time{
 				Time: data.ChangeTime,
@@ -205,7 +205,7 @@ func TranslateContainerStatusFromTunnelToContainerStatus(container corev1.Contai
 	}
 
 	// Handle the case where the container is in the deactivated state, indicating it's terminated
-	if data.State == model.ContainerStateDeactivated {
+	if strings.EqualFold(data.State, string(model.BizStateStopped)) {
 		ret.State.Terminated = &corev1.ContainerStateTerminated{
 			ExitCode: 1,
 			Reason:   data.Reason,
@@ -238,26 +238,6 @@ func SplitMetaNamespaceKey(key string) (namespace, name string, err error) {
 	return "", "", fmt.Errorf("unexpected key format: %q", key)
 }
 
-// IsContainerStatusDataEqual checks if two container status data are equal.
-func IsContainerStatusDataEqual(dataA, dataB *model.ContainerStatusData) bool {
-	// Check if either dataA or dataB is nil, if so, return false as they cannot be equal
-	if dataA == nil || dataB == nil {
-		return false
-	}
-	// Compare the State and PodKey of dataA and dataB, if they are not equal, return false
-	stateEqual := dataA.State == dataB.State && dataA.PodKey == dataB.PodKey
-	if !stateEqual {
-		return false
-	}
-	// Check if the Reason and Message of dataB are both empty, if so, return true as dataA and dataB are considered equal
-	newMsgEmpty := dataB.Reason == "" && dataB.Message == ""
-	if newMsgEmpty {
-		return true
-	}
-	// If none of the above conditions are met, compare the Reason and Message of dataA and dataB, return true if they are equal
-	return dataA.Reason == dataB.Reason && dataA.Message == dataB.Message
-}
-
 // GetBizVersionFromContainer extracts the biz version from a container's env vars
 func getBizVersionFromContainer(container *corev1.Container) string {
 	bizVersion := ""
@@ -278,31 +258,4 @@ func getBizIdentity(bizName, bizVersion string) string {
 // GetContainerUniqueKey returns a unique key for the container
 func GetContainerUniqueKey(container *corev1.Container) string {
 	return getBizIdentity(container.Name, getBizVersionFromContainer(container))
-}
-
-// GetContainerStateFromBizState maps biz state to container state
-func GetContainerStateFromBizState(bizState string) model.ContainerState {
-	switch strings.ToLower(bizState) {
-	case "resolved":
-		return model.ContainerStateResolved
-	case "activated":
-		return model.ContainerStateActivated
-	case "deactivated":
-		return model.ContainerStateDeactivated
-	case "broken":
-		return model.ContainerStateDeactivated
-	}
-	return model.ContainerStatePending
-}
-
-func GetBizStateFromContainerState(containerStatus corev1.ContainerStatus) model.ContainerState {
-	if containerStatus.State.Running != nil {
-		return model.ContainerStateActivated
-	} else if containerStatus.State.Terminated != nil {
-		return model.ContainerStateDeactivated
-	} else if containerStatus.State.Waiting != nil {
-		return model.ContainerStateResolved
-	} else {
-		return model.ContainerStatePending
-	}
 }

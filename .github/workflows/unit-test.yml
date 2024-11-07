@@ -2,9 +2,6 @@ name: virtual kubelet unit test
 run-name: ${{ github.actor }} pushed module-controller code
 
 on:
-  push:
-    branchs:
-      - main
   pull_request:
     branches:
       - main

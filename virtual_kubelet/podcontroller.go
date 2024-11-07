@@ -97,6 +97,7 @@ type PodEventFilterFunc func(context.Context, *corev1.Pod) bool
 
 // PodController is the controller implementation for Pod resources.
 type PodController struct {
+	nodeName string
 	provider PodLifecycleHandler
 
 	// recorder is an event recorder for recording Event resources to the Kubernetes API.
@@ -145,8 +146,9 @@ type knownPod struct {
 
 // PodControllerConfig is used to configure a new PodController.
 type PodControllerConfig struct {
-	Client client.Client
-	Cache  cache.Cache
+	NodeName string
+	Client   client.Client
+	Cache    cache.Cache
 
 	EventRecorder record.EventRecorder
 
@@ -205,6 +207,7 @@ func NewPodController(cfg PodControllerConfig) (*PodController, error) {
 	pc.deletePodsFromKubernetes = queue.New(cfg.DeletePodsFromKubernetesRateLimiter, "deletePodsFromKubernetes", pc.deletePodsFromKubernetesHandler, cfg.DeletePodsFromKubernetesShouldRetryFunc)
 	pc.syncPodStatusFromProvider = queue.New(cfg.SyncPodStatusFromProviderRateLimiter, "syncPodStatusFromProvider", pc.syncPodStatusFromProviderHandler, cfg.SyncPodStatusFromProviderShouldRetryFunc)
 
+	pc.nodeName = cfg.NodeName
 	return pc, nil
 }
 
@@ -251,7 +254,7 @@ func (pc *PodController) Run(ctx context.Context, podSyncWorkers int) (retErr er
 	// If by any reason the provider fails to delete a dangling pod, it will stay in the provider and deletion won't be retried.
 	pc.deleteDanglingPods(ctx, podSyncWorkers)
 
-	log.G(ctx).Info("starting workers")
+	log.G(ctx).Infof("starting workers for %s", pc.nodeName)
 	group := &wait.Group{}
 	group.StartWithContext(ctx, func(ctx context.Context) {
 		pc.syncPodsFromKubernetes.Run(ctx, podSyncWorkers)
@@ -263,11 +266,11 @@ func (pc *PodController) Run(ctx context.Context, podSyncWorkers int) (retErr er
 		pc.syncPodStatusFromProvider.Run(ctx, podSyncWorkers)
 	})
 	defer group.Wait()
-	log.G(ctx).Info("started workers")
+	log.G(ctx).Infof("started workers for %s", pc.nodeName)
 	close(pc.ready)
 
 	<-ctx.Done()
-	log.G(ctx).Info("shutting down workers")
+	log.G(ctx).Info("shutting down workers for %s", pc.nodeName)
 
 	return nil
 }

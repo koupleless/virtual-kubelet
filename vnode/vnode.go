@@ -430,8 +430,8 @@ func NewVNode(config *model.BuildVNodeConfig, t tunnel.Tunnel) (kn *VNode, err e
 		// Function to configure the node
 		func(cfg *nodeutil.NodeConfig) error {
 			// Set the node's architecture and operating system
-			cfg.NodeSpec.Status.NodeInfo.Architecture = runtime.GOARCH
-			cfg.NodeSpec.Status.NodeInfo.OperatingSystem = runtime.GOOS
+			cfg.Node.Status.NodeInfo.Architecture = runtime.GOARCH
+			cfg.Node.Status.NodeInfo.OperatingSystem = runtime.GOOS
 
 			// Set the number of workers based on configuration
 			cfg.NumWorkers = config.WorkerNum

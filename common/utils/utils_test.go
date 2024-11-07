@@ -164,7 +164,7 @@ func TestTranslateContainerStatusFromTunnelToContainerStatus_NoData(t *testing.T
 		Name:  "suite",
 		Image: "test_img",
 	}, nil)
-	assert.NotNil(t, status.State.Waiting)
+	assert.Equal(t, status.State, corev1.ContainerState{})
 }
 
 func TestTranslateContainerStatusFromTunnelToContainerStatus_RESOLVED(t *testing.T) {
@@ -212,9 +212,9 @@ func TestTranslateContainerStatusFromTunnelToContainerStatus_DEACTIVED(t *testin
 		Reason:     "deactivated",
 		Message:    "deactivated message",
 	})
-	assert.NotNil(t, status.State.Terminated)
-	assert.Equal(t, "deactivated", status.State.Terminated.Reason)
-	assert.Equal(t, "deactivated message", status.State.Terminated.Message)
+	assert.NotNil(t, status.State.Waiting)
+	assert.Equal(t, "deactivated", status.State.Waiting.Reason)
+	assert.Equal(t, "deactivated message", status.State.Waiting.Message)
 }
 
 func TestSplitMetaNamespaceKey(t *testing.T) {

@@ -163,7 +163,7 @@ type NodeConfig struct {
 	Cache cache.Cache
 
 	// Set the node spec to register with Kubernetes
-	NodeSpec v1.Node
+	Node v1.Node
 
 	// Specify the event recorder to use
 	// If this is not provided, a default one will be used.
@@ -201,7 +201,7 @@ func WithCache(cache cache.Cache) NodeOpt {
 func NewNode(name string, newProvider NewProviderFunc, opts ...NodeOpt) (*Node, error) {
 	cfg := NodeConfig{
 		NumWorkers: runtime.NumCPU(),
-		NodeSpec: v1.Node{
+		Node: v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name,
 				Labels: map[string]string{
@@ -233,8 +233,8 @@ func NewNode(name string, newProvider NewProviderFunc, opts ...NodeOpt) (*Node, 
 		return nil, errors.New("no client provided")
 	}
 
-	p, np, err := newProvider(ProviderConfig{
-		Node: &cfg.NodeSpec,
+	podProvider, nodeProvider, err := newProvider(ProviderConfig{
+		Node: &cfg.Node,
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating provider")
@@ -242,9 +242,9 @@ func NewNode(name string, newProvider NewProviderFunc, opts ...NodeOpt) (*Node, 
 
 	nodeControllerOpts := []virtual_kubelet.NodeControllerOpt{}
 
-	nc, err := virtual_kubelet.NewNodeController(
-		np,
-		&cfg.NodeSpec,
+	nodeController, err := virtual_kubelet.NewNodeController(
+		nodeProvider,
+		&cfg.Node,
 		cfg.Client,
 		nodeControllerOpts...,
 	)
@@ -258,19 +258,20 @@ func NewNode(name string, newProvider NewProviderFunc, opts ...NodeOpt) (*Node, 
 		cfg.EventRecorder = eb.NewRecorder(scheme.Scheme, v1.EventSource{Component: path.Join(name, "pod-controller")})
 	}
 
-	pc, err := virtual_kubelet.NewPodController(virtual_kubelet.PodControllerConfig{
+	podController, err := virtual_kubelet.NewPodController(virtual_kubelet.PodControllerConfig{
+		NodeName:      name,
 		EventRecorder: cfg.EventRecorder,
 		Client:        cfg.Client,
 		Cache:         cfg.Cache,
-		Provider:      p,
+		Provider:      podProvider,
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating pod controller")
 	}
 
 	return &Node{
-		nc:      nc,
-		pc:      pc,
+		nc:      nodeController,
+		pc:      podController,
 		ready:   make(chan struct{}),
 		done:    make(chan struct{}),
 		client:  cfg.Client,

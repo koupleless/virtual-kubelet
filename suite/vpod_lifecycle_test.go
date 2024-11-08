@@ -6,6 +6,7 @@ import (
 	"github.com/koupleless/virtual-kubelet/model"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -36,6 +37,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 					Name: name,
 				}, vnode)
 				vnodeReady := false
+				logrus.WithContext(ctx).Infof("pod status: %v", vnode.Status.Conditions)
 				for _, cond := range vnode.Status.Conditions {
 					if cond.Type == v1.NodeReady {
 						vnodeReady = cond.Status == v1.ConditionTrue
@@ -55,6 +57,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 					Namespace: basicPod.Namespace,
 					Name:      basicPod.Name,
 				}, podFromKubernetes)
+				logrus.WithContext(ctx).Infof("pod status: %v", podFromKubernetes.Status.Phase)
 				return err == nil && podFromKubernetes.Status.Phase == v1.PodPending && podFromKubernetes.Spec.NodeName == utils.FormatNodeName(nodeID, env)
 			}, time.Second*20, time.Second).Should(BeTrue())
 		})
@@ -78,6 +81,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 					Namespace: basicPod.Namespace,
 					Name:      basicPod.Name,
 				}, podFromKubernetes)
+				logrus.WithContext(ctx).Infof("pod status: %v", podFromKubernetes.Status.Phase)
 				return err == nil && podFromKubernetes.Status.Phase == v1.PodRunning
 			}, time.Second*30, time.Second).Should(BeTrue())
 		})
@@ -99,6 +103,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 					Namespace: basicPod.Namespace,
 					Name:      basicPod.Name,
 				}, podFromKubernetes)
+				logrus.WithContext(ctx).Infof("pod status: %v", podFromKubernetes.Status.Phase)
 				return err == nil && podFromKubernetes.Status.Phase == v1.PodRunning && podFromKubernetes.Status.Conditions[0].Status == v1.ConditionFalse
 			}, time.Second*20, time.Second).Should(BeTrue())
 		})
@@ -121,6 +126,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 					Namespace: basicPod.Namespace,
 					Name:      basicPod.Name,
 				}, podFromKubernetes)
+				logrus.WithContext(ctx).Infof("pod status: %v", podFromKubernetes.Status.Phase)
 				return err == nil && podFromKubernetes.Status.Phase == v1.PodRunning && podFromKubernetes.Status.Conditions[0].Status == v1.ConditionFalse
 			}, time.Second*20, time.Second).Should(BeTrue())
 		})
@@ -143,6 +149,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 					Namespace: basicPod.Namespace,
 					Name:      basicPod.Name,
 				}, podFromKubernetes)
+				logrus.WithContext(ctx).Infof("pod status: %v", podFromKubernetes.Status.Phase)
 				return err == nil && podFromKubernetes.Status.Phase == v1.PodRunning && podFromKubernetes.Status.Conditions[0].Status == v1.ConditionTrue
 			}, time.Second*20, time.Second).Should(BeTrue())
 		})
@@ -163,6 +170,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 					Namespace: basicPod.Namespace,
 					Name:      basicPod.Name,
 				}, podFromKubernetes)
+				logrus.WithContext(ctx).Infof("pod status: %v", podFromKubernetes.Status.Phase)
 				return err == nil && podFromKubernetes.Status.Phase == v1.PodPending
 			}, time.Second*20, time.Second).Should(BeTrue())
 		})
@@ -176,6 +184,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 					Namespace: basicPod.Namespace,
 					Name:      basicPod.Name,
 				}, podFromKubernetes)
+				logrus.WithContext(ctx).Infof("pod status: %v", podFromKubernetes.Status.Phase)
 				return errors.IsNotFound(err)
 			}, time.Second*20, time.Second).Should(BeTrue())
 		})

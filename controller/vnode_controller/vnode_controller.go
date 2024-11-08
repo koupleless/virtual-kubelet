@@ -101,7 +101,7 @@ func NewVNodeController(config *model.BuildVNodeControllerConfig, tunnels []tunn
 func (brc *VNodeController) SetupWithManager(ctx context.Context, mgr manager.Manager) (err error) {
 	// init all tunnels
 	for _, t := range brc.tunnels {
-		t.RegisterCallback(brc.onNodeDiscovered, brc.onNodeStatusDataArrived, brc.onQueryAllContainerStatusDataArrived, brc.onContainerStatusChanged)
+		t.RegisterCallback(brc.onNodeDiscovered, brc.onNodeStatusDataArrived, brc.onAllBizStatusArrived, brc.onSingleBizStatusArrived)
 	}
 
 	brc.client = mgr.GetClient()
@@ -361,9 +361,9 @@ func (brc *VNodeController) onNodeStatusDataArrived(nodeID string, data model.No
 	}
 }
 
-// onQueryAllContainerStatusDataArrived is an event handler for when status data is received for all containers in a node.
+// onAllBizStatusArrived is an event handler for when status data is received for all containers in a node.
 // It updates the status of all containers in the virtual node.
-func (brc *VNodeController) onQueryAllContainerStatusDataArrived(nodeID string, bizStatusDatas []model.BizStatusData) {
+func (brc *VNodeController) onAllBizStatusArrived(nodeID string, bizStatusDatas []model.BizStatusData) {
 	vNode := brc.runtimeInfoStore.GetVNode(nodeID)
 	if vNode == nil {
 		return
@@ -392,9 +392,9 @@ func (brc *VNodeController) onQueryAllContainerStatusDataArrived(nodeID string, 
 	}
 }
 
-// onContainerStatusChanged is an event handler for when the status of a container in a node changes.
+// onSingleBizStatusArrived is an event handler for when the status of a container in a node changes.
 // It updates the status of the container in the virtual node.
-func (brc *VNodeController) onContainerStatusChanged(nodeID string, containerStatusData model.BizStatusData) {
+func (brc *VNodeController) onSingleBizStatusArrived(nodeID string, containerStatusData model.BizStatusData) {
 	vNode := brc.runtimeInfoStore.GetVNode(nodeID)
 	if vNode == nil {
 		return
@@ -619,7 +619,7 @@ func (brc *VNodeController) startVNode(nodeID string, initData model.NodeInfo, t
 		// Start a new goroutine to query all container status data every 15 seconds
 		go utils.TimedTaskWithInterval(vnCtx, time.Second*15, func(ctx context.Context) {
 			log.G(vnCtx).Info("query all container status data for nodeId ", nodeID)
-			err = t.QueryAllContainerStatusData(vnCtx, nodeID)
+			err = t.QueryAllBizStatusData(vnCtx, nodeID)
 			if err != nil {
 				log.G(vnCtx).WithError(err).Errorf("Failed to query containers info from %s", nodeID)
 			}

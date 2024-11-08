@@ -19,10 +19,10 @@ type MockTunnel struct {
 	sync.Mutex
 	OnNodeDiscovered
 	OnNodeStatusDataArrived
-	OnSingleContainerStatusChanged
-	OnQueryAllContainerStatusDataArrived
+	OnSingleBizStatusArrived
+	OnAllBizStatusArrived
 
-	containerStorage map[string]map[string]model.BizStatusData
+	bizStatusStorage map[string]map[string]model.BizStatusData
 	nodeStorage      map[string]Node
 	NodeNotReady     map[string]bool
 }
@@ -51,13 +51,13 @@ func (m *MockTunnel) PutContainer(ctx context.Context, nodeID, containerKey stri
 	m.Lock()
 	defer m.Unlock()
 
-	containerMap, has := m.containerStorage[nodeID]
+	bizStatusMap, has := m.bizStatusStorage[nodeID]
 	if !has {
-		containerMap = map[string]model.BizStatusData{}
+		bizStatusMap = map[string]model.BizStatusData{}
 	}
-	containerMap[containerKey] = data
-	m.containerStorage[nodeID] = containerMap
-	m.OnSingleContainerStatusChanged(nodeID, data)
+	bizStatusMap[containerKey] = data
+	m.bizStatusStorage[nodeID] = bizStatusMap
+	m.OnSingleBizStatusArrived(nodeID, data)
 }
 
 func (m *MockTunnel) Key() string {
@@ -65,7 +65,7 @@ func (m *MockTunnel) Key() string {
 }
 
 func (m *MockTunnel) Start(ctx context.Context, clientID string, env string) error {
-	m.containerStorage = map[string]map[string]model.BizStatusData{}
+	m.bizStatusStorage = map[string]map[string]model.BizStatusData{}
 	m.nodeStorage = map[string]Node{}
 	m.NodeNotReady = map[string]bool{}
 	return nil
@@ -78,12 +78,12 @@ func (m *MockTunnel) Ready() bool {
 func (m *MockTunnel) RegisterCallback(
 	discovered OnNodeDiscovered,
 	onNodeStatusDataArrived OnNodeStatusDataArrived,
-	onQueryAllContainerStatusDataArrived OnQueryAllContainerStatusDataArrived,
-	onSingleContainerStatusChanged OnSingleContainerStatusChanged) {
+	onAllBizStatusArrived OnAllBizStatusArrived,
+	onSingleBizStatusArrived OnSingleBizStatusArrived) {
 	m.OnNodeStatusDataArrived = onNodeStatusDataArrived
 	m.OnNodeDiscovered = discovered
-	m.OnQueryAllContainerStatusDataArrived = onQueryAllContainerStatusDataArrived
-	m.OnSingleContainerStatusChanged = onSingleContainerStatusChanged
+	m.OnAllBizStatusArrived = onAllBizStatusArrived
+	m.OnSingleBizStatusArrived = onSingleBizStatusArrived
 }
 
 func (m *MockTunnel) OnNodeStart(ctx context.Context, nodeID string, initData model.NodeInfo) {
@@ -102,10 +102,10 @@ func (m *MockTunnel) FetchHealthData(ctx context.Context, nodeID string) error {
 	return nil
 }
 
-func (m *MockTunnel) QueryAllContainerStatusData(ctx context.Context, nodeID string) error {
+func (m *MockTunnel) QueryAllBizStatusData(ctx context.Context, nodeID string) error {
 	_, has := m.nodeStorage[nodeID]
 	if has {
-		m.OnQueryAllContainerStatusDataArrived(nodeID, translateContainerMap2ContainerList(m.containerStorage[nodeID]))
+		m.OnAllBizStatusArrived(nodeID, convertContainerMap2ContainerList(m.bizStatusStorage[nodeID]))
 	}
 	return nil
 }
@@ -114,7 +114,7 @@ func (m *MockTunnel) StartContainer(ctx context.Context, nodeID, podKey string, 
 	m.Lock()
 	defer m.Unlock()
 	key := m.GetContainerUniqueKey(podKey, container)
-	containerMap, has := m.containerStorage[nodeID]
+	containerMap, has := m.bizStatusStorage[nodeID]
 	if !has {
 		containerMap = map[string]model.BizStatusData{}
 	}
@@ -129,22 +129,22 @@ func (m *MockTunnel) StartContainer(ctx context.Context, nodeID, podKey string, 
 	}
 	containerMap[key] = data
 
-	m.containerStorage[nodeID] = containerMap
-	m.OnSingleContainerStatusChanged(nodeID, data)
+	m.bizStatusStorage[nodeID] = containerMap
+	m.OnSingleBizStatusArrived(nodeID, data)
 	return nil
 }
 
 func (m *MockTunnel) ShutdownContainer(ctx context.Context, nodeID, podKey string, container *corev1.Container) error {
 	m.Lock()
 	defer m.Unlock()
-	containerMap := m.containerStorage[nodeID]
+	containerMap := m.bizStatusStorage[nodeID]
 	key := m.GetContainerUniqueKey(podKey, container)
 	data := containerMap[key]
 	delete(containerMap, key)
-	m.containerStorage[nodeID] = containerMap
+	m.bizStatusStorage[nodeID] = containerMap
 	data.State = string(model.BizStateDeactivated)
 	data.ChangeTime = time.Now()
-	m.OnSingleContainerStatusChanged(nodeID, data)
+	m.OnSingleBizStatusArrived(nodeID, data)
 	return nil
 }
 
@@ -152,7 +152,7 @@ func (m *MockTunnel) GetContainerUniqueKey(podKey string, container *corev1.Cont
 	return podKey + container.Name
 }
 
-func translateContainerMap2ContainerList(containerMap map[string]model.BizStatusData) []model.BizStatusData {
+func convertContainerMap2ContainerList(containerMap map[string]model.BizStatusData) []model.BizStatusData {
 	ret := make([]model.BizStatusData, 0)
 	for _, container := range containerMap {
 		ret = append(ret, container)

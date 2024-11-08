@@ -12,11 +12,11 @@ type OnNodeDiscovered func(string, model.NodeInfo, Tunnel)
 // OnNodeStatusDataArrived is the node health data callback, will update vnode status to k8s
 type OnNodeStatusDataArrived func(string, model.NodeStatusData)
 
-// OnQueryAllContainerStatusDataArrived is the container status data callback, will update vpod status to k8s
-type OnQueryAllContainerStatusDataArrived func(string, []model.BizStatusData)
+// OnAllBizStatusArrived is the container status data callback, will update vpod status to k8s
+type OnAllBizStatusArrived func(string, []model.BizStatusData)
 
-// OnSingleContainerStatusChanged is one container status data callback, will update container-vpod status to k8s
-type OnSingleContainerStatusChanged func(string, model.BizStatusData)
+// OnSingleBizStatusArrived is one container status data callback, will update container-vpod status to k8s
+type OnSingleBizStatusArrived func(string, model.BizStatusData)
 
 type Tunnel interface {
 	// Key is the identity of Tunnel, will set to node label for special usage
@@ -29,7 +29,7 @@ type Tunnel interface {
 	Ready() bool
 
 	// RegisterCallback is the init func of Tunnel, please complete callback register in this func
-	RegisterCallback(OnNodeDiscovered, OnNodeStatusDataArrived, OnQueryAllContainerStatusDataArrived, OnSingleContainerStatusChanged)
+	RegisterCallback(OnNodeDiscovered, OnNodeStatusDataArrived, OnAllBizStatusArrived, OnSingleBizStatusArrived)
 
 	// OnNodeStart is the func call when a vnode start successfully, you can implement it on demand
 	OnNodeStart(ctx context.Context, nodeID string, initData model.NodeInfo)
@@ -43,8 +43,8 @@ type Tunnel interface {
 	// FetchHealthData is the func call for vnode to fetch health data , you need to fetch health data and call OnNodeStatusDataArrived when data arrived
 	FetchHealthData(ctx context.Context, nodeID string) error
 
-	// QueryAllContainerStatusData is the func call for vnode to fetch all containers status data , you need to fetch all containers status data and call OnQueryAllContainerStatusDataArrived when data arrived
-	QueryAllContainerStatusData(ctx context.Context, nodeID string) error
+	// QueryAllBizStatusData is the func call for vnode to fetch all containers status data , you need to fetch all containers status data and call OnAllBizStatusArrived when data arrived
+	QueryAllBizStatusData(ctx context.Context, nodeID string) error
 
 	// StartContainer is the func calls for vnode to start a container , you need to start container and call OnStartContainerResponseArrived when start complete with a response
 	StartContainer(ctx context.Context, nodeID, podKey string, container *v1.Container) error

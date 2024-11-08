@@ -378,7 +378,7 @@ func (b *VPodProvider) GetPod(_ context.Context, namespace, name string) (*corev
 
 // GetPodStatus is a method of VPodProvider that gets the status of a pod
 // This will be called repeatedly by virtual kubelet framework to get the defaultPod status
-// we should query the actual runtime info and translate them in to V1PodStatus accordingly
+// we should query the actual runtime info and convert them in to V1PodStatus accordingly
 func (b *VPodProvider) GetPodStatus(ctx context.Context, pod *corev1.Pod, bizState model.BizStatusData) (*corev1.PodStatus, error) {
 	podStatus := &corev1.PodStatus{}
 	// check pod status
@@ -396,7 +396,7 @@ func (b *VPodProvider) GetPodStatus(ctx context.Context, pod *corev1.Pod, bizSta
 		if !strings.Contains(container.Image, ".jar") {
 			continue
 		}
-		containerStatus := utils.TranslateContainerStatusFromTunnelToContainerStatus(container, &bizState)
+		containerStatus := utils.ConvertBizStatusToContainerStatus(container, &bizState)
 
 		bizJarContainerCount++
 		if containerStatus.Ready {

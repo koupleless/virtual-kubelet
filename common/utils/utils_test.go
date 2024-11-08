@@ -159,16 +159,16 @@ func TestExtractNodeIDFromNodeName(t *testing.T) {
 	assert.Equal(t, "", ExtractNodeIDFromNodeName("suite"))
 }
 
-func TestTranslateContainerStatusFromTunnelToContainerStatus_NoData(t *testing.T) {
-	status := TranslateContainerStatusFromTunnelToContainerStatus(corev1.Container{
+func TestConvertBizStatusToContainerStatus_NoData(t *testing.T) {
+	status := ConvertBizStatusToContainerStatus(corev1.Container{
 		Name:  "suite",
 		Image: "test_img",
 	}, nil)
 	assert.Equal(t, status.State, corev1.ContainerState{})
 }
 
-func TestTranslateContainerStatusFromTunnelToContainerStatus_RESOLVED(t *testing.T) {
-	status := TranslateContainerStatusFromTunnelToContainerStatus(corev1.Container{
+func TestConvertBizStatusToContainerStatus_RESOLVED(t *testing.T) {
+	status := ConvertBizStatusToContainerStatus(corev1.Container{
 		Name:  "suite",
 		Image: "test_img",
 	}, &model.BizStatusData{
@@ -185,8 +185,8 @@ func TestTranslateContainerStatusFromTunnelToContainerStatus_RESOLVED(t *testing
 	assert.Equal(t, "resolved message", status.State.Waiting.Message)
 }
 
-func TestTranslateContainerStatusFromTunnelToContainerStatus_ACTIVATED(t *testing.T) {
-	status := TranslateContainerStatusFromTunnelToContainerStatus(corev1.Container{
+func TestConvertBizStatusToContainerStatus_ACTIVATED(t *testing.T) {
+	status := ConvertBizStatusToContainerStatus(corev1.Container{
 		Name:  "suite",
 		Image: "test_img",
 	}, &model.BizStatusData{
@@ -199,8 +199,8 @@ func TestTranslateContainerStatusFromTunnelToContainerStatus_ACTIVATED(t *testin
 	assert.NotNil(t, status.State.Running)
 }
 
-func TestTranslateContainerStatusFromTunnelToContainerStatus_DEACTIVED(t *testing.T) {
-	status := TranslateContainerStatusFromTunnelToContainerStatus(corev1.Container{
+func TestConvertBizStatusToContainerStatus_DEACTIVED(t *testing.T) {
+	status := ConvertBizStatusToContainerStatus(corev1.Container{
 		Name:  "suite",
 		Image: "test_img",
 	}, &model.BizStatusData{

@@ -150,8 +150,8 @@ func TestCallBack_NoVnode(t *testing.T) {
 	})
 
 	vc.onNodeStatusDataArrived("test", model.NodeStatusData{})
-	vc.onQueryAllContainerStatusDataArrived("test", nil)
-	vc.onContainerStatusChanged("test", model.BizStatusData{})
+	vc.onAllBizStatusArrived("test", nil)
+	vc.onSingleBizStatusArrived("test", model.BizStatusData{})
 	vc.onNodeStatusDataArrived("test", model.NodeStatusData{})
 }
 

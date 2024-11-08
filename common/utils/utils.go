@@ -159,8 +159,8 @@ func ExtractNodeIDFromNodeName(nodeName string) string {
 	return strings.Join(split[1:len(split)-1], ".")
 }
 
-// TranslateContainerStatusFromTunnelToContainerStatus translates tunnel container status to Kubernetes container status.
-func TranslateContainerStatusFromTunnelToContainerStatus(container corev1.Container, data *model.BizStatusData) corev1.ContainerStatus {
+// ConvertBizStatusToContainerStatus converts tunnel container status to Kubernetes container status.
+func ConvertBizStatusToContainerStatus(container corev1.Container, data *model.BizStatusData) corev1.ContainerStatus {
 	// Determine if the container has started based on the data state
 	started := data != nil && strings.EqualFold(data.State, string(model.BizStateActivated))
 

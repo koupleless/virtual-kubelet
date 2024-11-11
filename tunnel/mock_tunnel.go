@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"context"
+	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
 	corev1 "k8s.io/api/core/v1"
 	"sync"
@@ -113,7 +114,7 @@ func (m *MockTunnel) QueryAllBizStatusData(ctx context.Context, nodeID string) e
 func (m *MockTunnel) StartContainer(ctx context.Context, nodeID, podKey string, container *corev1.Container) error {
 	m.Lock()
 	defer m.Unlock()
-	key := m.GetContainerUniqueKey(podKey, container)
+	key := utils.GetBizUniqueKey(container)
 	containerMap, has := m.bizStatusStorage[nodeID]
 	if !has {
 		containerMap = map[string]model.BizStatusData{}
@@ -122,7 +123,7 @@ func (m *MockTunnel) StartContainer(ctx context.Context, nodeID, podKey string, 
 		Key:        key,
 		Name:       container.Name,
 		PodKey:     podKey,
-		State:      string(model.BizStateResolved),
+		State:      string(model.BizStateUnResolved),
 		ChangeTime: time.Now(),
 		Reason:     "mock_resolved",
 		Message:    "mock resolved",
@@ -130,6 +131,8 @@ func (m *MockTunnel) StartContainer(ctx context.Context, nodeID, podKey string, 
 	containerMap[key] = data
 
 	m.bizStatusStorage[nodeID] = containerMap
+
+	// start to biz installation
 	m.OnSingleBizStatusArrived(nodeID, data)
 	return nil
 }
@@ -138,18 +141,18 @@ func (m *MockTunnel) ShutdownContainer(ctx context.Context, nodeID, podKey strin
 	m.Lock()
 	defer m.Unlock()
 	containerMap := m.bizStatusStorage[nodeID]
-	key := m.GetContainerUniqueKey(podKey, container)
+	key := utils.GetBizUniqueKey(container)
 	data := containerMap[key]
 	delete(containerMap, key)
 	m.bizStatusStorage[nodeID] = containerMap
-	data.State = string(model.BizStateDeactivated)
+	data.State = string(model.BizStateStopped)
 	data.ChangeTime = time.Now()
 	m.OnSingleBizStatusArrived(nodeID, data)
 	return nil
 }
 
-func (m *MockTunnel) GetContainerUniqueKey(podKey string, container *corev1.Container) string {
-	return podKey + container.Name
+func (m *MockTunnel) GetBizUniqueKey(container *corev1.Container) string {
+	return utils.GetBizUniqueKey(container)
 }
 
 func convertContainerMap2ContainerList(containerMap map[string]model.BizStatusData) []model.BizStatusData {

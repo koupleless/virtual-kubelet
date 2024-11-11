@@ -59,7 +59,7 @@ func TestSyncAllContainerInfo(t *testing.T) {
 	}
 	provider.SyncAllContainerInfo(context.TODO(), []model.BizStatusData{
 		{
-			Key: tl.GetContainerUniqueKey(utils.GetPodKey(pod), &corev1.Container{
+			Key: tl.GetBizUniqueKey(utils.GetPodKey(pod), &corev1.Container{
 				Name: "test-container",
 			}),
 		},

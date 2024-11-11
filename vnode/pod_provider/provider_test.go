@@ -2,7 +2,6 @@ package pod_provider
 
 import (
 	"context"
-	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/tunnel"
 	"github.com/stretchr/testify/assert"
@@ -59,7 +58,7 @@ func TestSyncAllContainerInfo(t *testing.T) {
 	}
 	provider.SyncAllContainerInfo(context.TODO(), []model.BizStatusData{
 		{
-			Key: tl.GetBizUniqueKey(utils.GetPodKey(pod), &corev1.Container{
+			Key: tl.GetBizUniqueKey(&corev1.Container{
 				Name: "test-container",
 			}),
 		},

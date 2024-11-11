@@ -91,6 +91,7 @@ func (b *VPodProvider) updatePodStatusToKubernetes(ctx context.Context, pod *cor
 
 	podCopy := pod.DeepCopy()
 	podStatus.DeepCopyInto(&podCopy.Status)
+	b.runtimeInfoStore.PutPod(podCopy, b.tunnel)
 	b.notify(podCopy)
 }
 

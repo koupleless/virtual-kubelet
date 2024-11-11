@@ -48,7 +48,7 @@ func (m *MockTunnel) DeleteNode(nodeID string) {
 	delete(m.nodeStorage, nodeID)
 }
 
-func (m *MockTunnel) PutContainer(ctx context.Context, nodeID, containerKey string, data model.BizStatusData) {
+func (m *MockTunnel) UpdateBizStatus(ctx context.Context, nodeID, containerKey string, data model.BizStatusData) {
 	m.Lock()
 	defer m.Unlock()
 

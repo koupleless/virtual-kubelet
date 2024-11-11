@@ -30,7 +30,7 @@ import (
 type RuntimeInfoStore struct {
 	sync.RWMutex // This mutex is used for thread-safe access to the store.
 
-	podKeyToPod map[string]*corev1.Pod // Maps pod keys to their corresponding pods.
+	podKeyToPod map[string]*corev1.Pod // Maps pod keys to their corresponding pods from provider
 }
 
 func NewRuntimeInfoStore() *RuntimeInfoStore {

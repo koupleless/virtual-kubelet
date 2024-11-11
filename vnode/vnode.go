@@ -267,21 +267,21 @@ func (n *VNode) newLease(holderIdentity string) *coordinationv1.Lease {
 // SyncNodeStatus syncs the status of the node
 func (n *VNode) SyncNodeStatus(data model.NodeStatusData) {
 	if n.nodeProvider != nil {
-		go n.nodeProvider.Notify(data)
+		n.nodeProvider.Notify(data)
 	}
 }
 
 // SyncAllContainerInfo syncs the status of all containers
 func (n *VNode) SyncAllContainerInfo(ctx context.Context, infos []model.BizStatusData) {
 	if n.podProvider != nil {
-		go n.podProvider.SyncAllContainerInfo(ctx, infos)
+		n.podProvider.SyncAllContainerInfo(ctx, infos)
 	}
 }
 
 // SyncOneContainerInfo syncs the status of a single container
 func (n *VNode) SyncOneContainerInfo(ctx context.Context, bizStatusData model.BizStatusData) {
 	if n.podProvider != nil {
-		go n.podProvider.SyncOneContainerInfo(ctx, bizStatusData)
+		n.podProvider.SyncOneContainerInfo(ctx, bizStatusData)
 	}
 }
 

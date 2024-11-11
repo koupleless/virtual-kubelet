@@ -118,7 +118,7 @@ func (b *VPodProvider) SyncAllContainerInfo(ctx context.Context, bizStatusDatas 
 		// Iterate through each container in the pod
 		for _, container := range pod.Spec.Containers {
 			// Get the unique key of the container
-			bizKey := utils.GetContainerUniqueKey(&container)
+			bizKey := utils.GetBizUniqueKey(&container)
 			// Check if container information exists for the container key
 			bizStatusData, has := bizKeyToBizStatusData[bizKey]
 			// If container information does not exist, create a new deactivated instance
@@ -236,7 +236,7 @@ func (b *VPodProvider) CreatePod(ctx context.Context, pod *corev1.Pod) error {
 	// update the baseline info so the async handle logic can see them first
 	podCopy := pod.DeepCopy()
 	b.runtimeInfoStore.PutPod(podCopy, b.tunnel)
-	go b.handleContainerStart(ctx, podCopy, podCopy.Spec.Containers)
+	b.handleContainerStart(ctx, podCopy, podCopy.Spec.Containers)
 
 	return nil
 }
@@ -260,56 +260,59 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 	for _, container := range newPod.Spec.Containers {
 		newContainerMap[container.Name] = container
 	}
-	stopContainers := make([]corev1.Container, 0)
+	shouldUpdateContainers := make([]corev1.Container, 0)
 	if oldPod != nil {
 		// stop first
-		containersShouldStop := make([]corev1.Container, 0)
-		for _, container := range oldPod.Spec.Containers {
+		for _, oldContainer := range oldPod.Spec.Containers {
 			// check need to stop
-			needStop := true
-			newContainer, ok := newContainerMap[container.Name]
-			if ok {
-				needStop = !cmp.Equal(newContainer, container)
-			}
-			if needStop {
+			if newContainer, ok := newContainerMap[oldContainer.Name]; ok && !cmp.Equal(newContainer, oldContainer) {
 				// sending to stop
-				containersShouldStop = append(containersShouldStop, container)
+				shouldUpdateContainers = append(shouldUpdateContainers, oldContainer)
 			} else {
 				// delete from new containers
-				delete(newContainerMap, container.Name)
+				delete(newContainerMap, oldContainer.Name)
 			}
 		}
-		go b.handleContainerShutdown(ctx, oldPod, containersShouldStop)
+		b.handleContainerShutdown(ctx, oldPod, shouldUpdateContainers)
+	}
+
+	if len(shouldUpdateContainers) == 0 {
+		// no need to stop, just do nothing
+		return nil
 	}
 
 	b.runtimeInfoStore.PutPod(newPod.DeepCopy(), b.tunnel)
 
 	// only start new containers and changed containers
 	startNewContainer := func() {
-		containersShouldStart := make([]corev1.Container, 0)
-
-		for _, container := range newPod.Spec.Containers {
-			_, has := newContainerMap[container.Name]
-			if has {
-				containersShouldStart = append(containersShouldStart, container)
-			}
-		}
-		go b.handleContainerStart(ctx, newPod, containersShouldStart)
+		b.handleContainerStart(ctx, newPod, shouldUpdateContainers)
 	}
 
-	go tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodUpdate, pod.Labels, model.CodeContainerStartTimeout, func() bool {
+	tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodUpdate, pod.Labels, model.CodeContainerStartTimeout, func() bool {
+		podFromKubernetes := &corev1.Pod{}
+		err := b.client.Get(ctx, client.ObjectKey{
+			Namespace: pod.Namespace,
+			Name:      pod.Name,
+		}, podFromKubernetes)
+		if err != nil {
+			logger.WithError(err).Error("Failed to get pod from k8s")
+			return false
+		}
+
 		nameToContainerStatus := make(map[string]corev1.ContainerStatus)
-		for _, containerStatus := range pod.Status.ContainerStatuses {
+		for _, containerStatus := range podFromKubernetes.Status.ContainerStatuses {
 			nameToContainerStatus[containerStatus.Name] = containerStatus
 		}
 
-		for _, oldContainer := range stopContainers {
-			if status, has := nameToContainerStatus[oldContainer.Name]; has && status.State.Terminated == nil {
+		for _, shouldUpdateContainer := range shouldUpdateContainers {
+			if status, has := nameToContainerStatus[shouldUpdateContainer.Name]; has && status.State.Terminated == nil {
 				return false
 			}
 		}
 		return true
-	}, time.Minute, time.Second, startNewContainer, startNewContainer)
+	}, time.Minute, time.Second, startNewContainer, func() {
+		logger.Warn("stop old containers timeout, not start new containers")
+	})
 
 	return nil
 }
@@ -333,7 +336,7 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 	// delete from curr provider
 	b.runtimeInfoStore.DeletePod(podKey, b.tunnel)
 
-	go b.handleContainerShutdown(ctx, pod, pod.Spec.Containers)
+	b.handleContainerShutdown(ctx, pod, pod.Spec.Containers)
 
 	if pod.DeletionGracePeriodSeconds == nil || *pod.DeletionGracePeriodSeconds == 0 {
 		// force delete, just return, skip check and delete
@@ -379,35 +382,49 @@ func (b *VPodProvider) GetPod(_ context.Context, namespace, name string) (*corev
 // GetPodStatus is a method of VPodProvider that gets the status of a pod
 // This will be called repeatedly by virtual kubelet framework to get the defaultPod status
 // we should query the actual runtime info and convert them in to V1PodStatus accordingly
-func (b *VPodProvider) GetPodStatus(ctx context.Context, pod *corev1.Pod, bizState model.BizStatusData) (*corev1.PodStatus, error) {
+func (b *VPodProvider) GetPodStatus(ctx context.Context, pod *corev1.Pod, bizStatus model.BizStatusData) (*corev1.PodStatus, error) {
 	podStatus := &corev1.PodStatus{}
 	// check pod status
 	bizJarContainerCount := 0
 	readyBizJarContainerCount := 0
 	terminatedBizJarContainerCount := 0
 	notReadyBizJarContainerCount := 0
+	notInitedBizJarContainerCount := 0
 
 	podStatus.PodIP = b.localIP
 	podStatus.PodIPs = []corev1.PodIP{{IP: b.localIP}}
 	podStatus.ContainerStatuses = make([]corev1.ContainerStatus, 0)
 
+	nameToContainerStatus := make(map[string]*corev1.ContainerStatus)
+	for _, cs := range pod.Status.ContainerStatuses {
+		nameToContainerStatus[cs.Name] = &cs
+	}
+
+	// TODO: check all containers status only biz jar container
 	for _, container := range pod.Spec.Containers {
 		// only check biz jar container
 		if !strings.Contains(container.Image, ".jar") {
 			continue
 		}
-		containerStatus := utils.ConvertBizStatusToContainerStatus(container, &bizState)
+		containerStatus, err := utils.ConvertBizStatusToContainerStatus(&container, nameToContainerStatus[container.Name], &bizStatus)
+		if err != nil || containerStatus == nil {
+			log.G(ctx).Errorf("can't convert biz status to container status for container %s", utils.GetContainerKey(utils.GetPodKey(pod), container.Name))
+			return nil, err
+		} else {
+			podStatus.ContainerStatuses = append(podStatus.ContainerStatuses, *containerStatus)
+		}
 
 		bizJarContainerCount++
 		if containerStatus.Ready {
 			readyBizJarContainerCount++
 		} else if containerStatus.State.Terminated != nil {
 			terminatedBizJarContainerCount++
-		} else {
+		} else if containerStatus.State.Waiting != nil || containerStatus.State.Running != nil {
 			notReadyBizJarContainerCount++
+		} else {
+			// not init yet
+			notInitedBizJarContainerCount++
 		}
-
-		podStatus.ContainerStatuses = append(podStatus.ContainerStatuses, containerStatus)
 	}
 
 	podStatus.Phase = corev1.PodPending
@@ -428,6 +445,20 @@ func (b *VPodProvider) GetPodStatus(ctx context.Context, pod *corev1.Pod, bizSta
 			},
 		}
 		return podStatus, nil
+	} else if notInitedBizJarContainerCount == bizJarContainerCount {
+		podStatus.Phase = corev1.PodPending
+		podStatus.Conditions = []corev1.PodCondition{
+			{
+				Type:          "Ready",
+				Status:        corev1.ConditionFalse,
+				LastProbeTime: metav1.NewTime(time.Now()),
+			},
+			{
+				Type:          "ContainersReady",
+				Status:        corev1.ConditionFalse,
+				LastProbeTime: metav1.NewTime(time.Now()),
+			},
+		}
 	} else if bizJarContainerCount == readyBizJarContainerCount {
 		// all biz jar container is ready
 		podStatus.Phase = corev1.PodRunning
@@ -443,7 +474,7 @@ func (b *VPodProvider) GetPodStatus(ctx context.Context, pod *corev1.Pod, bizSta
 				LastProbeTime: metav1.NewTime(time.Now()),
 			},
 		}
-	} else if notReadyBizJarContainerCount > 0 {
+	} else if notReadyBizJarContainerCount > 0 || (readyBizJarContainerCount > 0 && readyBizJarContainerCount < bizJarContainerCount) {
 		podStatus.Phase = corev1.PodRunning
 		podStatus.Conditions = []corev1.PodCondition{
 			{

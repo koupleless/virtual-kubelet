@@ -159,10 +159,22 @@ func ExtractNodeIDFromNodeName(nodeName string) string {
 	return strings.Join(split[1:len(split)-1], ".")
 }
 
-// ConvertBizStatusToContainerStatus converts tunnel container status to Kubernetes container status.
-func ConvertBizStatusToContainerStatus(container corev1.Container, data *model.BizStatusData) corev1.ContainerStatus {
+func CreateNewContainerStatus(container *corev1.Container, data *model.BizStatusData) *corev1.ContainerStatus {
+	if data == nil {
+		started := false
+		return &corev1.ContainerStatus{
+			Name:        container.Name,
+			ContainerID: container.Name,
+			State:       corev1.ContainerState{},
+			Ready:       started,
+			Started:     &started,
+			Image:       container.Image,
+			ImageID:     container.Image,
+		}
+	}
+
 	// Determine if the container has started based on the data state
-	started := data != nil && strings.EqualFold(data.State, string(model.BizStateActivated))
+	started := strings.EqualFold(data.State, string(model.BizStateActivated))
 
 	// Initialize the return value with common fields
 	ret := corev1.ContainerStatus{
@@ -175,37 +187,31 @@ func ConvertBizStatusToContainerStatus(container corev1.Container, data *model.B
 		ImageID:     container.Image,
 	}
 
-	// Handle the case where data is nil, indicating the container is pending
-	// no biz info yet
-	if data == nil || strings.EqualFold(data.State, string(model.BizStateUnResolved)) {
+	if strings.EqualFold(data.State, string(model.BizStateUnResolved)) {
+		// Handle the case where data is nil, indicating the container is pending
+		// no biz info yet
 		ret.State = corev1.ContainerState{}
-		return ret
-	}
-
-	// Handle the case where the container is in the resolved state, indicating it's starting
-	if strings.EqualFold(data.State, string(model.BizStateResolved)) ||
+		return &ret
+	} else if strings.EqualFold(data.State, string(model.BizStateResolved)) ||
 		strings.EqualFold(data.State, string(model.BizStateBroken)) ||
 		strings.EqualFold(data.State, string(model.BizStateDeactivated)) {
+		// Handle the case where the container is in the resolved state, indicating it's starting
 		ret.State.Waiting = &corev1.ContainerStateWaiting{
 			Reason:  data.Reason,
 			Message: data.Message,
 			// Note: This state indicates the container is in the process of starting
 		}
-		return ret
-	}
-
-	// Handle the case where the container is in the activated state, indicating it's running
-	if strings.EqualFold(data.State, string(model.BizStateActivated)) {
+		return &ret
+	} else if strings.EqualFold(data.State, string(model.BizStateActivated)) {
+		// Handle the case where the container is in the activated state, indicating it's running
 		ret.State.Running = &corev1.ContainerStateRunning{
 			StartedAt: metav1.Time{
 				Time: data.ChangeTime,
 			},
 			// Note: This state indicates the container is currently running
 		}
-	}
-
-	// Handle the case where the container is in the deactivated state, indicating it's terminated
-	if strings.EqualFold(data.State, string(model.BizStateStopped)) {
+	} else if strings.EqualFold(data.State, string(model.BizStateStopped)) {
+		// Handle the case where the container is in the deactivated state, indicating it's terminated
 		ret.State.Terminated = &corev1.ContainerStateTerminated{
 			ExitCode: 1,
 			Reason:   data.Reason,
@@ -220,7 +226,43 @@ func ConvertBizStatusToContainerStatus(container corev1.Container, data *model.B
 			// Note: This state indicates the container has been terminated
 		}
 	}
-	return ret
+
+	return &ret
+}
+
+// ConvertBizStatusToContainerStatus converts tunnel container status to Kubernetes container status.
+func ConvertBizStatusToContainerStatus(container *corev1.Container, containerStatus *corev1.ContainerStatus, data *model.BizStatusData) (*corev1.ContainerStatus, error) {
+	// this may be a little complex to handle the case that parameters is not nil or for same container name
+	if containerStatus == nil {
+		if data == nil || (container.Name != data.Name) {
+			started := false
+			return &corev1.ContainerStatus{
+				Name:        container.Name,
+				ContainerID: container.Name,
+				State:       corev1.ContainerState{},
+				Ready:       started,
+				Started:     &started,
+				Image:       container.Image,
+				ImageID:     container.Image,
+			}, nil
+		}
+	} else if data == nil {
+		// reuse the old status, cause the new data is nil
+		if containerStatus.Name == container.Name {
+			return containerStatus, nil
+		} else {
+			// can't handle this case
+			return nil, fmt.Errorf("convert biz status to container status but container name mismatch: %s != %s", containerStatus.Name, container.Name)
+		}
+	} else if container.Name != data.Name {
+		// reuse the old status, cause the new data is not for this container
+		if containerStatus.Name == container.Name {
+			return containerStatus, nil
+		} else {
+			return nil, fmt.Errorf("convert biz status to container status but container name mismatch: %s != %s", container.Name, data.Name)
+		}
+	}
+	return CreateNewContainerStatus(container, data), nil
 }
 
 // SplitMetaNamespaceKey splits a key into namespace and name.
@@ -255,7 +297,7 @@ func getBizIdentity(bizName, bizVersion string) string {
 	return bizName + ":" + bizVersion
 }
 
-// GetContainerUniqueKey returns a unique key for the container
-func GetContainerUniqueKey(container *corev1.Container) string {
+// GetBizUniqueKey returns a unique key for the container
+func GetBizUniqueKey(container *corev1.Container) string {
 	return getBizIdentity(container.Name, getBizVersionFromContainer(container))
 }

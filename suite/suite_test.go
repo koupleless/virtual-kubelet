@@ -164,12 +164,24 @@ func prepareBasicPod(name, namespace, nodeName string) v1.Pod {
 			NodeName: nodeName,
 			Containers: []v1.Container{
 				{
-					Name:  "suite-container",
-					Image: "suite-image",
+					Name:  "suite-biz1",
+					Image: "suite-biz1.jar",
+					Env: []v1.EnvVar{
+						{
+							Name:  "BIZ_VERSION",
+							Value: "1.0.0",
+						},
+					},
 				},
 				{
-					Name:  "suite-container-2",
-					Image: "suite-image-2",
+					Name:  "suite-biz2",
+					Image: "suite-biz2.jar",
+					Env: []v1.EnvVar{
+						{
+							Name:  "BIZ_VERSION",
+							Value: "1.0.0",
+						},
+					},
 				},
 			},
 			Tolerations: []v1.Toleration{

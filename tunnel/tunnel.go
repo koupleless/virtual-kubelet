@@ -52,6 +52,6 @@ type Tunnel interface {
 	// ShutdownContainer is the func calls for vnode to shut down a container , you need to start to shut down container and call OnShutdownContainerResponseArrived when shut down process complete with a response
 	ShutdownContainer(ctx context.Context, nodeID, podKey string, container *v1.Container) error
 
-	// GetContainerUniqueKey is the func returns a unique key of a container in a pod, vnode will use this unique key to find target Container status
-	GetContainerUniqueKey(podKey string, container *v1.Container) string
+	// GetBizUniqueKey is the func returns a unique key of a container in a pod, vnode will use this unique key to find target Container status
+	GetBizUniqueKey(container *v1.Container) string
 }

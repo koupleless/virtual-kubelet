@@ -160,18 +160,18 @@ func TestExtractNodeIDFromNodeName(t *testing.T) {
 }
 
 func TestConvertBizStatusToContainerStatus_NoData(t *testing.T) {
-	status := ConvertBizStatusToContainerStatus(corev1.Container{
+	status := ConvertBizStatusToContainerStatus(&corev1.Container{
 		Name:  "suite",
 		Image: "test_img",
-	}, nil)
+	}, &corev1.ContainerStatus{}, nil)
 	assert.Equal(t, status.State, corev1.ContainerState{})
 }
 
 func TestConvertBizStatusToContainerStatus_RESOLVED(t *testing.T) {
-	status := ConvertBizStatusToContainerStatus(corev1.Container{
+	status := ConvertBizStatusToContainerStatus(&corev1.Container{
 		Name:  "suite",
 		Image: "test_img",
-	}, &model.BizStatusData{
+	}, nil, &model.BizStatusData{
 		Key:        "test_key",
 		Name:       "suite",
 		PodKey:     "pod_key",
@@ -186,10 +186,10 @@ func TestConvertBizStatusToContainerStatus_RESOLVED(t *testing.T) {
 }
 
 func TestConvertBizStatusToContainerStatus_ACTIVATED(t *testing.T) {
-	status := ConvertBizStatusToContainerStatus(corev1.Container{
+	status := ConvertBizStatusToContainerStatus(&corev1.Container{
 		Name:  "suite",
 		Image: "test_img",
-	}, &model.BizStatusData{
+	}, nil, &model.BizStatusData{
 		Key:        "test_key",
 		Name:       "suite",
 		PodKey:     "pod_key",
@@ -200,10 +200,10 @@ func TestConvertBizStatusToContainerStatus_ACTIVATED(t *testing.T) {
 }
 
 func TestConvertBizStatusToContainerStatus_DEACTIVED(t *testing.T) {
-	status := ConvertBizStatusToContainerStatus(corev1.Container{
+	status := ConvertBizStatusToContainerStatus(&corev1.Container{
 		Name:  "suite",
 		Image: "test_img",
-	}, &model.BizStatusData{
+	}, nil, &model.BizStatusData{
 		Key:        "test_key",
 		Name:       "suite",
 		PodKey:     "pod_key",

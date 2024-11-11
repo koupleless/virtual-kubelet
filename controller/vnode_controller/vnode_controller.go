@@ -376,14 +376,21 @@ func (brc *VNodeController) onAllBizStatusArrived(nodeID string, bizStatusDatas 
 		for _, pod := range pods {
 			for _, container := range pod.Spec.Containers {
 				if strings.Contains(container.Image, ".jar") {
-					bizKeyToPodKey[utils.GetContainerUniqueKey(&container)] = utils.GetPodKey(pod)
+					bizKeyToPodKey[utils.GetBizUniqueKey(&container)] = utils.GetPodKey(pod)
 				}
 			}
 		}
 
+		// if bizStatusData.PodKey is empty, try to find it from bizKeyToPodKey
+		bizStatusDatasWithPodKey := make([]model.BizStatusData, 0, len(bizStatusDatas))
 		for i, _ := range bizStatusDatas {
-			if podKey, ok := bizKeyToPodKey[bizStatusDatas[i].Key]; ok {
+			if podKey, ok := bizKeyToPodKey[bizStatusDatas[i].Key]; ok && bizStatusDatas[i].PodKey == "" {
 				bizStatusDatas[i].PodKey = podKey
+			}
+			if bizStatusDatas[i].PodKey != "" {
+				bizStatusDatasWithPodKey = append(bizStatusDatasWithPodKey, bizStatusDatas[i])
+			} else {
+				log.G(context.Background()).Infof("biz container %s in k8s not found, skip sync status.", bizStatusDatas[i].Key)
 			}
 		}
 
@@ -407,13 +414,18 @@ func (brc *VNodeController) onSingleBizStatusArrived(nodeID string, containerSta
 		for _, pod := range pods {
 			for _, container := range pod.Spec.Containers {
 				if strings.Contains(container.Image, ".jar") {
-					bizKeyToPodKey[utils.GetContainerUniqueKey(&container)] = utils.GetPodKey(pod)
+					bizKeyToPodKey[utils.GetBizUniqueKey(&container)] = utils.GetPodKey(pod)
 				}
 			}
 		}
 
-		if podKey, ok := bizKeyToPodKey[containerStatusData.Key]; ok {
+		// if containerStatusData.PodKey is empty, try to find it from bizKeyToPodKey
+		if podKey, ok := bizKeyToPodKey[containerStatusData.Key]; ok && containerStatusData.PodKey == "" {
 			containerStatusData.PodKey = podKey
+		}
+		if containerStatusData.PodKey == "" {
+			log.G(context.Background()).Infof("biz container %s in k8s not found, skip sync status.", containerStatusData.Key)
+			return
 		}
 
 		brc.runtimeInfoStore.NodeMsgArrived(nodeID)

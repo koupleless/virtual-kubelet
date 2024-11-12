@@ -16,6 +16,7 @@ package pod_provider
 
 import (
 	"context"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"sort"
 	"strings"
 	"time"
@@ -312,7 +313,7 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 		}
 		return true
 	}, time.Minute, time.Second, startNewContainer, func() {
-		logger.Warn("stop old containers timeout, not start new containers")
+		logger.Error("stop old containers timeout, not start new containers")
 	})
 
 	return nil
@@ -355,18 +356,33 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 		}
 	}
 
-	go tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodDelete, pod.Labels, model.CodeContainerStartTimeout, func() bool {
+	tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodDelete, pod.Labels, model.CodeContainerStartTimeout, func() bool {
+		podFromKubernetes := &corev1.Pod{}
+		err := b.client.Get(ctx, client.ObjectKey{
+			Namespace: pod.Namespace,
+			Name:      pod.Name,
+		}, podFromKubernetes)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return true
+			}
+			logger.WithError(err).Error("Failed to get pod from k8s")
+			return false
+		}
+
 		nameToContainerStatus := make(map[string]corev1.ContainerStatus)
-		for _, containerStatus := range pod.Status.ContainerStatuses {
+		for _, containerStatus := range podFromKubernetes.Status.ContainerStatuses {
 			nameToContainerStatus[containerStatus.Name] = containerStatus
 		}
-		for _, container := range pod.Spec.Containers {
+		for _, container := range podFromKubernetes.Spec.Containers {
 			if status, has := nameToContainerStatus[container.Name]; has && status.State.Terminated == nil {
 				return false
 			}
 		}
 		return true
-	}, time.Second*25, time.Second, deletePod, deletePod)
+	}, time.Second*25, time.Second, deletePod, func() {
+		logger.Error("failed to delete pod: timeout")
+	})
 
 	return nil
 }

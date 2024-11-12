@@ -111,7 +111,7 @@ func (m *MockTunnel) QueryAllBizStatusData(ctx context.Context, nodeID string) e
 	return nil
 }
 
-func (m *MockTunnel) StartContainer(ctx context.Context, nodeID, podKey string, container *corev1.Container) error {
+func (m *MockTunnel) StartBiz(ctx context.Context, nodeID, podKey string, container *corev1.Container) error {
 	m.Lock()
 	defer m.Unlock()
 	key := utils.GetBizUniqueKey(container)
@@ -137,7 +137,7 @@ func (m *MockTunnel) StartContainer(ctx context.Context, nodeID, podKey string, 
 	return nil
 }
 
-func (m *MockTunnel) ShutdownContainer(ctx context.Context, nodeID, podKey string, container *corev1.Container) error {
+func (m *MockTunnel) StopBiz(ctx context.Context, nodeID, podKey string, container *corev1.Container) error {
 	m.Lock()
 	defer m.Unlock()
 	containerMap := m.bizStatusStorage[nodeID]

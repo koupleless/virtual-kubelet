@@ -289,3 +289,30 @@ func getBizIdentity(bizName, bizVersion string) string {
 func GetBizUniqueKey(container *corev1.Container) string {
 	return getBizIdentity(container.Name, getBizVersionFromContainer(container))
 }
+
+func FillPodKey(pods []*corev1.Pod, bizStatusDatas []model.BizStatusData) []model.BizStatusData {
+	bizKeyToPodKey := make(map[string]string)
+	// 一个 vnode 上,  所有的 biz container name 是唯一的
+	for _, pod := range pods {
+		for _, container := range pod.Spec.Containers {
+			if strings.Contains(container.Image, ".jar") {
+				bizKeyToPodKey[GetBizUniqueKey(&container)] = GetPodKey(pod)
+			}
+		}
+	}
+
+	// if bizStatusData.PodKey is empty, try to find it from bizKeyToPodKey
+	bizStatusDatasWithPodKey := make([]model.BizStatusData, 0, len(bizStatusDatas))
+	for i, _ := range bizStatusDatas {
+		if podKey, ok := bizKeyToPodKey[bizStatusDatas[i].Key]; ok && bizStatusDatas[i].PodKey == "" {
+			bizStatusDatas[i].PodKey = podKey
+		}
+		if bizStatusDatas[i].PodKey != "" {
+			bizStatusDatasWithPodKey = append(bizStatusDatasWithPodKey, bizStatusDatas[i])
+		} else {
+			log.G(context.Background()).Infof("biz container %s in k8s not found, skip sync status.", bizStatusDatas[i].Key)
+		}
+	}
+
+	return bizStatusDatasWithPodKey
+}

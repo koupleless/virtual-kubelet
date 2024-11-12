@@ -265,3 +265,81 @@ func TestDefaultRateLimiter(t *testing.T) {
 	assert.Equal(t, DefaultRateLimiter(30), 90*time.Second)
 	assert.Equal(t, DefaultRateLimiter(100), 1000*time.Second)
 }
+
+func TestFillPodKey(t *testing.T) {
+	pods := []*corev1.Pod{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "ut-pod1",
+				Namespace: "ut-ns",
+			},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{
+					{
+						Name:  "ut-biz1",
+						Image: "ut-biz1-version1.jar",
+						Env: []corev1.EnvVar{
+							{
+								Name:  "BIZ_VERSION",
+								Value: "ut-biz1-version1",
+							},
+						},
+					},
+					{
+						Name:  "ut-biz2",
+						Image: "ut-biz2-version1.jar",
+						Env: []corev1.EnvVar{
+							{
+								Name:  "BIZ_VERSION",
+								Value: "ut-biz2-version1",
+							},
+						},
+					},
+				},
+			},
+		}, {
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "ut-pod2",
+				Namespace: "ut-ns",
+			},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{
+					{
+						Name:  "ut-biz1",
+						Image: "ut-biz1-version2.jar",
+						Env: []corev1.EnvVar{
+							{
+								Name:  "BIZ_VERSION",
+								Value: "ut-biz1-version2",
+							},
+						},
+					},
+					{
+						Name:  "ut-biz2",
+						Image: "ut-biz2-version2.jar",
+						Env: []corev1.EnvVar{
+							{
+								Name:  "BIZ_VERSION",
+								Value: "ut-biz2-version2",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	bizStatusDatas := []model.BizStatusData{
+		{
+			Key:  "ut-biz1:ut-biz1-version1",
+			Name: "ut-biz1",
+		}, {
+			Key:  "ut-biz2:ut-biz2-version2",
+			Name: "ut-biz2",
+		},
+	}
+
+	bizStatusDatasWithPodKey := FillPodKey(pods, bizStatusDatas)
+	assert.Equal(t, "ut-ns/ut-pod1", bizStatusDatasWithPodKey[0].PodKey)
+	assert.Equal(t, "ut-ns/ut-pod2", bizStatusDatasWithPodKey[1].PodKey)
+}

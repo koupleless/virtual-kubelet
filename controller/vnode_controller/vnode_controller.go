@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/koupleless/virtual-kubelet/common/log"
@@ -371,37 +370,16 @@ func (brc *VNodeController) onAllBizStatusArrived(nodeID string, bizStatusDatas 
 
 	if vNode.IsLeader() {
 		pods, _ := vNode.ListPodFromController()
-		bizKeyToPodKey := make(map[string]string)
-		// 一个 vnode 上,  所有的 biz container name 是唯一的
-		for _, pod := range pods {
-			for _, container := range pod.Spec.Containers {
-				if strings.Contains(container.Image, ".jar") {
-					bizKeyToPodKey[utils.GetBizUniqueKey(&container)] = utils.GetPodKey(pod)
-				}
-			}
-		}
-
-		// if bizStatusData.PodKey is empty, try to find it from bizKeyToPodKey
-		bizStatusDatasWithPodKey := make([]model.BizStatusData, 0, len(bizStatusDatas))
-		for i, _ := range bizStatusDatas {
-			if podKey, ok := bizKeyToPodKey[bizStatusDatas[i].Key]; ok && bizStatusDatas[i].PodKey == "" {
-				bizStatusDatas[i].PodKey = podKey
-			}
-			if bizStatusDatas[i].PodKey != "" {
-				bizStatusDatasWithPodKey = append(bizStatusDatasWithPodKey, bizStatusDatas[i])
-			} else {
-				log.G(context.Background()).Infof("biz container %s in k8s not found, skip sync status.", bizStatusDatas[i].Key)
-			}
-		}
+		bizStatusDatasWithPodKey := utils.FillPodKey(pods, bizStatusDatas)
 
 		brc.runtimeInfoStore.NodeMsgArrived(nodeID)
-		vNode.SyncAllContainerInfo(context.TODO(), bizStatusDatas)
+		vNode.SyncAllContainerInfo(context.TODO(), bizStatusDatasWithPodKey)
 	}
 }
 
 // onSingleBizStatusArrived is an event handler for when the status of a container in a node changes.
 // It updates the status of the container in the virtual node.
-func (brc *VNodeController) onSingleBizStatusArrived(nodeID string, containerStatusData model.BizStatusData) {
+func (brc *VNodeController) onSingleBizStatusArrived(nodeID string, bizStatusData model.BizStatusData) {
 	vNode := brc.runtimeInfoStore.GetVNode(nodeID)
 	if vNode == nil {
 		return
@@ -409,27 +387,15 @@ func (brc *VNodeController) onSingleBizStatusArrived(nodeID string, containerSta
 
 	if vNode.IsLeader() {
 		pods, _ := vNode.ListPodFromController()
-		bizKeyToPodKey := make(map[string]string)
-		// 一个 vnode 上,  所有的 biz container name 是唯一的
-		for _, pod := range pods {
-			for _, container := range pod.Spec.Containers {
-				if strings.Contains(container.Image, ".jar") {
-					bizKeyToPodKey[utils.GetBizUniqueKey(&container)] = utils.GetPodKey(pod)
-				}
-			}
-		}
+		bizStatusDatasWithPodKey := utils.FillPodKey(pods, []model.BizStatusData{bizStatusData})
 
-		// if containerStatusData.PodKey is empty, try to find it from bizKeyToPodKey
-		if podKey, ok := bizKeyToPodKey[containerStatusData.Key]; ok && containerStatusData.PodKey == "" {
-			containerStatusData.PodKey = podKey
-		}
-		if containerStatusData.PodKey == "" {
-			log.G(context.Background()).Infof("biz container %s in k8s not found, skip sync status.", containerStatusData.Key)
+		if len(bizStatusDatasWithPodKey) == 0 {
+			log.G(context.Background()).Infof("biz container %s in k8s not found, skip sync status.", bizStatusData.Key)
 			return
 		}
 
 		brc.runtimeInfoStore.NodeMsgArrived(nodeID)
-		vNode.SyncOneContainerInfo(context.TODO(), containerStatusData)
+		vNode.SyncOneContainerInfo(context.TODO(), bizStatusDatasWithPodKey[0])
 	}
 }
 

@@ -159,17 +159,40 @@ func ExtractNodeIDFromNodeName(nodeName string) string {
 	return strings.Join(split[1:len(split)-1], ".")
 }
 
-func CreateNewContainerStatus(container *corev1.Container, data *model.BizStatusData) *corev1.ContainerStatus {
+// ConvertBizStatusToContainerStatus converts tunnel container status to Kubernetes container status.
+func ConvertBizStatusToContainerStatus(container *corev1.Container, containerStatus *corev1.ContainerStatus, data *model.BizStatusData) (*corev1.ContainerStatus, error) {
+	// this may be a little complex to handle the case that parameters is not nil or for same container name
+	if containerStatus == nil {
+		if data == nil || (container.Name != data.Name) {
+			started := false
+			return &corev1.ContainerStatus{
+				Name:        container.Name,
+				ContainerID: container.Name,
+				State:       corev1.ContainerState{},
+				Ready:       started,
+				Started:     &started,
+				Image:       container.Image,
+				ImageID:     container.Image,
+			}, nil
+		}
+	}
+
 	if data == nil {
-		started := false
-		return &corev1.ContainerStatus{
-			Name:        container.Name,
-			ContainerID: container.Name,
-			State:       corev1.ContainerState{},
-			Ready:       started,
-			Started:     &started,
-			Image:       container.Image,
-			ImageID:     container.Image,
+		// reuse the old status, cause the new data is nil
+		if containerStatus.Name == container.Name {
+			return containerStatus, nil
+		} else {
+			// can't handle this case
+			return nil, fmt.Errorf("convert biz status to container status but container name mismatch: %s != %s", containerStatus.Name, container.Name)
+		}
+	}
+
+	if container.Name != data.Name {
+		// reuse the old status, cause the new data is not for this container
+		if containerStatus.Name == container.Name {
+			return containerStatus, nil
+		} else {
+			return nil, fmt.Errorf("convert biz status to container status but container name mismatch: %s != %s", container.Name, data.Name)
 		}
 	}
 
@@ -191,7 +214,7 @@ func CreateNewContainerStatus(container *corev1.Container, data *model.BizStatus
 		// Handle the case where data is nil, indicating the container is pending
 		// no biz info yet
 		ret.State = corev1.ContainerState{}
-		return &ret
+		return &ret, nil
 	} else if strings.EqualFold(data.State, string(model.BizStateResolved)) ||
 		strings.EqualFold(data.State, string(model.BizStateBroken)) ||
 		strings.EqualFold(data.State, string(model.BizStateDeactivated)) {
@@ -201,7 +224,7 @@ func CreateNewContainerStatus(container *corev1.Container, data *model.BizStatus
 			Message: data.Message,
 			// Note: This state indicates the container is in the process of starting
 		}
-		return &ret
+		return &ret, nil
 	} else if strings.EqualFold(data.State, string(model.BizStateActivated)) {
 		// Handle the case where the container is in the activated state, indicating it's running
 		ret.State.Running = &corev1.ContainerStateRunning{
@@ -227,42 +250,7 @@ func CreateNewContainerStatus(container *corev1.Container, data *model.BizStatus
 		}
 	}
 
-	return &ret
-}
-
-// ConvertBizStatusToContainerStatus converts tunnel container status to Kubernetes container status.
-func ConvertBizStatusToContainerStatus(container *corev1.Container, containerStatus *corev1.ContainerStatus, data *model.BizStatusData) (*corev1.ContainerStatus, error) {
-	// this may be a little complex to handle the case that parameters is not nil or for same container name
-	if containerStatus == nil {
-		if data == nil || (container.Name != data.Name) {
-			started := false
-			return &corev1.ContainerStatus{
-				Name:        container.Name,
-				ContainerID: container.Name,
-				State:       corev1.ContainerState{},
-				Ready:       started,
-				Started:     &started,
-				Image:       container.Image,
-				ImageID:     container.Image,
-			}, nil
-		}
-	} else if data == nil {
-		// reuse the old status, cause the new data is nil
-		if containerStatus.Name == container.Name {
-			return containerStatus, nil
-		} else {
-			// can't handle this case
-			return nil, fmt.Errorf("convert biz status to container status but container name mismatch: %s != %s", containerStatus.Name, container.Name)
-		}
-	} else if container.Name != data.Name {
-		// reuse the old status, cause the new data is not for this container
-		if containerStatus.Name == container.Name {
-			return containerStatus, nil
-		} else {
-			return nil, fmt.Errorf("convert biz status to container status but container name mismatch: %s != %s", container.Name, data.Name)
-		}
-	}
-	return CreateNewContainerStatus(container, data), nil
+	return &ret, nil
 }
 
 // SplitMetaNamespaceKey splits a key into namespace and name.

@@ -46,11 +46,11 @@ type Tunnel interface {
 	// QueryAllBizStatusData is the func call for vnode to fetch all containers status data , you need to fetch all containers status data and call OnAllBizStatusArrived when data arrived
 	QueryAllBizStatusData(ctx context.Context, nodeID string) error
 
-	// StartContainer is the func calls for vnode to start a container , you need to start container and call OnStartContainerResponseArrived when start complete with a response
-	StartContainer(ctx context.Context, nodeID, podKey string, container *v1.Container) error
+	// StartBiz is the func calls for vnode to start a biz instance, you need to start container and call OnStartBizResponseArrived when start complete with a response
+	StartBiz(ctx context.Context, nodeID, podKey string, container *v1.Container) error
 
-	// ShutdownContainer is the func calls for vnode to shut down a container , you need to start to shut down container and call OnShutdownContainerResponseArrived when shut down process complete with a response
-	ShutdownContainer(ctx context.Context, nodeID, podKey string, container *v1.Container) error
+	// StopBiz is the func calls for vnode to shut down a container , you need to start to shut down container and call OnShutdownContainerResponseArrived when shut down process complete with a response
+	StopBiz(ctx context.Context, nodeID, podKey string, container *v1.Container) error
 
 	// GetBizUniqueKey is the func returns a unique key of a container in a pod, vnode will use this unique key to find target Container status
 	GetBizUniqueKey(container *v1.Container) string

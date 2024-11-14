@@ -149,10 +149,10 @@ func TestCallBack_NoVnode(t *testing.T) {
 		&mockTunnel,
 	})
 
-	vc.onNodeStatusDataArrived("test", model.NodeStatusData{})
+	vc.onBaseStatusArrived("test", model.NodeStatusData{})
 	vc.onAllBizStatusArrived("test", nil)
 	vc.onSingleBizStatusArrived("test", model.BizStatusData{})
-	vc.onNodeStatusDataArrived("test", model.NodeStatusData{})
+	vc.onBaseStatusArrived("test", model.NodeStatusData{})
 }
 
 func TestPodHandler_NoVnodeOrNotLeader(t *testing.T) {

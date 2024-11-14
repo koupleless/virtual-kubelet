@@ -290,13 +290,13 @@ func GetBizUniqueKey(container *corev1.Container) string {
 	return getBizIdentity(container.Name, getBizVersionFromContainer(container))
 }
 
-func FillPodKey(pods []*corev1.Pod, bizStatusDatas []model.BizStatusData) []model.BizStatusData {
+func FillPodKey(pods []corev1.Pod, bizStatusDatas []model.BizStatusData) []model.BizStatusData {
 	bizKeyToPodKey := make(map[string]string)
 	// 一个 vnode 上,  所有的 biz container name 是唯一的
 	for _, pod := range pods {
 		for _, container := range pod.Spec.Containers {
 			if strings.Contains(container.Image, ".jar") {
-				bizKeyToPodKey[GetBizUniqueKey(&container)] = GetPodKey(pod)
+				bizKeyToPodKey[GetBizUniqueKey(&container)] = GetPodKey(&pod)
 			}
 		}
 	}

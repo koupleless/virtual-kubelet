@@ -267,7 +267,7 @@ func TestDefaultRateLimiter(t *testing.T) {
 }
 
 func TestFillPodKey(t *testing.T) {
-	pods := []*corev1.Pod{
+	pods := []corev1.Pod{
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "ut-pod1",

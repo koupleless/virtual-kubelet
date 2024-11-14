@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/types"
 	"time"
 
 	"github.com/koupleless/virtual-kubelet/common/log"
@@ -128,7 +130,7 @@ func (vNodeController *VNodeController) SetupWithManager(ctx context.Context, mg
 	podHandler := handler.TypedFuncs[*corev1.Pod, reconcile.Request]{
 		CreateFunc: func(ctx context.Context, e event.TypedCreateEvent[*corev1.Pod], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 			<-vNodeController.ready
-			vNodeController.podCreateHandler(ctx, e.Object)
+			vNodeController.podAddHandler(ctx, e.Object)
 		},
 		UpdateFunc: func(ctx context.Context, e event.TypedUpdateEvent[*corev1.Pod], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 			<-vNodeController.ready
@@ -326,8 +328,6 @@ func (vNodeController *VNodeController) discoverPreviousPods(ctx context.Context
 	for _, pod := range podList.Items {
 		// Generate a unique key for the pod.
 		key := utils.GetPodKey(&pod)
-		// Store the pod in the virtual node.
-		vNode.PodStore(key, &pod)
 		// Sync the pods from Kubernetes to the virtual node.
 		vNode.SyncPodsFromKubernetesEnqueue(ctx, key)
 	}
@@ -369,11 +369,12 @@ func (vNodeController *VNodeController) onAllBizStatusArrived(nodeID string, biz
 	}
 
 	if vNode.IsLeader() {
-		pods, _ := vNode.ListPodFromController()
+		ctx := context.Background()
+		pods, _ := vNodeController.listPodFromKube(ctx, nodeID)
 		bizStatusDatasWithPodKey := utils.FillPodKey(pods, bizStatusDatas)
 
 		vNodeController.runtimeInfoStore.NodeMsgArrived(nodeID)
-		vNode.SyncAllContainerInfo(context.TODO(), bizStatusDatasWithPodKey)
+		vNode.SyncAllContainerInfo(ctx, bizStatusDatasWithPodKey)
 	}
 }
 
@@ -386,11 +387,12 @@ func (vNodeController *VNodeController) onSingleBizStatusArrived(nodeID string, 
 	}
 
 	if vNode.IsLeader() {
-		pods, _ := vNode.ListPodFromController()
+		ctx := context.Background()
+		pods, _ := vNodeController.listPodFromKube(ctx, nodeID)
 		bizStatusDatasWithPodKey := utils.FillPodKey(pods, []model.BizStatusData{bizStatusData})
 
 		if len(bizStatusDatasWithPodKey) == 0 {
-			log.G(context.Background()).Infof("biz container %s in k8s not found, skip sync status.", bizStatusData.Key)
+			log.G(ctx).Infof("biz container %s in k8s not found, skip sync status.", bizStatusData.Key)
 			return
 		}
 
@@ -399,9 +401,9 @@ func (vNodeController *VNodeController) onSingleBizStatusArrived(nodeID string, 
 	}
 }
 
-// podCreateHandler is an event handler for when a new pod is created.
+// podAddHandler is an event handler for when a new pod is created.
 // It syncs the pod from Kubernetes to the virtual node.
-func (vNodeController *VNodeController) podCreateHandler(ctx context.Context, podFromKubernetes *corev1.Pod) {
+func (vNodeController *VNodeController) podAddHandler(ctx context.Context, podFromKubernetes *corev1.Pod) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -418,14 +420,14 @@ func (vNodeController *VNodeController) podCreateHandler(ctx context.Context, po
 		return
 	}
 
-	ctx, span := trace.StartSpan(ctx, "CreateFunc")
+	ctx, span := trace.StartSpan(ctx, "AddFunc")
 	defer span.End()
 
 	// At this point we know that something in .metadata or .spec has changed, so we must proceed to sync the pod.
 	key := utils.GetPodKey(podFromKubernetes)
 	ctx = span.WithField(ctx, "key", key)
-	vn.PodStore(key, podFromKubernetes)
 
+	vn.InitKnowPod(key)
 	vn.SyncPodsFromKubernetesEnqueue(ctx, key)
 }
 
@@ -436,13 +438,13 @@ func (vNodeController *VNodeController) podUpdateHandler(ctx context.Context, ol
 
 	nodeName := newPodFromKubernetes.Spec.NodeName
 	// check node name in local storage
-	vn := vNodeController.runtimeInfoStore.GetVNodeByNodeName(nodeName)
-	if vn == nil {
+	vNode := vNodeController.runtimeInfoStore.GetVNodeByNodeName(nodeName)
+	if vNode == nil {
 		// node not exist, invalid add req
 		return
 	}
 
-	if !vn.IsLeader() {
+	if !vNode.IsLeader() {
 		// not leader, just return
 		return
 	}
@@ -452,17 +454,10 @@ func (vNodeController *VNodeController) podUpdateHandler(ctx context.Context, ol
 	// At this point we know that something in .metadata or .spec has changed, so we must proceed to sync the pod.
 	key := utils.GetPodKey(newPodFromKubernetes)
 	ctx = span.WithField(ctx, "key", key)
-	obj, ok := vn.LoadPodFromController(key)
-	isNewPod := false
-	if !ok {
-		vn.PodStore(key, newPodFromKubernetes)
-		isNewPod = true
-	} else {
-		vn.CheckAndUpdatePod(ctx, key, obj, newPodFromKubernetes)
-	}
+	vNode.CheckAndUpdatePodStatus(ctx, key, newPodFromKubernetes)
 
-	if isNewPod || podShouldEnqueue(oldPodFromKubernetes, newPodFromKubernetes) {
-		vn.SyncPodsFromKubernetesEnqueue(ctx, key)
+	if podShouldEnqueue(oldPodFromKubernetes, newPodFromKubernetes) {
+		vNode.SyncPodsFromKubernetesEnqueue(ctx, key)
 	}
 }
 
@@ -473,13 +468,13 @@ func (vNodeController *VNodeController) podDeleteHandler(ctx context.Context, po
 
 	nodeName := podFromKubernetes.Spec.NodeName
 	// check node name in local storage
-	vn := vNodeController.runtimeInfoStore.GetVNodeByNodeName(nodeName)
-	if vn == nil {
+	vNode := vNodeController.runtimeInfoStore.GetVNodeByNodeName(nodeName)
+	if vNode == nil {
 		// node not exist, invalid add req
 		return
 	}
 
-	if !vn.IsLeader() {
+	if !vNode.IsLeader() {
 		// not leader, just return
 		return
 	}
@@ -489,10 +484,11 @@ func (vNodeController *VNodeController) podDeleteHandler(ctx context.Context, po
 	key := utils.GetPodKey(podFromKubernetes)
 
 	ctx = span.WithField(ctx, "key", key)
-	vn.SyncPodsFromKubernetesEnqueue(ctx, key)
+	vNode.DeleteKnownPod(key)
+	vNode.SyncPodsFromKubernetesEnqueue(ctx, key)
 	// If this pod was in the deletion queue, forget about it
 	key = fmt.Sprintf("%v/%v", key, podFromKubernetes.UID)
-	vn.DeletePodsFromKubernetesForget(ctx, key)
+	vNode.DeletePodsFromKubernetesForget(ctx, key)
 }
 
 // This function starts a new virtual node with the given node ID, initialization data, and tunnel.
@@ -682,4 +678,19 @@ func (vNodeController *VNodeController) wakeUpVNode(ctx context.Context, nodeID 
 	}
 	log.G(ctx).Info("vnode lease outdated, wake vnode up :", nodeID)
 	vNode.RetryLease()
+}
+
+// getPodFromKube loads a pod from the node's pod controller
+func (vNodeController *VNodeController) getPodFromKube(ctx context.Context, namespace, name string) (*corev1.Pod, error) {
+	pod := &corev1.Pod{}
+	err := vNodeController.cache.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, pod, &client.GetOptions{})
+	return pod, err
+}
+
+// ListPodFromKube list all pods for this node from the kubernetes
+func (vNodeController *VNodeController) listPodFromKube(ctx context.Context, nodeId string) ([]corev1.Pod, error) {
+	podList := &corev1.PodList{}
+	err := vNodeController.cache.List(ctx, podList, &client.ListOptions{FieldSelector: fields.SelectorFromSet(
+		fields.Set{"spec.nodeName": utils.FormatNodeName(nodeId, vNodeController.env)})})
+	return podList.Items, err
 }

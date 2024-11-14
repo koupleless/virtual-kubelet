@@ -45,7 +45,7 @@ type VPodProvider struct {
 	nodeID           string
 	localIP          string
 	client           client.Client
-	runtimeInfoStore *RuntimeInfoStore
+	runtimeInfoStore *RuntimeInfoStore // store the pod from provider
 
 	tunnel tunnel.Tunnel
 

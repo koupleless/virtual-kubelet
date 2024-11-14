@@ -18,8 +18,8 @@ type Node struct {
 
 type MockTunnel struct {
 	sync.Mutex
-	OnNodeDiscovered
-	OnNodeStatusDataArrived
+	OnBaseDiscovered
+	OnBaseStatusArrived
 	OnSingleBizStatusArrived
 	OnAllBizStatusArrived
 
@@ -38,7 +38,7 @@ func (m *MockTunnel) PutNode(ctx context.Context, nodeID string, node Node) {
 	defer m.Unlock()
 
 	m.nodeStorage[nodeID] = node
-	m.OnNodeDiscovered(nodeID, node.NodeInfo, m)
+	m.OnBaseDiscovered(nodeID, node.NodeInfo, m)
 }
 
 func (m *MockTunnel) DeleteNode(nodeID string) {
@@ -77,12 +77,12 @@ func (m *MockTunnel) Ready() bool {
 }
 
 func (m *MockTunnel) RegisterCallback(
-	discovered OnNodeDiscovered,
-	onNodeStatusDataArrived OnNodeStatusDataArrived,
+	discovered OnBaseDiscovered,
+	onNodeStatusDataArrived OnBaseStatusArrived,
 	onAllBizStatusArrived OnAllBizStatusArrived,
 	onSingleBizStatusArrived OnSingleBizStatusArrived) {
-	m.OnNodeStatusDataArrived = onNodeStatusDataArrived
-	m.OnNodeDiscovered = discovered
+	m.OnBaseStatusArrived = onNodeStatusDataArrived
+	m.OnBaseDiscovered = discovered
 	m.OnAllBizStatusArrived = onAllBizStatusArrived
 	m.OnSingleBizStatusArrived = onSingleBizStatusArrived
 }
@@ -98,7 +98,7 @@ func (m *MockTunnel) OnNodeStop(ctx context.Context, nodeID string) {
 func (m *MockTunnel) FetchHealthData(ctx context.Context, nodeID string) error {
 	data, has := m.nodeStorage[nodeID]
 	if has {
-		m.OnNodeStatusDataArrived(nodeID, data.NodeStatusData)
+		m.OnBaseStatusArrived(nodeID, data.NodeStatusData)
 	}
 	return nil
 }

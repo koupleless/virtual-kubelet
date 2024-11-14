@@ -6,11 +6,11 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// OnNodeDiscovered is the node discover callback, will start/stop a vnode depends on node state
-type OnNodeDiscovered func(string, model.NodeInfo, Tunnel)
+// OnBaseDiscovered is the node discover callback, will start/stop a vnode depends on node state
+type OnBaseDiscovered func(string, model.NodeInfo, Tunnel)
 
-// OnNodeStatusDataArrived is the node health data callback, will update vnode status to k8s
-type OnNodeStatusDataArrived func(string, model.NodeStatusData)
+// OnBaseStatusArrived is the node health data callback, will update vnode status to k8s
+type OnBaseStatusArrived func(string, model.NodeStatusData)
 
 // OnAllBizStatusArrived is the container status data callback, will update vpod status to k8s
 type OnAllBizStatusArrived func(string, []model.BizStatusData)
@@ -29,7 +29,7 @@ type Tunnel interface {
 	Ready() bool
 
 	// RegisterCallback is the init func of Tunnel, please complete callback register in this func
-	RegisterCallback(OnNodeDiscovered, OnNodeStatusDataArrived, OnAllBizStatusArrived, OnSingleBizStatusArrived)
+	RegisterCallback(OnBaseDiscovered, OnBaseStatusArrived, OnAllBizStatusArrived, OnSingleBizStatusArrived)
 
 	// OnNodeStart is the func call when a vnode start successfully, you can implement it on demand
 	OnNodeStart(ctx context.Context, nodeID string, initData model.NodeInfo)
@@ -40,7 +40,7 @@ type Tunnel interface {
 	// OnNodeNotReady is the func call when a vnode status turns to not ready, you can implement it on demand
 	OnNodeNotReady(ctx context.Context, info model.UnreachableNodeInfo)
 
-	// FetchHealthData is the func call for vnode to fetch health data , you need to fetch health data and call OnNodeStatusDataArrived when data arrived
+	// FetchHealthData is the func call for vnode to fetch health data , you need to fetch health data and call OnBaseStatusArrived when data arrived
 	FetchHealthData(ctx context.Context, nodeID string) error
 
 	// QueryAllBizStatusData is the func call for vnode to fetch all containers status data , you need to fetch all containers status data and call OnAllBizStatusArrived when data arrived

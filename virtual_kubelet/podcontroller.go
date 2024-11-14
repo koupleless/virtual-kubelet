@@ -295,28 +295,22 @@ func (pc *PodController) Err() error {
 	return pc.err
 }
 
-func (pc *PodController) StorePod(key string, pod *corev1.Pod) {
-	podCopy := pod.DeepCopy()
-	pc.knownPods.Store(key, &knownPod{
-		lastPodStatusReceivedFromProvider: podCopy,
-		lastPodStatusUpdateSkipped:        false,
-	})
+func (pc *PodController) InitKnownPod(key string) {
+	pc.knownPods.Store(key, &knownPod{})
 }
 
-func (pc *PodController) LoadPod(key string) (any, bool) {
-	return pc.knownPods.Load(key)
-}
-
-func (pc *PodController) ListPodFromKubernetes() ([]*corev1.Pod, bool) {
-	pods, _ := pc.provider.GetPods(context.TODO())
-	return pods, true
-}
-
-func (pc *PodController) DeletePod(key string) {
+func (pc *PodController) DeleteKnownPod(key string) {
 	pc.knownPods.Delete(key)
 }
 
-func (pc *PodController) CheckAndUpdatePod(ctx context.Context, key string, obj interface{}, newPod *corev1.Pod) {
+func (pc *PodController) CheckAndUpdatePodStatus(ctx context.Context, key string, newPod *corev1.Pod) {
+	obj, ok := pc.knownPods.Load(key)
+	if !ok {
+		// Pods are only ever *added* to knownPods in the above AddFunc, and removed
+		// in the below *DeleteFunc*
+		panic(fmt.Sprintf("Pod %s not found in known pods. This should never happen.", key))
+	}
+
 	kPod := obj.(*knownPod)
 	kPod.Lock()
 	if kPod.lastPodStatusUpdateSkipped &&
@@ -325,10 +319,13 @@ func (pc *PodController) CheckAndUpdatePod(ctx context.Context, key string, obj 
 			!cmp.Equal(newPod.Labels, kPod.lastPodStatusReceivedFromProvider.Labels) ||
 			!cmp.Equal(newPod.Finalizers, kPod.lastPodStatusReceivedFromProvider.Finalizers)) {
 
-		kPod.lastPodStatusReceivedFromProvider = newPod
+		// The last pod from the provider -> kube api server was skipped, but we see they no longer match.
+		// This means that the pod in API server was changed by someone else [this can be okay], but we skipped
+		// a status update on our side because we compared the status received from the provider to the status
+		// received from the k8s api server based on outdated information.
+		pc.syncPodStatusFromProvider.Enqueue(ctx, key)
 		// Reset this to avoid re-adding it continuously
 		kPod.lastPodStatusUpdateSkipped = false
-		pc.syncPodStatusFromProvider.Enqueue(ctx, key)
 	}
 	kPod.Unlock()
 }
@@ -400,10 +397,8 @@ func (pc *PodController) syncPodFromKubernetesHandler(ctx context.Context, key s
 			span.SetStatus(err)
 		}
 
-		pc.DeletePod(key)
-
+		pc.DeleteKnownPod(key)
 		return err
-
 	}
 
 	// At this point we know the Pod resource has either been created or updated (which includes being marked for deletion).

@@ -165,7 +165,7 @@ func TestPodHandler_NoVnodeOrNotLeader(t *testing.T) {
 
 	ctx := context.TODO()
 
-	vc.podCreateHandler(ctx, &corev1.Pod{
+	vc.podAddHandler(ctx, &corev1.Pod{
 		Spec: corev1.PodSpec{
 			NodeName: "vnode.test-node.env",
 		},
@@ -186,7 +186,7 @@ func TestPodHandler_NoVnodeOrNotLeader(t *testing.T) {
 	})
 
 	vc.runtimeInfoStore.PutVNode("test-node", &vnode.VNode{})
-	vc.podCreateHandler(ctx, &corev1.Pod{
+	vc.podAddHandler(ctx, &corev1.Pod{
 		Spec: corev1.PodSpec{
 			NodeName: "vnode.test-node.env",
 		},

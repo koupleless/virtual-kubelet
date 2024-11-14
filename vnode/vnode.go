@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"time"
 
 	"github.com/koupleless/virtual-kubelet/common/log"
@@ -29,6 +30,7 @@ type VNode struct {
 	nodeID        string        // Unique identifier of the node
 	env           string        // Environment of the node
 	client        client.Client // Kubernetes client
+	kubeCache     cache.Cache   // Kubernetes cache
 	tunnel.Tunnel               // Tunnel for communication with the virtual kubelet
 
 	nodeProvider *node_provider.VNodeProvider // Node provider for the virtual node
@@ -342,27 +344,17 @@ func (n *VNode) leaderChanged() {
 	}
 }
 
-// PodStore stores the pod in the node
-func (n *VNode) PodStore(key string, pod *corev1.Pod) {
+// InitKnowPod stores the pod in the node
+func (n *VNode) InitKnowPod(key string) {
 	if n.node != nil {
-		n.node.PodController().StorePod(key, pod)
+		n.node.PodController().InitKnownPod(key)
 	}
 }
 
-// LoadPodFromController loads a pod from the node's pod controller
-func (n *VNode) LoadPodFromController(key string) (any, bool) {
-	return n.node.PodController().LoadPod(key)
-}
-
-// ListPodFromController list all pods for this node from the kubernetes
-func (n *VNode) ListPodFromController() ([]*corev1.Pod, bool) {
-	return n.node.PodController().ListPodFromKubernetes()
-}
-
-// CheckAndUpdatePod checks and updates a pod in the node
-func (n *VNode) CheckAndUpdatePod(ctx context.Context, key string, obj interface{}, pod *corev1.Pod) {
+// CheckAndUpdatePodStatus checks and updates a pod in the node
+func (n *VNode) CheckAndUpdatePodStatus(ctx context.Context, key string, pod *corev1.Pod) {
 	if n.node != nil {
-		n.node.PodController().CheckAndUpdatePod(ctx, key, obj, pod)
+		n.node.PodController().CheckAndUpdatePodStatus(ctx, key, pod)
 	}
 }
 
@@ -380,10 +372,10 @@ func (n *VNode) DeletePodsFromKubernetesForget(ctx context.Context, key string) 
 	}
 }
 
-// DeletePod deletes a pod from the node
-func (n *VNode) DeletePod(key string) {
+// DeleteKnownPod deletes a pod from the node
+func (n *VNode) DeleteKnownPod(key string) {
 	if n.node != nil {
-		n.node.PodController().DeletePod(key)
+		n.node.PodController().DeleteKnownPod(key)
 	}
 }
 
@@ -448,6 +440,7 @@ func NewVNode(config *model.BuildVNodeConfig, t tunnel.Tunnel) (kn *VNode, err e
 	return &VNode{
 		nodeID:                config.NodeID,
 		client:                config.Client,
+		kubeCache:             config.KubeCache,
 		env:                   config.Env,
 		nodeProvider:          nodeProvider,
 		podProvider:           podProvider,

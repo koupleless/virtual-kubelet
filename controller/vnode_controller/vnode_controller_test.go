@@ -90,7 +90,7 @@ func TestDiscoverPreviousPods(t *testing.T) {
 	vn := &vnode.VNode{
 		Tunnel: &mockTunnel,
 	}
-	vc.runtimeInfoStore.PutVNode("test-node", vn)
+	vc.runtimeInfoStore.AddVNode("test-node", vn)
 	vc.discoverPreviousPods(context.TODO(), vn, &corev1.PodList{
 		Items: []corev1.Pod{
 			{
@@ -149,10 +149,10 @@ func TestCallBack_NoVnode(t *testing.T) {
 		&mockTunnel,
 	})
 
-	vc.onBaseStatusArrived("test", model.NodeStatusData{})
-	vc.onAllBizStatusArrived("test", nil)
-	vc.onSingleBizStatusArrived("test", model.BizStatusData{})
-	vc.onBaseStatusArrived("test", model.NodeStatusData{})
+	vc.OnBaseStatusArrived("test", model.NodeStatusData{})
+	vc.OnAllBizStatusArrived("test", nil)
+	vc.OnSingleBizStatusArrived("test", model.BizStatusData{})
+	vc.OnBaseStatusArrived("test", model.NodeStatusData{})
 }
 
 func TestPodHandler_NoVnodeOrNotLeader(t *testing.T) {
@@ -185,7 +185,7 @@ func TestPodHandler_NoVnodeOrNotLeader(t *testing.T) {
 		},
 	})
 
-	vc.runtimeInfoStore.PutVNode("test-node", &vnode.VNode{})
+	vc.runtimeInfoStore.AddVNode("test-node", &vnode.VNode{})
 	vc.podAddHandler(ctx, &corev1.Pod{
 		Spec: corev1.PodSpec{
 			NodeName: "vnode.test-node.env",
@@ -236,7 +236,7 @@ func TestDelayWithWorkload(t *testing.T) {
 	end := time.Now()
 	ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Millisecond*20)
 	cancelFunc()
-	vc.runtimeInfoStore.NodeRunning("test-node")
+	vc.runtimeInfoStore.NodeHeartbeatFromProviderArrived("test-node")
 	vc.runtimeInfoStore.PutNode("test-node")
 	vc.delayWithWorkload(ctx)
 	assert.True(t, end.Sub(now) < time.Millisecond*100)

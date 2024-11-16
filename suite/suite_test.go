@@ -29,7 +29,6 @@ import (
 var cfg *rest.Config
 var testEnv *envtest.Environment
 var k8sClient client.Client
-var tl tunnel.MockTunnel
 
 const (
 	clientID     = "suite-suite"
@@ -65,10 +64,6 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).ToNot(HaveOccurred())
 
-	tunnels := []tunnel.Tunnel{
-		&tl,
-	}
-
 	ctx := context.Background()
 
 	vnodeController, err := vnode_controller.NewVNodeController(&model.BuildVNodeControllerConfig{
@@ -76,12 +71,15 @@ var _ = BeforeSuite(func() {
 		Env:          env,
 		VPodIdentity: vPodIdentity,
 		IsCluster:    true,
-	}, tunnels)
+	})
 
 	err = vnodeController.SetupWithManager(ctx, k8sManager)
 
 	Expect(err).ToNot(HaveOccurred())
 
+	tunnels := []tunnel.Tunnel{
+		tunnel.NewMockTunnel(vnodeController),
+	}
 	for _, t := range tunnels {
 		err = t.Start(ctx, clientID, env)
 		if err != nil {

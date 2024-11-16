@@ -117,7 +117,7 @@ func NewVirtualKubeletNode(config model.BuildVNodeProviderConfig) *VNodeProvider
 }
 
 // BuildVirtualNode builds a virtual node based on the provided configuration.
-func (v *VNodeProvider) BuildVirtualNode(node *corev1.Node, tunnelKey string) {
+func (v *VNodeProvider) BuildVirtualNode(node *corev1.Node) {
 	config := *v.nodeConfig // Copy the node configuration.
 	// Set custom labels on the node.
 	node.Labels = v.nodeConfig.CustomLabels
@@ -130,7 +130,6 @@ func (v *VNodeProvider) BuildVirtualNode(node *corev1.Node, tunnelKey string) {
 	node.Labels[model.LabelKeyOfVNodeName] = config.Name
 	node.Labels[model.LabelKeyOfEnv] = config.Env
 	node.Labels[model.LabelKeyOfComponent] = model.ComponentVNode
-	node.Labels[model.LabelKeyOfVnodeTunnel] = tunnelKey
 
 	// Set custom annotations on the node.
 	node.Annotations = v.nodeConfig.CustomAnnotations
@@ -181,8 +180,8 @@ func (v *VNodeProvider) BuildVirtualNode(node *corev1.Node, tunnelKey string) {
 }
 
 // Register registers a node with the provider.
-func (v *VNodeProvider) Register(node *corev1.Node, tunnelKey string) error {
-	v.BuildVirtualNode(node, tunnelKey)
+func (v *VNodeProvider) Register(node *corev1.Node) error {
+	v.BuildVirtualNode(node)
 	v.Lock()
 	v.nodeInfo = node.DeepCopy()
 	v.Unlock()

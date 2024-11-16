@@ -15,20 +15,20 @@ func TestNewRuntimeInfoStore(t *testing.T) {
 
 func TestRuntimeInfoStore_PutBaseNode(t *testing.T) {
 	store := NewRuntimeInfoStore()
-	store.PutVNode("suite", &vnode.VNode{})
+	store.AddVNode("suite", &vnode.VNode{})
 	assert.Assert(t, len(store.nodeIDToVNode) == 1)
 }
 
 func TestRuntimeInfoStore_DeleteBaseNode(t *testing.T) {
 	store := NewRuntimeInfoStore()
-	store.PutVNode("suite", &vnode.VNode{})
+	store.AddVNode("suite", &vnode.VNode{})
 	store.DeleteVNode("suite")
 	assert.Assert(t, len(store.nodeIDToVNode) == 0)
 }
 
 func TestRuntimeInfoStore_GetBaseNode(t *testing.T) {
 	store := NewRuntimeInfoStore()
-	store.PutVNode("suite", &vnode.VNode{})
+	store.AddVNode("suite", &vnode.VNode{})
 	baseNode := store.GetVNode("suite")
 	assert.Assert(t, baseNode != nil)
 	store.DeleteVNode("suite")
@@ -38,8 +38,8 @@ func TestRuntimeInfoStore_GetBaseNode(t *testing.T) {
 
 func TestRuntimeInfoStore_GetBaseNodes(t *testing.T) {
 	store := NewRuntimeInfoStore()
-	store.PutVNode("suite", &vnode.VNode{})
-	store.PutVNode("test2", &vnode.VNode{})
+	store.AddVNode("suite", &vnode.VNode{})
+	store.AddVNode("test2", &vnode.VNode{})
 	nodes := store.GetVNodes()
 	assert.Assert(t, len(nodes) == 2)
 }
@@ -56,7 +56,7 @@ func TestRuntimeInfoStore_GetBaseNodeByNodeID(t *testing.T) {
 	store := NewRuntimeInfoStore()
 	node := store.GetVNodeByNodeName("suite")
 	assert.Assert(t, node == nil)
-	store.PutVNode("suite", &vnode.VNode{})
+	store.AddVNode("suite", &vnode.VNode{})
 	node = store.GetVNodeByNodeName(utils.FormatNodeName("suite", "suite"))
 	assert.Assert(t, node != nil)
 }
@@ -64,6 +64,6 @@ func TestRuntimeInfoStore_GetBaseNodeByNodeID(t *testing.T) {
 func TestRuntimeInfoStore_GetLeaseOutdatedVNodeName(t *testing.T) {
 	store := NewRuntimeInfoStore()
 	store.PutVNodeLeaseLatestUpdateTime("test", time.Now().Add(-time.Second*2))
-	nameList := store.GetLeaseOutdatedVNodeName(time.Second)
+	nameList := store.GetLeaseOutdatedVNodeIDs()
 	assert.Assert(t, len(nameList) == 1)
 }

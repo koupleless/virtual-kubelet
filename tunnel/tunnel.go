@@ -6,18 +6,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// OnBaseDiscovered is the node discover callback, will start/stop a vnode depends on node state
-type OnBaseDiscovered func(string, model.NodeInfo, Tunnel)
-
-// OnBaseStatusArrived is the node health data callback, will update vnode status to k8s
-type OnBaseStatusArrived func(string, model.NodeStatusData)
-
-// OnAllBizStatusArrived is the container status data callback, will update vpod status to k8s
-type OnAllBizStatusArrived func(string, []model.BizStatusData)
-
-// OnSingleBizStatusArrived is one container status data callback, will update container-vpod status to k8s
-type OnSingleBizStatusArrived func(string, model.BizStatusData)
-
 type Tunnel interface {
 	// Key is the identity of Tunnel, will set to node label for special usage
 	Key() string
@@ -29,7 +17,19 @@ type Tunnel interface {
 	Ready() bool
 
 	// RegisterCallback is the init func of Tunnel, please complete callback register in this func
-	RegisterCallback(OnBaseDiscovered, OnBaseStatusArrived, OnAllBizStatusArrived, OnSingleBizStatusArrived)
+	//RegisterCallback(OnBaseDiscovered, OnBaseStatusArrived, OnAllBizStatusArrived, OnSingleBizStatusArrived)
+
+	// OnBaseDiscovered is the node discover callback, will start/stop a vnode depends on node state
+	OnBaseDiscovered(string, model.NodeInfo, Tunnel)
+
+	// OnBaseStatusArrived is the node health data callback, will update vnode status to k8s
+	OnBaseStatusArrived(string, model.NodeStatusData)
+
+	// OnAllBizStatusArrived is the container status data callback, will update vpod status to k8s
+	OnAllBizStatusArrived(string, []model.BizStatusData)
+
+	// OnSingleBizStatusArrived is one container status data callback, will update container-vpod status to k8s
+	OnSingleBizStatusArrived(string, model.BizStatusData)
 
 	// OnNodeStart is the func call when a vnode start successfully, you can implement it on demand
 	OnNodeStart(ctx context.Context, nodeID string, initData model.NodeInfo)
@@ -38,7 +38,7 @@ type Tunnel interface {
 	OnNodeStop(ctx context.Context, nodeID string)
 
 	// OnNodeNotReady is the func call when a vnode status turns to not ready, you can implement it on demand
-	OnNodeNotReady(ctx context.Context, info model.UnreachableNodeInfo)
+	OnNodeNotReady(ctx context.Context, nodeID string)
 
 	// FetchHealthData is the func call for vnode to fetch health data , you need to fetch health data and call OnBaseStatusArrived when data arrived
 	FetchHealthData(ctx context.Context, nodeID string) error
@@ -54,4 +54,7 @@ type Tunnel interface {
 
 	// GetBizUniqueKey is the func returns a unique key of a container in a pod, vnode will use this unique key to find target Container status
 	GetBizUniqueKey(container *v1.Container) string
+
+	startBaseStatusHeartBeatTask(ctx context.Context)
+	startAllBizStatusHeartBeatTask(ctx context.Context)
 }

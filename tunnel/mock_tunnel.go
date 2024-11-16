@@ -2,7 +2,9 @@ package tunnel
 
 import (
 	"context"
+	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/common/utils"
+	"github.com/koupleless/virtual-kubelet/controller/vnode_controller"
 	"github.com/koupleless/virtual-kubelet/model"
 	corev1 "k8s.io/api/core/v1"
 	"sync"
@@ -18,18 +20,20 @@ type Node struct {
 
 type MockTunnel struct {
 	sync.Mutex
-	OnBaseDiscovered
-	OnBaseStatusArrived
-	OnSingleBizStatusArrived
-	OnAllBizStatusArrived
-
 	bizStatusStorage map[string]map[string]model.BizStatusData
 	nodeStorage      map[string]Node
 	NodeNotReady     map[string]bool
+	vNodeController  *vnode_controller.VNodeController
 }
 
-func (m *MockTunnel) OnNodeNotReady(ctx context.Context, info model.UnreachableNodeInfo) {
-	m.NodeNotReady[info.NodeID] = true
+func NewMockTunnel(vNodeController *vnode_controller.VNodeController) *MockTunnel {
+	return &MockTunnel{
+		vNodeController: vNodeController,
+	}
+}
+
+func (m *MockTunnel) OnNodeNotReady(ctx context.Context, nodeID string) {
+	m.NodeNotReady[nodeID] = true
 	return
 }
 
@@ -69,6 +73,8 @@ func (m *MockTunnel) Start(ctx context.Context, clientID string, env string) err
 	m.bizStatusStorage = map[string]map[string]model.BizStatusData{}
 	m.nodeStorage = map[string]Node{}
 	m.NodeNotReady = map[string]bool{}
+	m.startAllBizStatusHeartBeatTask(ctx)
+	m.startBaseStatusHeartBeatTask(ctx)
 	return nil
 }
 
@@ -76,15 +82,20 @@ func (m *MockTunnel) Ready() bool {
 	return true
 }
 
-func (m *MockTunnel) RegisterCallback(
-	discovered OnBaseDiscovered,
-	onNodeStatusDataArrived OnBaseStatusArrived,
-	onAllBizStatusArrived OnAllBizStatusArrived,
-	onSingleBizStatusArrived OnSingleBizStatusArrived) {
-	m.OnBaseStatusArrived = onNodeStatusDataArrived
-	m.OnBaseDiscovered = discovered
-	m.OnAllBizStatusArrived = onAllBizStatusArrived
-	m.OnSingleBizStatusArrived = onSingleBizStatusArrived
+func (m *MockTunnel) OnBaseStatusArrived(nodeId string, nodeStatus model.NodeStatusData) {
+	m.vNodeController.OnBaseStatusArrived(nodeId, nodeStatus)
+}
+
+func (m *MockTunnel) OnBaseDiscovered(nodeId string, nodeInfo model.NodeInfo, tunnel Tunnel) {
+	m.vNodeController.OnBaseDiscovered(nodeId, nodeInfo)
+}
+
+func (m *MockTunnel) OnAllBizStatusArrived(nodeID string, bizStatuses []model.BizStatusData) {
+	m.vNodeController.OnAllBizStatusArrived(nodeID, bizStatuses)
+}
+
+func (m *MockTunnel) OnSingleBizStatusArrived(nodeID string, bizStatus model.BizStatusData) {
+	m.vNodeController.OnSingleBizStatusArrived(nodeID, bizStatus)
 }
 
 func (m *MockTunnel) OnNodeStart(ctx context.Context, nodeID string, initData model.NodeInfo) {
@@ -153,6 +164,41 @@ func (m *MockTunnel) StopBiz(ctx context.Context, nodeID, podKey string, contain
 
 func (m *MockTunnel) GetBizUniqueKey(container *corev1.Container) string {
 	return utils.GetBizUniqueKey(container)
+}
+
+func (m *MockTunnel) startBaseStatusHeartBeatTask(ctx context.Context) {
+	go utils.TimedTaskWithInterval(ctx, time.Second*10, func(ctx context.Context) {
+		runningVNodes := m.vNodeController.GetRunningVnode()
+		for _, runningVNode := range runningVNodes {
+			nodeID := runningVNode.GetNodeId()
+			vnCtx := context.WithValue(context.Background(), "nodeID", nodeID)
+			// Start a new goroutine to fetch node health data every 10 seconds
+			go func() {
+				log.G(vnCtx).Info("fetch node health data for nodeId ", nodeID)
+				err := m.FetchHealthData(vnCtx, nodeID)
+				if err != nil {
+					log.G(vnCtx).WithError(err).Errorf("Failed to fetch node health info from %s", nodeID)
+				}
+			}()
+		}
+	})
+
+}
+func (m *MockTunnel) startAllBizStatusHeartBeatTask(ctx context.Context) {
+	go utils.TimedTaskWithInterval(ctx, time.Second*15, func(ctx context.Context) {
+		runningVNodes := m.vNodeController.GetRunningVnode()
+		for _, runningVNode := range runningVNodes {
+			nodeID := runningVNode.GetNodeId()
+			vnCtx := context.WithValue(ctx, "nodeID", nodeID)
+			go func() {
+				log.G(vnCtx).Info("query all container status data for nodeId ", nodeID)
+				err := m.QueryAllBizStatusData(vnCtx, nodeID)
+				if err != nil {
+					log.G(vnCtx).WithError(err).Errorf("Failed to query containers info from %s", nodeID)
+				}
+			}()
+		}
+	})
 }
 
 func convertContainerMap2ContainerList(containerMap map[string]model.BizStatusData) []model.BizStatusData {

@@ -95,3 +95,11 @@ type UnreachableNodeInfo struct {
 	NodeID              string    // ID of the unreachable node
 	LatestReachableTime time.Time // Time of the latest reachable status
 }
+
+// QueryBaselineRequest is the request parameters of query baseline func
+// Used to query baseline configuration with filters
+type QueryBaselineRequest struct {
+	Name         string            `json:"name"`         // Name to filter by
+	Version      string            `json:"version"`      // Version to filter by
+	CustomLabels map[string]string `json:"customLabels"` // Additional label filters
+}

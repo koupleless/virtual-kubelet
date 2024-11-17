@@ -12,10 +12,11 @@
  * limitations under the License.
  */
 
-package pod_provider
+package provider
 
 import (
 	"context"
+	"github.com/koupleless/virtual-kubelet/tunnel"
 	"sort"
 	"strings"
 	"time"
@@ -24,7 +25,6 @@ import (
 	"github.com/koupleless/virtual-kubelet/common/tracker"
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
-	"github.com/koupleless/virtual-kubelet/tunnel"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet/nodeutil"
 	pkgerrors "github.com/pkg/errors"
@@ -45,7 +45,7 @@ type VPodProvider struct {
 	nodeID           string
 	localIP          string
 	client           client.Client
-	runtimeInfoStore *RuntimeInfoStore // store the pod from provider
+	runtimeInfoStore *VPodStore // store the pod from provider
 
 	tunnel tunnel.Tunnel
 
@@ -60,43 +60,37 @@ func (b *VPodProvider) NotifyPods(_ context.Context, cb func(*corev1.Pod)) {
 }
 
 // NewVPodProvider is a function that creates a new VPodProvider instance
-func NewVPodProvider(namespace, localIP, nodeID string, client client.Client, t tunnel.Tunnel) *VPodProvider {
+func NewVPodProvider(namespace, localIP, nodeID string, client client.Client, tunnel tunnel.Tunnel) *VPodProvider {
 	provider := &VPodProvider{
 		Namespace:        namespace,
 		localIP:          localIP,
 		nodeID:           nodeID,
 		client:           client,
-		tunnel:           t,
-		runtimeInfoStore: NewRuntimeInfoStore(),
+		tunnel:           tunnel,
+		runtimeInfoStore: NewVPodStore(),
 	}
 
 	return provider
 }
 
-// syncRelatedPodStatus is a method of VPodProvider that synchronizes the status of related pods
-func (b *VPodProvider) syncRelatedPodStatus(ctx context.Context, bizStatusData model.BizStatusData) {
+// syncBizStatusToKube is a method of VPodProvider that synchronizes the status of related pods
+func (b *VPodProvider) syncBizStatusToKube(ctx context.Context, bizStatusData model.BizStatusData) {
 	logger := log.G(ctx)
 	pod := b.runtimeInfoStore.GetPodByKey(bizStatusData.PodKey)
 	if pod == nil {
 		logger.Errorf("skip updating non-exist pod status for biz %s pod %s", bizStatusData.Key, bizStatusData.PodKey)
 		return
 	}
-	b.updatePodStatusToKubernetes(ctx, pod, bizStatusData)
-}
-
-// updatePodStatusToKubernetes is a method of VPodProvider that updates the status of a pod to Kubernetes
-func (b *VPodProvider) updatePodStatusToKubernetes(ctx context.Context, pod *corev1.Pod, bizStatus model.BizStatusData) {
-	// merge pod status from k8s and biz status
-	podStatus, _ := b.GetPodStatus(ctx, pod, bizStatus)
+	podStatus, _ := b.GetPodStatus(ctx, pod, bizStatusData)
 
 	podCopy := pod.DeepCopy()
 	podStatus.DeepCopyInto(&podCopy.Status)
-	b.runtimeInfoStore.PutPod(podCopy, b.tunnel)
+	b.runtimeInfoStore.PutPod(podCopy)
 	b.notify(podCopy)
 }
 
-// SyncAllContainerInfo is a method of VPodProvider that synchronizes the information of all containers
-func (b *VPodProvider) SyncAllContainerInfo(ctx context.Context, bizStatusDatas []model.BizStatusData) {
+// SyncAllBizStatusToKube is a method of VPodProvider that synchronizes the information of all containers
+func (b *VPodProvider) SyncAllBizStatusToKube(ctx context.Context, bizStatusDatas []model.BizStatusData) {
 	bizKeyToBizStatusData := make(map[string]model.BizStatusData)
 	for _, bizStatusData := range bizStatusDatas {
 		bizKeyToBizStatusData[bizStatusData.Key] = bizStatusData
@@ -145,16 +139,16 @@ func (b *VPodProvider) SyncAllContainerInfo(ctx context.Context, bizStatusDatas 
 
 	// Iterate through the provided container information and sync the related pod status
 	for _, toUpdateBizStatus := range toUpdateBizStatusDatas {
-		b.syncRelatedPodStatus(ctx, toUpdateBizStatus)
+		b.syncBizStatusToKube(ctx, toUpdateBizStatus)
 	}
 }
 
-// SyncOneContainerInfo is a method of VPodProvider that synchronizes the information of a single container
-func (b *VPodProvider) SyncOneContainerInfo(ctx context.Context, bizStatusData model.BizStatusData) {
+// SyncBizStatusToKube is a method of VPodProvider that synchronizes the information of a single container
+func (b *VPodProvider) SyncBizStatusToKube(ctx context.Context, bizStatusData model.BizStatusData) {
 	needSync := b.runtimeInfoStore.CheckContainerStatusNeedSync(bizStatusData)
 	if needSync {
 		// only when container status updated, update related pod status
-		b.syncRelatedPodStatus(ctx, bizStatusData)
+		b.syncBizStatusToKube(ctx, bizStatusData)
 	}
 }
 
@@ -225,7 +219,7 @@ func (b *VPodProvider) CreatePod(ctx context.Context, pod *corev1.Pod) error {
 
 	// update the baseline info so the async handle logic can see them first
 	podCopy := pod.DeepCopy()
-	b.runtimeInfoStore.PutPod(podCopy, b.tunnel)
+	b.runtimeInfoStore.PutPod(podCopy)
 	b.handleBizBatchStart(ctx, podCopy, podCopy.Spec.Containers)
 	b.notify(podCopy)
 	return nil
@@ -278,7 +272,7 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 		b.handleBizBatchStop(ctx, oldPod, shouldStopContainers)
 	}
 
-	b.runtimeInfoStore.PutPod(newPod.DeepCopy(), b.tunnel)
+	b.runtimeInfoStore.PutPod(newPod.DeepCopy())
 
 	if len(shouldStartContainers) == 0 {
 		b.notify(newPod)
@@ -335,7 +329,7 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 	}
 
 	// delete from curr provider
-	b.runtimeInfoStore.DeletePod(podKey, b.tunnel)
+	b.runtimeInfoStore.DeletePod(podKey)
 	b.handleBizBatchStop(ctx, pod, pod.Spec.Containers)
 	b.notify(pod)
 	return nil

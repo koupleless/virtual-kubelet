@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package node_provider
+package provider
 
 import (
 	"context"
@@ -109,8 +109,8 @@ func (v *VNodeProvider) CurrNodeInfo() *corev1.Node {
 	return v.constructVNode()
 }
 
-// NewVirtualKubeletNode creates a new VNodeProvider instance.
-func NewVirtualKubeletNode(config model.BuildVNodeProviderConfig) *VNodeProvider {
+// NewVNodeProvider creates a new VNodeProvider instance.
+func NewVNodeProvider(config model.BuildVNodeProviderConfig) *VNodeProvider {
 	return &VNodeProvider{
 		nodeConfig: &config,
 	}

@@ -565,7 +565,7 @@ func podsEffectivelyEqual(p1, p2 *corev1.Pod) bool {
 		if p.String() == "ObjectMeta.ResourceVersion" {
 			return true
 		}
-		if p.String() == "Status" {
+		if p.String() == "State" {
 			return true
 		}
 		return false

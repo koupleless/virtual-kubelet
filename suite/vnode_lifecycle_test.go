@@ -27,7 +27,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 
 	Context("node online and deactive finally", func() {
 		It("node should become a ready vnode eventually", func() {
-			nodeInfo.NodeInfo.Metadata.Status = model.NodeStatusActivated
+			nodeInfo.NodeInfo.State = model.NodeStateActivated
 			tl.PutNode(ctx, nodeID, nodeInfo)
 
 			Eventually(func() bool {
@@ -79,7 +79,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 		})
 
 		It("node offline with deactive message and finally exit", func() {
-			nodeInfo.NodeInfo.Metadata.Status = model.NodeStatusDeactivated
+			nodeInfo.NodeInfo.State = model.NodeStateDeactivated
 			tl.PutNode(ctx, nodeID, nodeInfo)
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
@@ -97,7 +97,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 
 	Context("node online and timeout finally", func() {
 		It("node should become a ready vnode eventually", func() {
-			nodeInfo.Metadata.Status = model.NodeStatusActivated
+			nodeInfo.State = model.NodeStateActivated
 			tl.PutNode(ctx, nodeID, nodeInfo)
 
 			Eventually(func() bool {
@@ -117,7 +117,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 		})
 
 		It("node offline with deactive message and finally exit", func() {
-			nodeInfo.NodeInfo.Metadata.Status = model.NodeStatusDeactivated
+			nodeInfo.NodeInfo.State = model.NodeStateDeactivated
 			tl.PutNode(ctx, nodeID, nodeInfo)
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
@@ -129,3 +129,17 @@ var _ = Describe("VNode Lifecycle Test", func() {
 	})
 
 })
+
+//func TestRuntimeInfoStore_GetLeaseOutdatedVNodeName(t *testing.T) {
+//	ctx := context.Background()
+//	store := vnode_controller.NewVNodeStore()
+//	clientId := "test-client-id"
+//	vNode, _ := provider.NewVNode(&model.BuildVNodeConfig{
+//		Client: ,
+//	}, &tunnel.MockTunnel{})
+//	store.AddVNode("test", vNode)
+//	vNode.CreateNodeLease(ctx, clientId)
+//	vNode.RenewLease(ctx, clientId)
+//	nameList := store.GetLeaseOutdatedVNodeIDs(clientId)
+//	assert.Assert(t, len(nameList) == 1)
+//}

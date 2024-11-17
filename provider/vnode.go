@@ -1,9 +1,9 @@
-package vnode
+package provider
 
 import (
 	"context"
 	"fmt"
-	"github.com/koupleless/virtual-kubelet/vnode/liveness"
+	"github.com/koupleless/virtual-kubelet/tunnel"
 	"runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"time"
@@ -13,8 +13,6 @@ import (
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet/nodeutil"
-	"github.com/koupleless/virtual-kubelet/vnode/node_provider"
-	"github.com/koupleless/virtual-kubelet/vnode/pod_provider"
 	"github.com/pkg/errors"
 	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -32,9 +30,10 @@ type VNode struct {
 	client    client.Client // Kubernetes client
 	kubeCache cache.Cache   // Kubernetes cache
 
-	nodeProvider *node_provider.VNodeProvider // Node provider for the virtual node
-	podProvider  *pod_provider.VPodProvider   // Pod provider for the virtual node
-	node         *nodeutil.Node               // Node instance for the virtual node
+	nodeProvider *VNodeProvider // Node provider for the virtual node
+	podProvider  *VPodProvider  // Pod provider for the virtual node
+	node         *nodeutil.Node // Node instance for the virtual node
+	tunnel       tunnel.Tunnel
 
 	exit                  chan struct{} // Channel for signaling the node to exit
 	ready                 chan struct{} // Channel for signaling the node is ready
@@ -43,7 +42,7 @@ type VNode struct {
 	done                  chan struct{} // Channel for signaling the node has exited
 
 	lease    *coordinationv1.Lease // Latest lease of the node
-	Liveness liveness.Liveness     // Liveness of the node from provider
+	Liveness Liveness              // Liveness of the node from provider
 
 	err error // Error that caused the node to exit
 }
@@ -69,8 +68,9 @@ func (vNode *VNode) Run(ctx context.Context, initData model.NodeInfo) {
 
 	// Set the node as the leader
 	vNode.exitWhenLeaderChanged = make(chan struct{})
-	vNode.OnNodeStart(ctx, vNode.nodeID, initData)
-	defer vNode.OnNodeStop(ctx, vNode.nodeID)
+	// TODO: remove the dep of tunnel
+	vNode.tunnel.RegisterNode(ctx, vNode.nodeID, initData)
+	defer vNode.tunnel.UnRegisterNode(ctx, vNode.nodeID)
 
 	// Signal that the node is ready
 	close(vNode.ready)
@@ -277,14 +277,14 @@ func (vNode *VNode) SyncNodeStatus(data model.NodeStatusData) {
 // SyncAllContainerInfo syncs the status of all containers
 func (vNode *VNode) SyncAllContainerInfo(ctx context.Context, infos []model.BizStatusData) {
 	if vNode.podProvider != nil {
-		vNode.podProvider.SyncAllContainerInfo(ctx, infos)
+		vNode.podProvider.SyncAllBizStatusToKube(ctx, infos)
 	}
 }
 
 // SyncOneContainerInfo syncs the status of a single container
 func (vNode *VNode) SyncOneContainerInfo(ctx context.Context, bizStatusData model.BizStatusData) {
 	if vNode.podProvider != nil {
-		vNode.podProvider.SyncOneContainerInfo(ctx, bizStatusData)
+		vNode.podProvider.SyncBizStatusToKube(ctx, bizStatusData)
 	}
 }
 
@@ -301,7 +301,8 @@ func (vNode *VNode) ExitWhenLeaderChanged() <-chan struct{} {
 // IsLeader returns a bool marked current vnode is leader or not
 func (vNode *VNode) IsLeader(clientId string) bool {
 	// current time is not after the lease renew time and the lease holder time
-	return *vNode.lease.Spec.HolderIdentity == clientId &&
+
+	return vNode.lease != nil && *vNode.lease.Spec.HolderIdentity == clientId &&
 		!time.Now().After(vNode.lease.Spec.RenewTime.Time.Add(time.Second*model.NodeLeaseDurationSeconds))
 }
 
@@ -383,13 +384,13 @@ func (vNode *VNode) DeleteKnownPod(key string) {
 }
 
 // NewVNode creates a new virtual node
-func NewVNode(config *model.BuildVNodeConfig) (kn *VNode, err error) {
+func NewVNode(config *model.BuildVNodeConfig, tunnel tunnel.Tunnel) (kn *VNode, err error) {
 	if config.NodeID == "" {
 		return nil, errors.New("node id cannot be empty")
 	}
 	// Declare variables for nodeProvider and podProvider
-	var nodeProvider *node_provider.VNodeProvider
-	var podProvider *pod_provider.VPodProvider
+	var nodeProvider *VNodeProvider
+	var podProvider *VPodProvider
 
 	// Create a new node with the formatted name and configuration
 	cm, err := nodeutil.NewNode(
@@ -397,7 +398,7 @@ func NewVNode(config *model.BuildVNodeConfig) (kn *VNode, err error) {
 		// Function to create providers and register the node
 		func(cfg nodeutil.ProviderConfig) (nodeutil.Provider, virtual_kubelet.NodeProvider, error) {
 			// Create a new VirtualKubeletNode provider with configuration
-			nodeProvider = node_provider.NewVirtualKubeletNode(model.BuildVNodeProviderConfig{
+			nodeProvider = NewVNodeProvider(model.BuildVNodeProviderConfig{
 				NodeIP:            config.NodeIP,
 				NodeHostname:      config.NodeHostname,
 				Version:           config.NodeVersion,
@@ -408,7 +409,7 @@ func NewVNode(config *model.BuildVNodeConfig) (kn *VNode, err error) {
 				CustomLabels:      config.CustomLabels,
 			})
 			// Initialize pod provider with node namespace, IP, ID, client, and tunnel
-			podProvider = pod_provider.NewVPodProvider(cfg.Node.Namespace, config.NodeIP, config.NodeID, config.Client, t)
+			podProvider = NewVPodProvider(cfg.Node.Namespace, config.NodeIP, config.NodeID, config.Client, tunnel)
 
 			// Register the node with the tunnel key
 			err = nodeProvider.Register(cfg.Node)
@@ -443,12 +444,13 @@ func NewVNode(config *model.BuildVNodeConfig) (kn *VNode, err error) {
 		env:                   config.Env,
 		nodeProvider:          nodeProvider,
 		podProvider:           podProvider,
+		tunnel:                tunnel,
 		node:                  cm,
 		exit:                  make(chan struct{}),
 		ready:                 make(chan struct{}),
 		done:                  make(chan struct{}),
 		exitWhenLeaderChanged: make(chan struct{}),
 		shouldRetryLease:      make(chan struct{}),
-		Liveness:              liveness.Liveness{}, // a very old time
+		Liveness:              Liveness{}, // a very old time
 	}, nil
 }

@@ -386,7 +386,7 @@ func updateNodeStatus(ctx context.Context, c client.Client, nodeFromProvider *co
 		return nil, err
 	}
 	log.G(ctx).WithField("node.resourceVersion", updatedNode.ResourceVersion).
-		WithField("node.Status.Conditions", updatedNode.Status.Conditions).
+		WithField("node.State.Conditions", updatedNode.Status.Conditions).
 		Debug("updated node status in api server")
 	return updatedNode, nil
 }

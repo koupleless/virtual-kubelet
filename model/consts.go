@@ -72,16 +72,16 @@ const (
 	CodeContainerStopFailed   ErrorCode = "01003"
 )
 
-// NodeStatus is the node curr status
-type NodeStatus string
+// NodeState is the node curr status
+type NodeState string
 
-// NodeStatusActivated and NodeStatusDeactivated are constant NodeStatus values representing the activation or deactivation of a node.
+// NodeStateActivated and NodeStateDeactivated are constant NodeState values representing the activation or deactivation of a node.
 const (
-	// NodeStatusActivated node activated, will start vnode if not being started
-	NodeStatusActivated NodeStatus = "ACTIVATED"
+	// NodeStateActivated node activated, will start vnode if not being started
+	NodeStateActivated NodeState = "ACTIVATED"
 
-	// NodeStatusDeactivated node deactivated, will shut down vnode if started
-	NodeStatusDeactivated NodeStatus = "DEACTIVATED"
+	// NodeStateDeactivated node deactivated, will shut down vnode if started
+	NodeStateDeactivated NodeState = "DEACTIVATED"
 )
 
 // BizState is the state of a container, will set to pod state and show on k8s

@@ -17,9 +17,8 @@ type NetworkInfo struct {
 
 // NodeMetadata is the base data of a vnode, will be transfer to default labels of a vnode
 type NodeMetadata struct {
-	Name    string     // Name of the vnode
-	Version string     // Version of the vnode
-	Status  NodeStatus // Current status of the vnode
+	Name    string // Name of the vnode
+	Version string // Version of the vnode
 }
 
 // NodeInfo is the data of node info.
@@ -29,6 +28,7 @@ type NodeInfo struct {
 	CustomTaints      []v1.Taint        // Custom taints set by the tunnel
 	CustomLabels      map[string]string // Custom labels set by the tunnel
 	CustomAnnotations map[string]string // Custom annotations set by the tunnel
+	State             NodeState         // Current state of the vnode
 }
 
 // NodeResource is the data of node resource

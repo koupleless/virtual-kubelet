@@ -1,10 +1,11 @@
-package liveness
+package provider
 
 import (
 	"github.com/koupleless/virtual-kubelet/model"
 	"time"
 )
 
+// Liveness sync and check the status in provider
 type Liveness struct {
 	// for fast close, we need to close manually, or we need to wait to timeout
 	isClose             bool

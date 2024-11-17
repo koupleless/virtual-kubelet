@@ -591,7 +591,7 @@ type fakeExporter struct {
 	// Events returns all the events that occurred within in the spans
 	// lifetime.
 	events []sdktrace.Event
-	// Status returns the spans status.
+	// State returns the spans status.
 	status codes.Code
 }
 

@@ -1,4 +1,4 @@
-package vnode
+package provider
 
 import (
 	"github.com/stretchr/testify/assert"

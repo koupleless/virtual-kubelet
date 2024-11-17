@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package pod_provider
+package provider
 
 import (
 	"strings"
@@ -21,27 +21,25 @@ import (
 
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
-	"github.com/koupleless/virtual-kubelet/tunnel"
-
 	corev1 "k8s.io/api/core/v1"
 )
 
-// RuntimeInfoStore provides in-memory runtime information.
-type RuntimeInfoStore struct {
+// VPodStore provides in-memory runtime information.
+type VPodStore struct {
 	sync.RWMutex // This mutex is used for thread-safe access to the store.
 
 	podKeyToPod map[string]*corev1.Pod // Maps pod keys to their corresponding pods from provider
 }
 
-func NewRuntimeInfoStore() *RuntimeInfoStore {
-	return &RuntimeInfoStore{
+func NewVPodStore() *VPodStore {
+	return &VPodStore{
 		RWMutex:     sync.RWMutex{},
 		podKeyToPod: make(map[string]*corev1.Pod),
 	}
 }
 
-// PutPod function updates or adds a pod to the RuntimeInfoStore.
-func (r *RuntimeInfoStore) PutPod(pod *corev1.Pod, t tunnel.Tunnel) {
+// PutPod function updates or adds a pod to the VPodStore.
+func (r *VPodStore) PutPod(pod *corev1.Pod) {
 	r.Lock()
 	defer r.Unlock()
 
@@ -51,8 +49,8 @@ func (r *RuntimeInfoStore) PutPod(pod *corev1.Pod, t tunnel.Tunnel) {
 	r.podKeyToPod[podKey] = pod
 }
 
-// DeletePod function removes a pod from the RuntimeInfoStore.
-func (r *RuntimeInfoStore) DeletePod(podKey string, t tunnel.Tunnel) {
+// DeletePod function removes a pod from the VPodStore.
+func (r *VPodStore) DeletePod(podKey string) {
 	r.Lock()
 	defer r.Unlock()
 
@@ -60,14 +58,14 @@ func (r *RuntimeInfoStore) DeletePod(podKey string, t tunnel.Tunnel) {
 }
 
 // GetPodByKey function retrieves a pod by its key.
-func (r *RuntimeInfoStore) GetPodByKey(podKey string) *corev1.Pod {
+func (r *VPodStore) GetPodByKey(podKey string) *corev1.Pod {
 	r.RLock()
 	defer r.RUnlock()
 	return r.podKeyToPod[podKey]
 }
 
-// GetPods function retrieves all pods in the RuntimeInfoStore.
-func (r *RuntimeInfoStore) GetPods() []*corev1.Pod {
+// GetPods function retrieves all pods in the VPodStore.
+func (r *VPodStore) GetPods() []*corev1.Pod {
 	r.RLock()
 	defer r.RUnlock()
 
@@ -78,7 +76,7 @@ func (r *RuntimeInfoStore) GetPods() []*corev1.Pod {
 	return ret
 }
 
-func (r *RuntimeInfoStore) CheckContainerStatusNeedSync(bizStatusData model.BizStatusData) bool {
+func (r *VPodStore) CheckContainerStatusNeedSync(bizStatusData model.BizStatusData) bool {
 	r.Lock()
 	defer r.Unlock()
 

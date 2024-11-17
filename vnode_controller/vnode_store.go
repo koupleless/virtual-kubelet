@@ -16,30 +16,31 @@ package vnode_controller
 
 import (
 	"github.com/koupleless/virtual-kubelet/common/utils"
-	"github.com/koupleless/virtual-kubelet/vnode"
+	"github.com/koupleless/virtual-kubelet/provider"
+	"github.com/pkg/errors"
 	"sync"
 )
 
 // Summary:
-// This file defines the RuntimeInfoStore structure, which provides in-memory runtime information for virtual nodes.
+// This file defines the VNodeStore structure, which provides in-memory runtime information for virtual nodes.
 // It includes methods for managing node state, tracking node runtime information, and retrieving node details.
 
-// RuntimeInfoStore provide the in memory runtime information.
-type RuntimeInfoStore struct {
+// VNodeStore provide the in memory runtime information.
+type VNodeStore struct {
 	sync.RWMutex
-	nodeIDToVNode map[string]*vnode.VNode // A map from node ID to VNode
+	nodeIDToVNode map[string]*provider.VNode // A map from node ID to VNode
 }
 
-// NewRuntimeInfoStore creates a new instance of RuntimeInfoStore.
-func NewRuntimeInfoStore() *RuntimeInfoStore {
-	return &RuntimeInfoStore{
+// NewVNodeStore creates a new instance of VNodeStore.
+func NewVNodeStore() *VNodeStore {
+	return &VNodeStore{
 		RWMutex:       sync.RWMutex{},
-		nodeIDToVNode: make(map[string]*vnode.VNode),
+		nodeIDToVNode: make(map[string]*provider.VNode),
 	}
 }
 
 // NodeHeartbeatFromProviderArrived updates the latest message time for a given node ID.
-func (r *RuntimeInfoStore) NodeHeartbeatFromProviderArrived(nodeID string) {
+func (r *VNodeStore) NodeHeartbeatFromProviderArrived(nodeID string) {
 	r.Lock()
 	defer r.Unlock()
 
@@ -49,7 +50,7 @@ func (r *RuntimeInfoStore) NodeHeartbeatFromProviderArrived(nodeID string) {
 }
 
 // NodeShutdown removes a node from the running node map.
-func (r *RuntimeInfoStore) NodeShutdown(nodeID string) {
+func (r *VNodeStore) NodeShutdown(nodeID string) {
 	r.Lock()
 	defer r.Unlock()
 
@@ -59,10 +60,10 @@ func (r *RuntimeInfoStore) NodeShutdown(nodeID string) {
 	}
 }
 
-func (r *RuntimeInfoStore) GetRunningVNodes() []*vnode.VNode {
+func (r *VNodeStore) GetRunningVNodes() []*provider.VNode {
 	r.Lock()
 	defer r.Unlock()
-	runningVNodes := make([]*vnode.VNode, 0)
+	runningVNodes := make([]*provider.VNode, 0)
 	for _, vNode := range r.nodeIDToVNode {
 		if vNode.Liveness.IsAlive() {
 			runningVNodes = append(runningVNodes, vNode)
@@ -72,7 +73,7 @@ func (r *RuntimeInfoStore) GetRunningVNodes() []*vnode.VNode {
 }
 
 // RunningNodeNum returns the number of running nodes.
-func (r *RuntimeInfoStore) RunningNodeNum() int {
+func (r *VNodeStore) RunningNodeNum() int {
 	r.Lock()
 	defer r.Unlock()
 
@@ -80,7 +81,7 @@ func (r *RuntimeInfoStore) RunningNodeNum() int {
 }
 
 // AllNodeNum returns the number of all nodes.
-func (r *RuntimeInfoStore) AllNodeNum() int {
+func (r *VNodeStore) AllNodeNum() int {
 	r.Lock()
 	defer r.Unlock()
 
@@ -88,15 +89,19 @@ func (r *RuntimeInfoStore) AllNodeNum() int {
 }
 
 // AddVNode adds a VNode to the node ID to VNode map.
-func (r *RuntimeInfoStore) AddVNode(nodeID string, vnode *vnode.VNode) {
+func (r *VNodeStore) AddVNode(nodeID string, vnode *provider.VNode) error {
 	r.Lock()
 	defer r.Unlock()
 
+	if _, has := r.nodeIDToVNode[nodeID]; has {
+		return errors.Errorf("nodeID %s already exists", nodeID)
+	}
 	r.nodeIDToVNode[nodeID] = vnode
+	return nil
 }
 
 // DeleteVNode removes a VNode from the node ID to VNode map.
-func (r *RuntimeInfoStore) DeleteVNode(nodeID string) {
+func (r *VNodeStore) DeleteVNode(nodeID string) {
 	r.Lock()
 	defer r.Unlock()
 
@@ -104,17 +109,17 @@ func (r *RuntimeInfoStore) DeleteVNode(nodeID string) {
 }
 
 // GetVNode returns a VNode for a given node ID.
-func (r *RuntimeInfoStore) GetVNode(nodeID string) *vnode.VNode {
+func (r *VNodeStore) GetVNode(nodeID string) *provider.VNode {
 	r.RLock()
 	defer r.RUnlock()
 	return r.nodeIDToVNode[nodeID]
 }
 
 // GetVNodes returns all VNodes.
-func (r *RuntimeInfoStore) GetVNodes() []*vnode.VNode {
+func (r *VNodeStore) GetVNodes() []*provider.VNode {
 	r.RLock()
 	defer r.RUnlock()
-	ret := make([]*vnode.VNode, 0)
+	ret := make([]*provider.VNode, 0)
 	for _, kn := range r.nodeIDToVNode {
 		ret = append(ret, kn)
 	}
@@ -122,7 +127,7 @@ func (r *RuntimeInfoStore) GetVNodes() []*vnode.VNode {
 }
 
 // GetVNodeByNodeName returns a VNode for a given node name.
-func (r *RuntimeInfoStore) GetVNodeByNodeName(nodeName string) *vnode.VNode {
+func (r *VNodeStore) GetVNodeByNodeName(nodeName string) *provider.VNode {
 	r.Lock()
 	defer r.Unlock()
 	nodeID := utils.ExtractNodeIDFromNodeName(nodeName)
@@ -130,7 +135,7 @@ func (r *RuntimeInfoStore) GetVNodeByNodeName(nodeName string) *vnode.VNode {
 }
 
 // GetLeaseOutdatedVNodeIDs returns the node ids of outdated leases.
-func (r *RuntimeInfoStore) GetLeaseOutdatedVNodeIDs(clientID string) []string {
+func (r *VNodeStore) GetLeaseOutdatedVNodeIDs(clientID string) []string {
 	r.Lock()
 	defer r.Unlock()
 	ret := make([]string, 0)
@@ -142,7 +147,7 @@ func (r *RuntimeInfoStore) GetLeaseOutdatedVNodeIDs(clientID string) []string {
 	return ret
 }
 
-func (r *RuntimeInfoStore) GetLeaseOccupiedVNodeIDs(clientID string) []string {
+func (r *VNodeStore) GetLeaseOccupiedVNodeIDs(clientID string) []string {
 	r.Lock()
 	defer r.Unlock()
 	ret := make([]string, 0)
@@ -154,10 +159,10 @@ func (r *RuntimeInfoStore) GetLeaseOccupiedVNodeIDs(clientID string) []string {
 	return ret
 }
 
-func (r *RuntimeInfoStore) GetLeaseOccupiedVNodes(clientID string) []*vnode.VNode {
+func (r *VNodeStore) GetLeaseOccupiedVNodes(clientID string) []*provider.VNode {
 	r.Lock()
 	defer r.Unlock()
-	ret := make([]*vnode.VNode, 0)
+	ret := make([]*provider.VNode, 0)
 	for _, vNode := range r.nodeIDToVNode {
 		if vNode.IsLeader(clientID) {
 			ret = append(ret, vNode)
@@ -166,15 +171,15 @@ func (r *RuntimeInfoStore) GetLeaseOccupiedVNodes(clientID string) []*vnode.VNod
 	return ret
 }
 
-// GetUnReachableNodeIds returns the node information of nodes that are not reachable.
-func (r *RuntimeInfoStore) GetUnReachableNodeIds() []string {
+// GetUnReachableVNodes returns the node information of nodes that are not reachable.
+func (r *VNodeStore) GetUnReachableVNodes() []*provider.VNode {
 	r.Lock()
 	defer r.Unlock()
-	ret := make([]string, 0)
+	ret := make([]*provider.VNode, 0)
 
-	for nodeId, vNode := range r.nodeIDToVNode {
+	for _, vNode := range r.nodeIDToVNode {
 		if !vNode.Liveness.IsAlive() {
-			ret = append(ret, nodeId)
+			ret = append(ret, vNode)
 		}
 	}
 	return ret

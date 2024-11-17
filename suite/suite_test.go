@@ -3,9 +3,9 @@ package suite
 import (
 	"context"
 	"github.com/koupleless/virtual-kubelet/common/log"
-	"github.com/koupleless/virtual-kubelet/controller/vnode_controller"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/tunnel"
+	"github.com/koupleless/virtual-kubelet/vnode_controller"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
@@ -29,6 +29,7 @@ import (
 var cfg *rest.Config
 var testEnv *envtest.Environment
 var k8sClient client.Client
+var tl tunnel.MockTunnel
 
 const (
 	clientID     = "suite-suite"
@@ -71,14 +72,14 @@ var _ = BeforeSuite(func() {
 		Env:          env,
 		VPodIdentity: vPodIdentity,
 		IsCluster:    true,
-	})
+	}, &tl)
 
 	err = vnodeController.SetupWithManager(ctx, k8sManager)
 
 	Expect(err).ToNot(HaveOccurred())
 
 	tunnels := []tunnel.Tunnel{
-		tunnel.NewMockTunnel(vnodeController),
+		&tl,
 	}
 	for _, t := range tunnels {
 		err = t.Start(ctx, clientID, env)
@@ -111,7 +112,6 @@ func prepareNode(name, version string) tunnel.Node {
 			Metadata: model.NodeMetadata{
 				Name:    name,
 				Version: version,
-				Status:  model.NodeStatusActivated,
 			},
 			NetworkInfo: model.NetworkInfo{
 				HostName: name,
@@ -123,6 +123,7 @@ func prepareNode(name, version string) tunnel.Node {
 					Effect: v1.TaintEffectNoExecute,
 				},
 			},
+			State: model.NodeStateActivated,
 		},
 		NodeStatusData: model.NodeStatusData{
 			Resources: map[v1.ResourceName]model.NodeResource{

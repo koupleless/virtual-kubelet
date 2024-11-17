@@ -40,7 +40,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 
 	Context("pod publish and status sync", func() {
 		It(tasks[0], func() {
-			nodeInfo.NodeInfo.Metadata.Status = model.NodeStatusActivated
+			nodeInfo.NodeInfo.State = model.NodeStateActivated
 			tl.PutNode(ctx, nodeID, nodeInfo)
 			name := utils.FormatNodeName(nodeID, env)
 
@@ -203,7 +203,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 		})
 
 		It(tasks[8], func() {
-			nodeInfo.Metadata.Status = model.NodeStatusDeactivated
+			nodeInfo.State = model.NodeStateDeactivated
 			tl.PutNode(ctx, nodeID, nodeInfo)
 			Eventually(func() bool {
 				node := &v1.Node{}

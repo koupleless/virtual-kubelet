@@ -16,15 +16,15 @@ import (
 var _ = Describe("VPod Lifecycle Test", func() {
 	ctx := context.Background()
 
-	nodeID := "suite-node-pod-lifecycle"
+	nodeName := "suite-node-pod-lifecycle"
 	nodeVersion := "1.0.0"
 	vnode := &v1.Node{}
 
 	podName := "suite-pod"
 	podNamespace := "default"
 
-	nodeInfo := prepareNode(nodeID, nodeVersion)
-	basicPod := prepareBasicPod(podName, podNamespace, utils.FormatNodeName(nodeID, env))
+	nodeInfo := prepareNode(nodeName, nodeVersion)
+	basicPod := prepareBasicPod(podName, podNamespace, nodeName)
 
 	tasks := []string{
 		"node should be ready.",
@@ -41,12 +41,11 @@ var _ = Describe("VPod Lifecycle Test", func() {
 	Context("pod publish and status sync", func() {
 		It(tasks[0], func() {
 			nodeInfo.NodeInfo.State = model.NodeStateActivated
-			tl.PutNode(ctx, nodeID, nodeInfo)
-			name := utils.FormatNodeName(nodeID, env)
+			tl.PutNode(ctx, nodeName, nodeInfo)
 
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: name,
+					Name: nodeName,
 				}, vnode)
 				vnodeReady := false
 				logrus.WithContext(ctx).Infof("%s node status: %v", tasks[0], vnode.Status.Conditions)
@@ -71,7 +70,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 				}, podFromKubernetes)
 
 				logrus.WithContext(ctx).Infof("%s pod status: %v", tasks[1], podFromKubernetes.Status.Phase)
-				return err == nil && podFromKubernetes.Status.Phase == v1.PodPending && podFromKubernetes.Spec.NodeName == utils.FormatNodeName(nodeID, env)
+				return err == nil && podFromKubernetes.Status.Phase == v1.PodPending && podFromKubernetes.Spec.NodeName == nodeName
 			}, time.Second*10, time.Second).Should(BeTrue())
 		})
 
@@ -80,7 +79,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 				podKey := utils.GetPodKey(&basicPod)
 				key := tl.GetBizUniqueKey(&container)
 				time.Sleep(time.Second)
-				tl.UpdateBizStatus(ctx, nodeID, key, model.BizStatusData{
+				tl.UpdateBizStatus(ctx, nodeName, key, model.BizStatusData{
 					Key:        key,
 					Name:       container.Name,
 					PodKey:     podKey,
@@ -103,7 +102,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 			container := basicPod.Spec.Containers[0]
 			podKey := utils.GetPodKey(&basicPod)
 			key := tl.GetBizUniqueKey(&container)
-			tl.UpdateBizStatus(ctx, nodeID, key, model.BizStatusData{
+			tl.UpdateBizStatus(ctx, nodeName, key, model.BizStatusData{
 				Key:        key,
 				Name:       container.Name,
 				PodKey:     podKey,
@@ -125,7 +124,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 			container := basicPod.Spec.Containers[0]
 			podKey := utils.GetPodKey(&basicPod) + "-wrong"
 			key := tl.GetBizUniqueKey(&container)
-			tl.UpdateBizStatus(ctx, nodeID, key, model.BizStatusData{
+			tl.UpdateBizStatus(ctx, nodeName, key, model.BizStatusData{
 				Key:        key,
 				Name:       container.Name,
 				PodKey:     podKey,
@@ -148,7 +147,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 			container := basicPod.Spec.Containers[0]
 			podKey := utils.GetPodKey(&basicPod)
 			key := tl.GetBizUniqueKey(&container)
-			tl.UpdateBizStatus(ctx, nodeID, key, model.BizStatusData{
+			tl.UpdateBizStatus(ctx, nodeName, key, model.BizStatusData{
 				Key:        key,
 				Name:       container.Name,
 				PodKey:     podKey,
@@ -204,11 +203,11 @@ var _ = Describe("VPod Lifecycle Test", func() {
 
 		It(tasks[8], func() {
 			nodeInfo.State = model.NodeStateDeactivated
-			tl.PutNode(ctx, nodeID, nodeInfo)
+			tl.PutNode(ctx, nodeName, nodeInfo)
 			Eventually(func() bool {
 				node := &v1.Node{}
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: utils.FormatNodeName(nodeID, env),
+					Name: nodeName,
 				}, node)
 				return errors.IsNotFound(err)
 			}, time.Second*10, time.Second).Should(BeTrue())

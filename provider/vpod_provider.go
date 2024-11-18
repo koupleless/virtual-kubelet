@@ -41,11 +41,11 @@ var _ virtual_kubelet.PodNotifier = &VPodProvider{}
 
 // VPodProvider is a struct that implements the nodeutil.Provider and virtual_kubelet.PodNotifier interfaces
 type VPodProvider struct {
-	Namespace        string
-	nodeID           string
-	localIP          string
-	client           client.Client
-	runtimeInfoStore *VPodStore // store the pod from provider
+	Namespace string
+	nodeName  string
+	localIP   string
+	client    client.Client
+	vPodStore *VPodStore // store the pod from provider
 
 	tunnel tunnel.Tunnel
 
@@ -60,14 +60,14 @@ func (b *VPodProvider) NotifyPods(_ context.Context, cb func(*corev1.Pod)) {
 }
 
 // NewVPodProvider is a function that creates a new VPodProvider instance
-func NewVPodProvider(namespace, localIP, nodeID string, client client.Client, tunnel tunnel.Tunnel) *VPodProvider {
+func NewVPodProvider(namespace, localIP, nodeName string, client client.Client, tunnel tunnel.Tunnel) *VPodProvider {
 	provider := &VPodProvider{
-		Namespace:        namespace,
-		localIP:          localIP,
-		nodeID:           nodeID,
-		client:           client,
-		tunnel:           tunnel,
-		runtimeInfoStore: NewVPodStore(),
+		Namespace: namespace,
+		localIP:   localIP,
+		nodeName:  nodeName,
+		client:    client,
+		tunnel:    tunnel,
+		vPodStore: NewVPodStore(),
 	}
 
 	return provider
@@ -76,7 +76,7 @@ func NewVPodProvider(namespace, localIP, nodeID string, client client.Client, tu
 // syncBizStatusToKube is a method of VPodProvider that synchronizes the status of related pods
 func (b *VPodProvider) syncBizStatusToKube(ctx context.Context, bizStatusData model.BizStatusData) {
 	logger := log.G(ctx)
-	pod := b.runtimeInfoStore.GetPodByKey(bizStatusData.PodKey)
+	pod := b.vPodStore.GetPodByKey(bizStatusData.PodKey)
 	if pod == nil {
 		logger.Errorf("skip updating non-exist pod status for biz %s pod %s", bizStatusData.Key, bizStatusData.PodKey)
 		return
@@ -85,7 +85,7 @@ func (b *VPodProvider) syncBizStatusToKube(ctx context.Context, bizStatusData mo
 
 	podCopy := pod.DeepCopy()
 	podStatus.DeepCopyInto(&podCopy.Status)
-	b.runtimeInfoStore.PutPod(podCopy)
+	b.vPodStore.PutPod(podCopy)
 	b.notify(podCopy)
 }
 
@@ -96,7 +96,7 @@ func (b *VPodProvider) SyncAllBizStatusToKube(ctx context.Context, bizStatusData
 		bizKeyToBizStatusData[bizStatusData.Key] = bizStatusData
 	}
 
-	pods := b.runtimeInfoStore.GetPods()
+	pods := b.vPodStore.GetPods()
 	// sort by create time
 	sort.Slice(pods, func(i, j int) bool {
 		return pods[i].CreationTimestamp.UnixMilli() > pods[j].CreationTimestamp.UnixMilli()
@@ -127,7 +127,7 @@ func (b *VPodProvider) SyncAllBizStatusToKube(ctx context.Context, bizStatusData
 				}
 			}
 			// Attempt to update the container status
-			toUpdate := b.runtimeInfoStore.CheckContainerStatusNeedSync(bizStatusData)
+			toUpdate := b.vPodStore.CheckContainerStatusNeedSync(bizStatusData)
 			// If the update was successful, add the container information to the updated list
 			if toUpdate {
 				toUpdateBizStatusDatas = append(toUpdateBizStatusDatas, bizStatusData)
@@ -145,7 +145,7 @@ func (b *VPodProvider) SyncAllBizStatusToKube(ctx context.Context, bizStatusData
 
 // SyncBizStatusToKube is a method of VPodProvider that synchronizes the information of a single container
 func (b *VPodProvider) SyncBizStatusToKube(ctx context.Context, bizStatusData model.BizStatusData) {
-	needSync := b.runtimeInfoStore.CheckContainerStatusNeedSync(bizStatusData)
+	needSync := b.vPodStore.CheckContainerStatusNeedSync(bizStatusData)
 	if needSync {
 		// only when container status updated, update related pod status
 		b.syncBizStatusToKube(ctx, bizStatusData)
@@ -167,7 +167,7 @@ func (b *VPodProvider) handleBizBatchStart(ctx context.Context, pod *corev1.Pod,
 	for _, container := range containers {
 		err := tracker.G().FuncTrack(labelMap[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventContainerStart, labelMap, func() (error, model.ErrorCode) {
 			err := utils.CallWithRetry(ctx, func(_ int) (bool, error) {
-				innerErr := b.tunnel.StartBiz(ctx, b.nodeID, podKey, &container)
+				innerErr := b.tunnel.StartBiz(ctx, b.nodeName, podKey, &container)
 
 				return innerErr != nil, innerErr
 			}, nil)
@@ -197,7 +197,7 @@ func (b *VPodProvider) handleBizBatchStop(ctx context.Context, pod *corev1.Pod, 
 	for _, container := range containers {
 		err := tracker.G().FuncTrack(labelMap[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventContainerShutdown, labelMap, func() (error, model.ErrorCode) {
 			err := utils.CallWithRetry(ctx, func(_ int) (bool, error) {
-				innerErr := b.tunnel.StopBiz(ctx, b.nodeID, podKey, &container)
+				innerErr := b.tunnel.StopBiz(ctx, b.nodeName, podKey, &container)
 
 				return innerErr != nil, innerErr
 			}, nil)
@@ -219,7 +219,7 @@ func (b *VPodProvider) CreatePod(ctx context.Context, pod *corev1.Pod) error {
 
 	// update the baseline info so the async handle logic can see them first
 	podCopy := pod.DeepCopy()
-	b.runtimeInfoStore.PutPod(podCopy)
+	b.vPodStore.PutPod(podCopy)
 	b.handleBizBatchStart(ctx, podCopy, podCopy.Spec.Containers)
 	b.notify(podCopy)
 	return nil
@@ -239,7 +239,7 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 		return nil
 	}
 
-	oldPod := b.runtimeInfoStore.GetPodByKey(podKey).DeepCopy()
+	oldPod := b.vPodStore.GetPodByKey(podKey).DeepCopy()
 	if oldPod == nil {
 		return pkgerrors.Errorf("pod %s not found when updating", podKey)
 	}
@@ -272,7 +272,7 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 		b.handleBizBatchStop(ctx, oldPod, shouldStopContainers)
 	}
 
-	b.runtimeInfoStore.PutPod(newPod.DeepCopy())
+	b.vPodStore.PutPod(newPod.DeepCopy())
 
 	if len(shouldStartContainers) == 0 {
 		b.notify(newPod)
@@ -322,14 +322,14 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 		return nil
 	}
 
-	localPod := b.runtimeInfoStore.GetPodByKey(podKey)
+	localPod := b.vPodStore.GetPodByKey(podKey)
 	if localPod == nil {
 		// has been deleted or not managed by current provider, just return
 		return nil
 	}
 
 	// delete from curr provider
-	b.runtimeInfoStore.DeletePod(podKey)
+	b.vPodStore.DeletePod(podKey)
 	b.handleBizBatchStop(ctx, pod, pod.Spec.Containers)
 	b.notify(pod)
 	return nil
@@ -341,7 +341,7 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 //	so the outer control loop can call CreatePod / UpdatePod / DeletePod accordingly
 //	just return the defaultPod from the local store
 func (b *VPodProvider) GetPod(_ context.Context, namespace, name string) (*corev1.Pod, error) {
-	return b.runtimeInfoStore.GetPodByKey(namespace + "/" + name), nil
+	return b.vPodStore.GetPodByKey(namespace + "/" + name), nil
 }
 
 // GetPodStatus is a method of VPodProvider that gets the status of a pod
@@ -473,5 +473,5 @@ func (b *VPodProvider) GetPodStatus(ctx context.Context, pod *corev1.Pod, bizSta
 }
 
 func (b *VPodProvider) GetPods(_ context.Context) ([]*corev1.Pod, error) {
-	return b.runtimeInfoStore.GetPods(), nil
+	return b.vPodStore.GetPods(), nil
 }

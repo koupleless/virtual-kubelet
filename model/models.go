@@ -70,7 +70,6 @@ type BuildVNodeProviderConfig struct {
 type BuildVNodeConfig struct {
 	Client            client.Client     // Runtime client instance
 	KubeCache         cache.Cache       // Cache of kube resources
-	NodeID            string            // Unique id of node
 	NodeIP            string            // IP of node
 	NodeHostname      string            // Hostname of node
 	NodeName          string            // Name of node
@@ -89,11 +88,6 @@ type BuildVNodeControllerConfig struct {
 	IsCluster        bool   // Whether the deployment is in a cluster
 	WorkloadMaxLevel int    // Maximum workload level
 	VNodeWorkerNum   int    // VNode container event processor worker num, default 1, means execute Container events serially
-}
-
-type UnreachableNodeInfo struct {
-	NodeID              string    // ID of the unreachable node
-	LatestReachableTime time.Time // Time of the latest reachable status
 }
 
 // QueryBaselineRequest is the request parameters of query baseline func

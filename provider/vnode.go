@@ -25,7 +25,7 @@ import (
 
 // VNode is the main struct for a virtual node
 type VNode struct {
-	nodeID    string        // Unique identifier of the node
+	name      string        // Unique identifier of the node
 	env       string        // Environment of the node
 	client    client.Client // Kubernetes client
 	kubeCache cache.Cache   // Kubernetes cache
@@ -47,8 +47,8 @@ type VNode struct {
 	err error // Error that caused the node to exit
 }
 
-func (vNode *VNode) GetNodeId() string {
-	return vNode.nodeID
+func (vNode *VNode) GetNodeName() string {
+	return vNode.name
 }
 
 // Run is the main function for a virtual node
@@ -69,8 +69,8 @@ func (vNode *VNode) Run(ctx context.Context, initData model.NodeInfo) {
 	// Set the node as the leader
 	vNode.exitWhenLeaderChanged = make(chan struct{})
 	// TODO: remove the dep of tunnel
-	vNode.tunnel.RegisterNode(ctx, vNode.nodeID, initData)
-	defer vNode.tunnel.UnRegisterNode(ctx, vNode.nodeID)
+	vNode.tunnel.RegisterNode(ctx, vNode.name, initData)
+	defer vNode.tunnel.UnRegisterNode(ctx, vNode.name)
 
 	// Signal that the node is ready
 	close(vNode.ready)
@@ -110,7 +110,7 @@ func (vNode *VNode) retryUpdateLease(ctx context.Context, clientID string) {
 	for i := 0; i < model.NodeLeaseMaxRetryTimes; i++ {
 		lease := &coordinationv1.Lease{}
 		err := vNode.client.Get(ctx, types.NamespacedName{
-			Name:      utils.FormatNodeName(vNode.nodeID, vNode.env),
+			Name:      vNode.name,
 			Namespace: corev1.NamespaceNodeLease,
 		}, lease)
 		if err != nil {
@@ -164,7 +164,7 @@ func (vNode *VNode) WaitReady(ctx context.Context, timeout time.Duration) error 
 	utils.CheckAndFinallyCall(ctx, func() bool {
 		vnode := &corev1.Node{}
 		err = vNode.client.Get(ctx, types.NamespacedName{
-			Name: utils.FormatNodeName(vNode.nodeID, vNode.env),
+			Name: vNode.name,
 		}, vnode)
 		return err == nil
 	}, timeout, time.Millisecond*200, func() {}, func() {})
@@ -191,11 +191,10 @@ func (vNode *VNode) CreateNodeLease(ctx context.Context, controllerID string) bo
 
 	// Initialize lease and nodeName
 	lease := &coordinationv1.Lease{}
-	nodeName := utils.FormatNodeName(vNode.nodeID, vNode.env)
 
 	// Attempt to get the lease from the client
 	err := vNode.client.Get(ctx, types.NamespacedName{
-		Name:      nodeName,
+		Name:      vNode.name,
 		Namespace: corev1.NamespaceNodeLease,
 	}, lease)
 
@@ -220,6 +219,10 @@ func (vNode *VNode) CreateNodeLease(ctx context.Context, controllerID string) bo
 				logger.WithError(err).Error("error creating node lease")
 				return false
 			}
+		} else {
+			// Log the error if there's a problem getting the lease
+			log.G(ctx).Errorf("failed to get node lease %s: %v", vNode.name, err)
+			return false
 		}
 	} else {
 		// If the lease exists, check if it's outdated
@@ -231,6 +234,7 @@ func (vNode *VNode) CreateNodeLease(ctx context.Context, controllerID string) bo
 			err = vNode.client.Update(ctx, newLease)
 			// If the update is successful, return true
 			if err == nil {
+				vNode.lease = newLease
 				return true
 			}
 			// Log the error if there's a problem updating the lease
@@ -247,10 +251,9 @@ func (vNode *VNode) CreateNodeLease(ctx context.Context, controllerID string) bo
 
 // newLease creates a new lease for the node
 func (vNode *VNode) newLease(holderIdentity string) *coordinationv1.Lease {
-	nodeName := utils.FormatNodeName(vNode.nodeID, vNode.env)
 	lease := &coordinationv1.Lease{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      nodeName,
+			Name:      vNode.name,
 			Namespace: corev1.NamespaceNodeLease,
 			Labels: map[string]string{
 				model.LabelKeyOfEnv:       vNode.env,
@@ -385,8 +388,8 @@ func (vNode *VNode) DeleteKnownPod(key string) {
 
 // NewVNode creates a new virtual node
 func NewVNode(config *model.BuildVNodeConfig, tunnel tunnel.Tunnel) (kn *VNode, err error) {
-	if config.NodeID == "" {
-		return nil, errors.New("node id cannot be empty")
+	if config.NodeName == "" {
+		return nil, errors.New("node name cannot be empty")
 	}
 	// Declare variables for nodeProvider and podProvider
 	var nodeProvider *VNodeProvider
@@ -394,7 +397,7 @@ func NewVNode(config *model.BuildVNodeConfig, tunnel tunnel.Tunnel) (kn *VNode, 
 
 	// Create a new node with the formatted name and configuration
 	cm, err := nodeutil.NewNode(
-		utils.FormatNodeName(config.NodeID, config.Env),
+		config.NodeName,
 		// Function to create providers and register the node
 		func(cfg nodeutil.ProviderConfig) (nodeutil.Provider, virtual_kubelet.NodeProvider, error) {
 			// Create a new VirtualKubeletNode provider with configuration
@@ -409,7 +412,7 @@ func NewVNode(config *model.BuildVNodeConfig, tunnel tunnel.Tunnel) (kn *VNode, 
 				CustomLabels:      config.CustomLabels,
 			})
 			// Initialize pod provider with node namespace, IP, ID, client, and tunnel
-			podProvider = NewVPodProvider(cfg.Node.Namespace, config.NodeIP, config.NodeID, config.Client, tunnel)
+			podProvider = NewVPodProvider(cfg.Node.Namespace, config.NodeIP, config.NodeName, config.Client, tunnel)
 
 			// Register the node with the tunnel key
 			err = nodeProvider.Register(cfg.Node)
@@ -438,7 +441,7 @@ func NewVNode(config *model.BuildVNodeConfig, tunnel tunnel.Tunnel) (kn *VNode, 
 	}
 
 	return &VNode{
-		nodeID:                config.NodeID,
+		name:                  config.NodeName,
 		client:                config.Client,
 		kubeCache:             config.KubeCache,
 		env:                   config.Env,

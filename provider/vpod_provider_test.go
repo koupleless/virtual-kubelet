@@ -40,7 +40,7 @@ func TestSyncAllContainerInfo(t *testing.T) {
 			},
 		},
 	}
-	provider.runtimeInfoStore.podKeyToPod = map[string]*corev1.Pod{
+	provider.vPodStore.podKeyToPod = map[string]*corev1.Pod{
 		"test": pod,
 		"test2": {
 			ObjectMeta: metav1.ObjectMeta{

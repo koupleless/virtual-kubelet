@@ -9,6 +9,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/cache/informertest"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"testing"
 	"time"
@@ -39,15 +41,22 @@ func TestNewVNodeController_Success(t *testing.T) {
 
 func TestDiscoverPreviousNode(t *testing.T) {
 	mockTunnel := tunnel.MockTunnel{}
+
 	vc, _ := NewVNodeController(&model.BuildVNodeControllerConfig{
 		VPodIdentity: "suite",
 	}, &mockTunnel)
-	vc.discoverPreviousNodes(&corev1.NodeList{
+
+	nodeList := &corev1.NodeList{
 		Items: []corev1.Node{
 			{
 				ObjectMeta: v1.ObjectMeta{
-					Name:   "test-node-without-tunnel",
-					Labels: map[string]string{},
+					Name: "test-node-without-tunnel",
+					Labels: map[string]string{
+						model.LabelKeyOfComponent:    model.ComponentVNode,
+						model.LabelKeyOfEnv:          "suite",
+						model.LabelKeyOfVNodeName:    "test-cluster-name",
+						model.LabelKeyOfVNodeVersion: "1.0.0",
+					},
 				},
 			},
 			{
@@ -71,8 +80,12 @@ func TestDiscoverPreviousNode(t *testing.T) {
 				},
 			},
 		},
-	})
-	assert.Equal(t, len(vc.runtimeInfoStore.nodeIDToVNode), 1)
+	}
+
+	vc.client = fake.NewFakeClient(&nodeList.Items[0], &nodeList.Items[1])
+	vc.cache = &informertest.FakeInformers{}
+	vc.discoverPreviousNodes(nodeList)
+	assert.Equal(t, 1, len(vc.vNodeStore.GetVNodes()))
 }
 
 func TestDiscoverPreviousPods(t *testing.T) {
@@ -83,7 +96,7 @@ func TestDiscoverPreviousPods(t *testing.T) {
 	vn := &provider.VNode{
 		//tunnel: &mockTunnel,
 	}
-	vc.runtimeInfoStore.AddVNode("test-node", vn)
+	vc.vNodeStore.AddVNode("test-node", vn)
 	vc.discoverPreviousPods(context.TODO(), vn, &corev1.PodList{
 		Items: []corev1.Pod{
 			{
@@ -172,7 +185,7 @@ func TestPodHandler_NoVnodeOrNotLeader(t *testing.T) {
 		},
 	})
 
-	vc.runtimeInfoStore.AddVNode("test-node", &provider.VNode{})
+	vc.vNodeStore.AddVNode("test-node", &provider.VNode{})
 	vc.podAddHandler(ctx, &corev1.Pod{
 		Spec: corev1.PodSpec{
 			NodeName: "vnode.test-node.env",
@@ -202,7 +215,7 @@ func TestWorkloadLevel(t *testing.T) {
 
 	level := vc.workloadLevel()
 	assert.Equal(t, 0, level)
-	vc.runtimeInfoStore.AddVNode("test-node", &provider.VNode{})
+	vc.vNodeStore.AddVNode("test-node", &provider.VNode{})
 	level = vc.workloadLevel()
 	assert.Equal(t, 0, level)
 }
@@ -219,8 +232,8 @@ func TestDelayWithWorkload(t *testing.T) {
 	end := time.Now()
 	ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Millisecond*20)
 	cancelFunc()
-	vc.runtimeInfoStore.NodeHeartbeatFromProviderArrived("test-node")
-	vc.runtimeInfoStore.AddVNode("test-node", &provider.VNode{})
+	vc.vNodeStore.NodeHeartbeatFromProviderArrived("test-node")
+	vc.vNodeStore.AddVNode("test-node", &provider.VNode{})
 	vc.delayWithWorkload(ctx)
 	assert.True(t, end.Sub(now) < time.Millisecond*100)
 }

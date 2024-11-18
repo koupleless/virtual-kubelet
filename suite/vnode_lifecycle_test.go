@@ -2,7 +2,6 @@ package suite
 
 import (
 	"context"
-	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -17,22 +16,20 @@ var _ = Describe("VNode Lifecycle Test", func() {
 
 	ctx := context.Background()
 
-	nodeID := "suite-node-node-lifecycle"
+	nodeName := "suite-node-node-lifecycle"
 	nodeVersion := "1.0.0"
 	vnode := &v1.Node{}
 
-	nodeInfo := prepareNode(nodeID, nodeVersion)
-
-	name := utils.FormatNodeName(nodeID, env)
+	nodeInfo := prepareNode(nodeName, nodeVersion)
 
 	Context("node online and deactive finally", func() {
 		It("node should become a ready vnode eventually", func() {
 			nodeInfo.NodeInfo.State = model.NodeStateActivated
-			tl.PutNode(ctx, nodeID, nodeInfo)
+			tl.PutNode(ctx, nodeName, nodeInfo)
 
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: name,
+					Name: nodeName,
 				}, vnode)
 				vnodeReady := false
 				for _, cond := range vnode.Status.Conditions {
@@ -45,12 +42,23 @@ var _ = Describe("VNode Lifecycle Test", func() {
 			}, time.Second*20, time.Second).Should(BeTrue())
 		})
 
+		It("node online and should get the lease", func() {
+			Eventually(func() bool {
+				lease := &v12.Lease{}
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      nodeName,
+					Namespace: v1.NamespaceNodeLease,
+				}, lease)
+				return err == nil
+			}, time.Second*30, time.Second).Should(BeTrue())
+		})
+
 		It("node should not start again with the same name", func() {
-			tl.PutNode(ctx, nodeID, nodeInfo)
+			tl.PutNode(ctx, nodeName, nodeInfo)
 		})
 
 		It("node should contains custom information after status sync", func() {
-			Expect(vnode.Labels[model.LabelKeyOfVNodeName]).To(Equal(nodeID))
+			Expect(vnode.Labels[model.LabelKeyOfVNodeName]).To(Equal(nodeName))
 			Expect(vnode.Labels[model.LabelKeyOfVNodeVersion]).To(Equal(nodeVersion))
 			Expect(vnode.Labels[testKey]).To(Equal(testValue))
 			Expect(vnode.Labels[model.LabelKeyOfEnv]).To(Equal(env))
@@ -72,22 +80,22 @@ var _ = Describe("VNode Lifecycle Test", func() {
 		})
 
 		It("node not ready should send not ready to mock tunnel", func() {
-			tl.DeleteNode(nodeID)
+			tl.DeleteNode(nodeName)
 			Eventually(func() bool {
-				return tl.NodeNotReady[nodeID]
+				return tl.NodeNotReady[nodeName]
 			}, time.Second*50, time.Second).Should(BeTrue())
 		})
 
 		It("node offline with deactive message and finally exit", func() {
 			nodeInfo.NodeInfo.State = model.NodeStateDeactivated
-			tl.PutNode(ctx, nodeID, nodeInfo)
+			tl.PutNode(ctx, nodeName, nodeInfo)
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: name,
+					Name: nodeName,
 				}, vnode)
 				lease := &v12.Lease{}
 				leaseErr := k8sClient.Get(ctx, types.NamespacedName{
-					Name:      name,
+					Name:      nodeName,
 					Namespace: v1.NamespaceNodeLease,
 				}, lease)
 				return errors.IsNotFound(err) && errors.IsNotFound(leaseErr)
@@ -98,11 +106,11 @@ var _ = Describe("VNode Lifecycle Test", func() {
 	Context("node online and timeout finally", func() {
 		It("node should become a ready vnode eventually", func() {
 			nodeInfo.State = model.NodeStateActivated
-			tl.PutNode(ctx, nodeID, nodeInfo)
+			tl.PutNode(ctx, nodeName, nodeInfo)
 
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: name,
+					Name: nodeName,
 				}, vnode)
 				vnodeReady := false
 				for _, cond := range vnode.Status.Conditions {
@@ -118,10 +126,10 @@ var _ = Describe("VNode Lifecycle Test", func() {
 
 		It("node offline with deactive message and finally exit", func() {
 			nodeInfo.NodeInfo.State = model.NodeStateDeactivated
-			tl.PutNode(ctx, nodeID, nodeInfo)
+			tl.PutNode(ctx, nodeName, nodeInfo)
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: name,
+					Name: nodeName,
 				}, vnode)
 				return errors.IsNotFound(err)
 			}, time.Second*30, time.Second).Should(BeTrue())
@@ -129,17 +137,3 @@ var _ = Describe("VNode Lifecycle Test", func() {
 	})
 
 })
-
-//func TestRuntimeInfoStore_GetLeaseOutdatedVNodeName(t *testing.T) {
-//	ctx := context.Background()
-//	store := vnode_controller.NewVNodeStore()
-//	clientId := "test-client-id"
-//	vNode, _ := provider.NewVNode(&model.BuildVNodeConfig{
-//		Client: ,
-//	}, &tunnel.MockTunnel{})
-//	store.AddVNode("test", vNode)
-//	vNode.CreateNodeLease(ctx, clientId)
-//	vNode.RenewLease(ctx, clientId)
-//	nameList := store.GetLeaseOutdatedVNodeIDs(clientId)
-//	assert.Assert(t, len(nameList) == 1)
-//}

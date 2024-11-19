@@ -590,7 +590,7 @@ func (vNodeController *VNodeController) wakeUpVNode(ctx context.Context, nodeNam
 	if vNode == nil {
 		return
 	}
-	log.G(ctx).Info("vnode lease outdated, wake vnode up :", nodeName)
+	log.G(ctx).Info("vnode lease outdated, wake vnode up ", nodeName)
 	vNode.RetryLease()
 }
 

@@ -7,7 +7,7 @@ import (
 )
 
 // OnBaseDiscovered is the node discover callback, will start/stop a vnode depends on node state
-type OnBaseDiscovered func(string, model.NodeInfo)
+type OnBaseDiscovered func(model.NodeInfo)
 
 // OnBaseStatusArrived is the node health data callback, will update vnode status to k8s
 type OnBaseStatusArrived func(string, model.NodeStatusData)
@@ -32,7 +32,7 @@ type Tunnel interface {
 	RegisterCallback(OnBaseDiscovered, OnBaseStatusArrived, OnAllBizStatusArrived, OnSingleBizStatusArrived)
 
 	// RegisterNode is the func call when a vnode start successfully, you can implement it on demand
-	RegisterNode(ctx context.Context, nodeName string, initData model.NodeInfo)
+	RegisterNode(ctx context.Context, initData model.NodeInfo)
 
 	// UnRegisterNode is the func call when a vnode shutdown successfully, you can implement it on demand
 	UnRegisterNode(ctx context.Context, nodeName string)

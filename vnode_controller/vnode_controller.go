@@ -227,8 +227,9 @@ func (vNodeController *VNodeController) discoverPreviousNodes(nodeList *corev1.N
 		// Start the virtual node with the extracted information.
 		vNodeController.startVNode(model.NodeInfo{
 			Metadata: model.NodeMetadata{
-				Name:    node.Labels[model.LabelKeyOfVNodeName],
-				Version: node.Labels[model.LabelKeyOfVNodeVersion],
+				Name:        node.Labels[model.LabelKeyOfVNodeName],
+				Version:     node.Labels[model.LabelKeyOfVNodeVersion],
+				ClusterName: node.Labels[model.LabelKeyOfVNodeClusterName],
 			},
 			NetworkInfo: model.NetworkInfo{
 				NodeIP:   nodeIP,
@@ -428,11 +429,12 @@ func (vNodeController *VNodeController) startVNode(initData model.NodeInfo) {
 	vn, err := provider.NewVNode(&model.BuildVNodeConfig{
 		Client:            vNodeController.client,
 		KubeCache:         vNodeController.cache,
-		Env:               vNodeController.env,
 		NodeIP:            initData.NetworkInfo.NodeIP,
 		NodeHostname:      initData.NetworkInfo.HostName,
 		NodeName:          initData.Metadata.Name,
 		NodeVersion:       initData.Metadata.Version,
+		ClusterName:       initData.Metadata.ClusterName,
+		Env:               vNodeController.env,
 		CustomTaints:      initData.CustomTaints,
 		CustomLabels:      initData.CustomLabels,
 		CustomAnnotations: initData.CustomAnnotations,

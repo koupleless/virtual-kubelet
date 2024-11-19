@@ -401,16 +401,7 @@ func NewVNode(config *model.BuildVNodeConfig, tunnel tunnel.Tunnel) (kn *VNode, 
 		// Function to create providers and register the node
 		func(cfg nodeutil.ProviderConfig) (nodeutil.Provider, virtual_kubelet.NodeProvider, error) {
 			// Create a new VirtualKubeletNode provider with configuration
-			nodeProvider = NewVNodeProvider(model.BuildVNodeProviderConfig{
-				NodeIP:            config.NodeIP,
-				NodeHostname:      config.NodeHostname,
-				Version:           config.NodeVersion,
-				Name:              config.NodeName,
-				Env:               config.Env,
-				CustomTaints:      config.CustomTaints,
-				CustomAnnotations: config.CustomAnnotations,
-				CustomLabels:      config.CustomLabels,
-			})
+			nodeProvider = NewVNodeProvider(config)
 			// Initialize pod provider with node namespace, IP, ID, client, and tunnel
 			podProvider = NewVPodProvider(cfg.Node.Namespace, config.NodeIP, config.NodeName, config.Client, tunnel)
 

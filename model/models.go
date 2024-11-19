@@ -17,8 +17,9 @@ type NetworkInfo struct {
 
 // NodeMetadata is the base data of a vnode, will be transfer to default labels of a vnode
 type NodeMetadata struct {
-	Name    string // Name of the vnode
-	Version string // Version of the vnode
+	Name        string // Name of the vnode
+	Version     string // Version of the vnode
+	ClusterName string // ClusterName of the cluster the vnode belongs to
 }
 
 // NodeInfo is the data of node info.
@@ -56,25 +57,15 @@ type BizStatusData struct {
 	Message    string    // Message for state change
 }
 
-type BuildVNodeProviderConfig struct {
-	NodeIP            string            // IP of the node
-	NodeHostname      string            // Hostname of the node
-	Name              string            // Name of the node
-	Version           string            // Version of the node
-	Env               string            // Environment of the node
-	CustomTaints      []v1.Taint        // Custom taints set by the tunnel
-	CustomLabels      map[string]string // Custom labels set by the tunnel
-	CustomAnnotations map[string]string // Custom annotations set by the tunnel
-}
-
 type BuildVNodeConfig struct {
 	Client            client.Client     // Runtime client instance
 	KubeCache         cache.Cache       // Cache of kube resources
-	NodeIP            string            // IP of node
-	NodeHostname      string            // Hostname of node
-	NodeName          string            // Name of node
-	NodeVersion       string            // Version of node
-	Env               string            // Runtime env of virtual-kubelet
+	NodeIP            string            // IP of the node
+	NodeHostname      string            // Hostname of the node
+	NodeName          string            // NodeName of the node
+	NodeVersion       string            // NodeVersion of the node
+	ClusterName       string            // ClusterName of the node
+	Env               string            // Environment of the node
 	CustomTaints      []v1.Taint        // Custom taints set by the tunnel
 	CustomLabels      map[string]string // Custom labels set by the tunnel
 	CustomAnnotations map[string]string // Custom annotations set by the tunnel

@@ -31,7 +31,7 @@ var _ virtual_kubelet.NodeProvider = &VNodeProvider{}
 type VNodeProvider struct {
 	sync.Mutex
 
-	nodeConfig *model.BuildVNodeProviderConfig // Configuration for building a virtual node provider.
+	nodeConfig *model.BuildVNodeConfig // Configuration for building a virtual node provider.
 
 	nodeInfo *corev1.Node // Information about the node.
 
@@ -110,9 +110,9 @@ func (v *VNodeProvider) CurrNodeInfo() *corev1.Node {
 }
 
 // NewVNodeProvider creates a new VNodeProvider instance.
-func NewVNodeProvider(config model.BuildVNodeProviderConfig) *VNodeProvider {
+func NewVNodeProvider(config *model.BuildVNodeConfig) *VNodeProvider {
 	return &VNodeProvider{
-		nodeConfig: &config,
+		nodeConfig: config,
 	}
 }
 
@@ -126,8 +126,9 @@ func (v *VNodeProvider) BuildVirtualNode(node *corev1.Node) {
 	}
 
 	// Set necessary labels on the node.
-	node.Labels[model.LabelKeyOfVNodeVersion] = config.Version
-	node.Labels[model.LabelKeyOfVNodeName] = config.Name
+	node.Labels[model.LabelKeyOfVNodeVersion] = config.NodeVersion
+	node.Labels[model.LabelKeyOfVNodeName] = config.NodeName
+	node.Labels[model.LabelKeyOfVNodeClusterName] = config.ClusterName
 	node.Labels[model.LabelKeyOfEnv] = config.Env
 	node.Labels[model.LabelKeyOfComponent] = model.ComponentVNode
 

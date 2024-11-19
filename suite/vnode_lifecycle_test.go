@@ -18,9 +18,10 @@ var _ = Describe("VNode Lifecycle Test", func() {
 
 	nodeName := "suite-node-node-lifecycle"
 	nodeVersion := "1.0.0"
+	clusterName := "suite-cluster-name"
 	vnode := &v1.Node{}
 
-	nodeInfo := prepareNode(nodeName, nodeVersion)
+	nodeInfo := prepareNode(nodeName, nodeVersion, clusterName)
 
 	Context("node online and deactive finally", func() {
 		It("node should become a ready vnode eventually", func() {
@@ -60,6 +61,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 		It("node should contains custom information after status sync", func() {
 			Expect(vnode.Labels[model.LabelKeyOfVNodeName]).To(Equal(nodeName))
 			Expect(vnode.Labels[model.LabelKeyOfVNodeVersion]).To(Equal(nodeVersion))
+			Expect(vnode.Labels[model.LabelKeyOfVNodeClusterName]).To(Equal(clusterName))
 			Expect(vnode.Labels[testKey]).To(Equal(testValue))
 			Expect(vnode.Labels[model.LabelKeyOfEnv]).To(Equal(env))
 			Expect(vnode.Annotations[testKey]).To(Equal(testValue))

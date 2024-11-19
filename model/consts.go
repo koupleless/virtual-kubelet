@@ -45,6 +45,8 @@ const (
 	LabelKeyOfVNodeName = "vnode.koupleless.io/name"
 	// LabelKeyOfVNodeVersion is a constant string used as a key for vnode version in Kubernetes objects.
 	LabelKeyOfVNodeVersion = "vnode.koupleless.io/version"
+	// LabelKeyOfVNodeClusterName is the constant string used as a key for vnode cluster name in Kubernetes objects.
+	LabelKeyOfVNodeClusterName = "vnode.koupleless.io/cluster-name"
 )
 
 const (

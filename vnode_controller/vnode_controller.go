@@ -258,11 +258,11 @@ func (vNodeController *VNodeController) discoverPreviousPods(ctx context.Context
 
 // onBaseDiscovered is an event handler for when a new node is discovered.
 // It starts a virtual node if the node's status is activated, otherwise it shuts down the virtual node.
-func (vNodeController *VNodeController) onBaseDiscovered(nodeName string, data model.NodeInfo) {
+func (vNodeController *VNodeController) onBaseDiscovered(data model.NodeInfo) {
 	if data.State == model.NodeStateActivated {
 		vNodeController.startVNode(data)
 	} else {
-		vNodeController.shutdownVNode(nodeName)
+		vNodeController.shutdownVNode(data.Metadata.Name)
 	}
 }
 

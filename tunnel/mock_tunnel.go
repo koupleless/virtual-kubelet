@@ -38,7 +38,7 @@ func (m *MockTunnel) PutNode(ctx context.Context, nodeName string, node Node) {
 	defer m.Unlock()
 
 	m.nodeStorage[nodeName] = node
-	m.OnBaseDiscovered(nodeName, node.NodeInfo)
+	m.OnBaseDiscovered(node.NodeInfo)
 }
 
 func (m *MockTunnel) DeleteNode(nodeName string) {
@@ -87,7 +87,7 @@ func (m *MockTunnel) RegisterCallback(
 	m.OnSingleBizStatusArrived = OnSingleBizStatusArrived
 }
 
-func (m *MockTunnel) RegisterNode(ctx context.Context, nodeName string, initData model.NodeInfo) {
+func (m *MockTunnel) RegisterNode(ctx context.Context, initData model.NodeInfo) {
 	return
 }
 

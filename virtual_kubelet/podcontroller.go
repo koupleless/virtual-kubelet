@@ -270,7 +270,7 @@ func (pc *PodController) Run(ctx context.Context, podSyncWorkers int) (retErr er
 	close(pc.ready)
 
 	<-ctx.Done()
-	log.G(ctx).Info("shutting down workers for %s", pc.nodeName)
+	log.G(ctx).Infof("shutting down workers for %s", pc.nodeName)
 
 	return nil
 }

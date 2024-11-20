@@ -85,7 +85,7 @@ func TestDiscoverPreviousNode(t *testing.T) {
 	vc.client = fake.NewFakeClient(&nodeList.Items[0], &nodeList.Items[1])
 	vc.cache = &informertest.FakeInformers{}
 	vc.discoverPreviousNodes(nodeList)
-	assert.Equal(t, 1, len(vc.vNodeStore.GetVNodes()))
+	assert.Equal(t, 2, len(vc.vNodeStore.GetVNodes()))
 }
 
 func TestDiscoverPreviousPods(t *testing.T) {

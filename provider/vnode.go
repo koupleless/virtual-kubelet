@@ -430,6 +430,7 @@ func NewVNode(config *model.BuildVNodeConfig, tunnel tunnel.Tunnel) (kn *VNode, 
 			oldLabels[model.LabelKeyOfComponent] = model.ComponentVNode
 			oldLabels[model.LabelKeyOfEnv] = config.Env
 			oldLabels[model.LabelKeyOfVNodeVersion] = config.NodeVersion
+			oldLabels[corev1.LabelHostname] = config.NodeHostname
 			cfg.Node.Labels = oldLabels
 			return nil
 		},

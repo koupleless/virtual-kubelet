@@ -131,6 +131,7 @@ func (v *VNodeProvider) BuildNode(node *corev1.Node) {
 	node.Labels[model.LabelKeyOfVNodeClusterName] = config.ClusterName
 	node.Labels[model.LabelKeyOfEnv] = config.Env
 	node.Labels[model.LabelKeyOfComponent] = model.ComponentVNode
+	node.Labels[corev1.LabelHostname] = config.NodeHostname
 
 	// Set custom annotations on the node.
 	node.Annotations = v.nodeConfig.CustomAnnotations

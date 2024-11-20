@@ -423,6 +423,16 @@ func NewVNode(config *model.BuildVNodeConfig, tunnel tunnel.Tunnel) (kn *VNode, 
 			cfg.NumWorkers = config.WorkerNum
 			return nil
 		},
+		func(cfg *nodeutil.NodeConfig) error {
+			oldLabels := cfg.Node.Labels
+			oldLabels[model.LabelKeyOfVNodeName] = config.NodeName
+			oldLabels[model.LabelKeyOfVNodeClusterName] = config.ClusterName
+			oldLabels[model.LabelKeyOfComponent] = model.ComponentVNode
+			oldLabels[model.LabelKeyOfEnv] = config.Env
+			oldLabels[model.LabelKeyOfVNodeVersion] = config.NodeVersion
+			cfg.Node.Labels = oldLabels
+			return nil
+		},
 		// Options for creating the node
 		nodeutil.WithClient(config.Client),
 		nodeutil.WithCache(config.KubeCache),

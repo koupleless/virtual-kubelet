@@ -116,8 +116,8 @@ func NewVNodeProvider(config *model.BuildVNodeConfig) *VNodeProvider {
 	}
 }
 
-// BuildVirtualNode builds a virtual node based on the provided configuration.
-func (v *VNodeProvider) BuildVirtualNode(node *corev1.Node) {
+// BuildNode builds a virtual node based on the provided configuration.
+func (v *VNodeProvider) BuildNode(node *corev1.Node) {
 	config := *v.nodeConfig // Copy the node configuration.
 	// Set custom labels on the node.
 	node.Labels = v.nodeConfig.CustomLabels
@@ -182,7 +182,7 @@ func (v *VNodeProvider) BuildVirtualNode(node *corev1.Node) {
 
 // Register registers a node with the provider.
 func (v *VNodeProvider) Register(node *corev1.Node) error {
-	v.BuildVirtualNode(node)
+	v.BuildNode(node)
 	v.Lock()
 	v.nodeInfo = node.DeepCopy()
 	v.Unlock()

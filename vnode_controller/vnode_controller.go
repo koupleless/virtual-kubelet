@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/koupleless/virtual-kubelet/tunnel"
 	"github.com/koupleless/virtual-kubelet/vnode_controller/predicates"
+	errors2 "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
 	"time"
@@ -279,7 +280,11 @@ func (vNodeController *VNodeController) onBaseDiscovered(data model.NodeInfo) {
 // It updates the node's status in the virtual node.
 func (vNodeController *VNodeController) onBaseStatusArrived(nodeName string, data model.NodeStatusData) {
 	vNode := vNodeController.vNodeStore.GetVNode(nodeName)
-	if vNode == nil {
+	node := &corev1.Node{}
+	err := vNodeController.cache.Get(context.TODO(), types.NamespacedName{Name: nodeName}, node, &client.GetOptions{})
+
+	// if not exist then return
+	if vNode == nil || (err != nil && errors2.IsNotFound(err)) {
 		return
 	}
 
@@ -293,7 +298,11 @@ func (vNodeController *VNodeController) onBaseStatusArrived(nodeName string, dat
 // It updates the status of all containers in the virtual node.
 func (vNodeController *VNodeController) onAllBizStatusArrived(nodeName string, bizStatusDatas []model.BizStatusData) {
 	vNode := vNodeController.vNodeStore.GetVNode(nodeName)
-	if vNode == nil {
+	node := &corev1.Node{}
+	err := vNodeController.cache.Get(context.TODO(), types.NamespacedName{Name: nodeName}, node, &client.GetOptions{})
+
+	// if not exist then return
+	if vNode == nil || (err != nil && errors2.IsNotFound(err)) {
 		return
 	}
 
@@ -311,7 +320,11 @@ func (vNodeController *VNodeController) onAllBizStatusArrived(nodeName string, b
 // It updates the status of the container in the virtual node.
 func (vNodeController *VNodeController) onSingleBizStatusArrived(nodeName string, bizStatusData model.BizStatusData) {
 	vNode := vNodeController.vNodeStore.GetVNode(nodeName)
-	if vNode == nil {
+	node := &corev1.Node{}
+	err := vNodeController.cache.Get(context.TODO(), types.NamespacedName{Name: nodeName}, node, &client.GetOptions{})
+
+	// if not exist then return
+	if vNode == nil || (err != nil && errors2.IsNotFound(err)) {
 		return
 	}
 
@@ -429,8 +442,13 @@ func (vNodeController *VNodeController) startVNode(initData model.NodeInfo) {
 	}
 
 	nodeName := initData.Metadata.Name
-	if vNodeController.vNodeStore.GetVNode(nodeName) != nil {
-		// already exist, return
+
+	vNode := vNodeController.vNodeStore.GetVNode(nodeName)
+	node := &corev1.Node{}
+	err = vNodeController.cache.Get(context.TODO(), types.NamespacedName{Name: nodeName}, node, &client.GetOptions{})
+
+	// if already exist then return
+	if vNode != nil && err == nil {
 		return
 	}
 
@@ -598,9 +616,14 @@ func (vNodeController *VNodeController) shutdownVNode(nodeName string) {
 // This function wakes up a VNode by retrying its lease if it has become outdated.
 func (vNodeController *VNodeController) wakeUpVNode(ctx context.Context, nodeName string) {
 	vNode := vNodeController.vNodeStore.GetVNode(nodeName)
-	if vNode == nil {
+	node := &corev1.Node{}
+	err := vNodeController.cache.Get(context.TODO(), types.NamespacedName{Name: nodeName}, node, &client.GetOptions{})
+
+	// if not exist then return
+	if vNode == nil || (err != nil && errors2.IsNotFound(err)) {
 		return
 	}
+
 	log.G(ctx).Info("vnode lease outdated, wake vnode up ", nodeName)
 	vNode.RetryLease()
 }

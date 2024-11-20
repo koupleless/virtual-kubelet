@@ -592,6 +592,7 @@ func (vNodeController *VNodeController) startLeaderElection(ctx context.Context,
 // This function shuts down a VNode by calling its Shutdown method and updating the runtime info store.
 func (vNodeController *VNodeController) shutdownVNode(nodeName string) {
 	vNodeController.vNodeStore.NodeShutdown(nodeName)
+	vNodeController.vNodeStore.DeleteVNode(nodeName)
 }
 
 // This function wakes up a VNode by retrying its lease if it has become outdated.

@@ -84,6 +84,8 @@ func NewVNodeController(config *model.BuildVNodeControllerConfig, tunnel tunnel.
 	return &VNodeController{
 		clientID:         config.ClientID,
 		env:              config.Env,
+		client:           config.KubeClient,
+		cache:            config.KubeCache,
 		vPodIdentity:     config.VPodIdentity,
 		isCluster:        config.IsCluster,
 		workloadMaxLevel: config.WorkloadMaxLevel,

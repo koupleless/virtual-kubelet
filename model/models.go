@@ -73,12 +73,14 @@ type BuildVNodeConfig struct {
 }
 
 type BuildVNodeControllerConfig struct {
-	ClientID         string // Identity of vk instance, recommended to set it to pod name
-	Env              string // Environment of the vk instance
-	VPodIdentity     string // VPod special value of model.LabelKeyOfComponent
-	IsCluster        bool   // Whether the deployment is in a cluster
-	WorkloadMaxLevel int    // Maximum workload level
-	VNodeWorkerNum   int    // VNode container event processor worker num, default 1, means execute Container events serially
+	KubeClient       client.Client // Runtime client instance
+	KubeCache        cache.Cache   // Cache of kube resources
+	ClientID         string        // Identity of vk instance, recommended to set it to pod name
+	Env              string        // Environment of the vk instance
+	VPodIdentity     string        // VPod special value of model.LabelKeyOfComponent
+	IsCluster        bool          // Whether the deployment is in a cluster
+	WorkloadMaxLevel int           // Maximum workload level
+	VNodeWorkerNum   int           // VNode container event processor worker num, default 1, means execute Container events serially
 }
 
 // QueryBaselineRequest is the request parameters of query baseline func

@@ -133,7 +133,7 @@ func (b *VPodProvider) SyncAllBizStatusToKube(ctx context.Context, bizStatusData
 				toUpdateBizStatusDatas = append(toUpdateBizStatusDatas, bizStatusData)
 			}
 
-			log.G(ctx).Infof("container %s/%s need update: %s", podKey, bizKey, toUpdate)
+			log.G(ctx).Infof("container %s/%s need update: %v", podKey, bizKey, toUpdate)
 		}
 	}
 

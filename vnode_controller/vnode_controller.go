@@ -177,7 +177,11 @@ func (vNodeController *VNodeController) SetupWithManager(ctx context.Context, mg
 			go utils.TimedTaskWithInterval(ctx, time.Millisecond*500, func(ctx context.Context) {
 				outdatedVNodeNames := vNodeController.vNodeStore.GetLeaseOutdatedVNodeNames(vNodeController.clientID)
 				if outdatedVNodeNames != nil && len(outdatedVNodeNames) > 0 {
-					log.G(ctx).Info("check outdated vnode", outdatedVNodeNames)
+					nodeNames := make([]string, 0, len(outdatedVNodeNames))
+					for _, vNodeName := range outdatedVNodeNames {
+						nodeNames = append(nodeNames, vNodeName)
+					}
+					log.G(ctx).Info("check outdated vnode", nodeNames)
 				}
 				for _, vNodeName := range outdatedVNodeNames {
 					vNodeController.wakeUpVNode(ctx, vNodeName)
@@ -188,7 +192,11 @@ func (vNodeController *VNodeController) SetupWithManager(ctx context.Context, mg
 			go utils.TimedTaskWithInterval(ctx, time.Second, func(ctx context.Context) {
 				unReachableVNode := vNodeController.vNodeStore.GetUnReachableVNodes()
 				if unReachableVNode != nil && len(unReachableVNode) > 0 {
-					log.G(ctx).Infof("check not reachable vnode %v", unReachableVNode)
+					nodeNames := make([]string, 0, len(unReachableVNode))
+					for _, vNode := range unReachableVNode {
+						nodeNames = append(nodeNames, vNode.GetNodeName())
+					}
+					log.G(ctx).Infof("check not reachable vnode %v", nodeNames)
 				}
 				for _, vNode := range unReachableVNode {
 					if vNode.IsLeader(vNodeController.clientID) {

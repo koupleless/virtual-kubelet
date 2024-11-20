@@ -71,6 +71,8 @@ var _ = BeforeSuite(func() {
 	ctx := context.Background()
 
 	vnodeController, err := vnode_controller.NewVNodeController(&model.BuildVNodeControllerConfig{
+		KubeClient:   k8sManager.GetClient(),
+		KubeCache:    k8sManager.GetCache(),
 		ClientID:     clientID,
 		Env:          env,
 		VPodIdentity: vPodIdentity,

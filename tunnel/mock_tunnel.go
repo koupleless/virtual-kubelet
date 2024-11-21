@@ -29,7 +29,9 @@ type MockTunnel struct {
 }
 
 func (m *MockTunnel) OnNodeNotReady(ctx context.Context, nodeName string) {
-	m.NodeNotReady[nodeName] = true
+	m.Lock()
+	defer m.Unlock()
+	delete(m.nodeStorage, nodeName)
 	return
 }
 

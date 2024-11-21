@@ -241,7 +241,7 @@ func TestDelayWithWorkload(t *testing.T) {
 	end := time.Now()
 	ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Millisecond*20)
 	cancelFunc()
-	vc.vNodeStore.UpdateNodeHeartbeatFromProviderArrived("test-node")
+	vc.vNodeStore.UpdateNodeStateOnProviderArrived("test-node", model.NodeStateActivated)
 	vc.vNodeStore.AddVNode("test-node", &provider.VNode{})
 	vc.delayWithWorkload(ctx)
 	assert.True(t, end.Sub(now) < time.Millisecond*100)

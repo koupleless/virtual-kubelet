@@ -15,7 +15,9 @@
 package provider
 
 import (
+	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/pkg/errors"
+	"strings"
 	"sync"
 )
 
@@ -37,13 +39,17 @@ func NewVNodeStore() *VNodeStore {
 	}
 }
 
-// UpdateNodeHeartbeatFromProviderArrived updates the latest message time for a given node ID.
-func (r *VNodeStore) UpdateNodeHeartbeatFromProviderArrived(nodeName string) {
+// UpdateNodeStateOnProviderArrived updates the latest message time for a given node ID.
+func (r *VNodeStore) UpdateNodeStateOnProviderArrived(nodeName string, state model.NodeState) {
 	r.Lock()
 	defer r.Unlock()
 
 	if vNode, has := r.nodeNameToVNode[nodeName]; has {
-		vNode.Liveness.UpdateHeartBeatTime()
+		if strings.EqualFold(string(state), string(model.NodeStateActivated)) {
+			vNode.Liveness.UpdateHeartBeatTime()
+		} else {
+			vNode.Liveness.Close()
+		}
 	}
 }
 

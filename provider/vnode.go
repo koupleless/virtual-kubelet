@@ -216,12 +216,12 @@ func (vNode *VNode) CreateNodeLease(ctx context.Context, controllerID string) bo
 				return false
 			} else if err != nil {
 				// Log the error if there's a problem creating the lease
-				logger.WithError(err).Error("error creating node lease")
+				logger.WithError(err).Errorf("node lease %s creating error", vNode.name)
 				return false
 			}
 		} else {
 			// Log the error if there's a problem getting the lease
-			log.G(ctx).Errorf("failed to get node lease %s: %v", vNode.name, err)
+			log.G(ctx).WithError(err).Errorf("failed to get node lease %s", vNode.name)
 			return false
 		}
 	} else {

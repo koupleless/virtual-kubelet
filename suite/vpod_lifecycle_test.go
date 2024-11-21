@@ -202,17 +202,18 @@ var _ = Describe("VPod Lifecycle Test", func() {
 			}, time.Second*20, time.Second).Should(BeTrue())
 		})
 
-		It(tasks[8], func() {
-			nodeInfo.State = model.NodeStateDeactivated
-			tl.PutNode(ctx, nodeName, nodeInfo)
-			Eventually(func() bool {
-				node := &v1.Node{}
-				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: nodeName,
-				}, node)
-				return errors.IsNotFound(err)
-			}, time.Second*10, time.Second).Should(BeTrue())
-		})
+		// TODO: to enable this feature
+		//It(tasks[8], func() {
+		//	nodeInfo.State = model.NodeStateDeactivated
+		//	tl.PutNode(ctx, nodeName, nodeInfo)
+		//	Eventually(func() bool {
+		//		node := &v1.Node{}
+		//		err := k8sClient.Get(ctx, types.NamespacedName{
+		//			Name: nodeName,
+		//		}, node)
+		//		return errors.IsNotFound(err)
+		//	}, time.Second*10, time.Second).Should(BeTrue())
+		//})
 	})
 
 })

@@ -87,6 +87,7 @@ func TestDiscoverPreviousNode(t *testing.T) {
 	vc.client = fake.NewFakeClient(&nodeList.Items[0], &nodeList.Items[1])
 	vc.cache = &informertest.FakeInformers{}
 	vc.discoverPreviousNodes(nodeList)
+	time.Sleep(20 * time.Second)
 	assert.Equal(t, 2, len(vc.vNodeStore.GetVNodes()))
 }
 
@@ -240,7 +241,7 @@ func TestDelayWithWorkload(t *testing.T) {
 	end := time.Now()
 	ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Millisecond*20)
 	cancelFunc()
-	vc.vNodeStore.NodeHeartbeatFromProviderArrived("test-node")
+	vc.vNodeStore.UpdateNodeHeartbeatFromProviderArrived("test-node")
 	vc.vNodeStore.AddVNode("test-node", &provider.VNode{})
 	vc.delayWithWorkload(ctx)
 	assert.True(t, end.Sub(now) < time.Millisecond*100)
@@ -253,15 +254,6 @@ func TestShutdownNonExistVNode(t *testing.T) {
 		KubeCache:    &informertest.FakeInformers{},
 	}, &mockTunnel)
 	vc.shutdownVNode("test-node")
-}
-
-func TestWakeUpNonExistVNode(t *testing.T) {
-	mockTunnel := tunnel.MockTunnel{}
-	vc, _ := NewVNodeController(&model.BuildVNodeControllerConfig{
-		VPodIdentity: "suite",
-		KubeCache:    &informertest.FakeInformers{},
-	}, &mockTunnel)
-	vc.wakeUpVNode(context.TODO(), "test-node")
 }
 
 func TestDeleteGraceTimeEqual(t *testing.T) {

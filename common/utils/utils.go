@@ -145,6 +145,13 @@ func PodsEqual(pod1, pod2 *corev1.Pod) bool {
 		cmp.Equal(pod1.ObjectMeta.Finalizers, pod2.Finalizers)
 }
 
+func NodeStatusEqual(status1, status2 model.NodeStatusData) bool {
+	return cmp.Equal(status1.Resources, status2.Resources) &&
+		cmp.Equal(status1.CustomConditions, status2.CustomConditions) &&
+		cmp.Equal(status1.CustomAnnotations, status2.CustomAnnotations) &&
+		cmp.Equal(status1.CustomLabels, status2.CustomLabels)
+}
+
 // FormatNodeName constructs a node name based on node ID and environment.
 func FormatNodeName(nodeID, env string) string {
 	return fmt.Sprintf("%s.%s.%s", model.VNodePrefix, nodeID, env)

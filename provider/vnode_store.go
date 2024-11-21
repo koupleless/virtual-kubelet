@@ -37,8 +37,8 @@ func NewVNodeStore() *VNodeStore {
 	}
 }
 
-// NodeHeartbeatFromProviderArrived updates the latest message time for a given node ID.
-func (r *VNodeStore) NodeHeartbeatFromProviderArrived(nodeName string) {
+// UpdateNodeHeartbeatFromProviderArrived updates the latest message time for a given node ID.
+func (r *VNodeStore) UpdateNodeHeartbeatFromProviderArrived(nodeName string) {
 	r.Lock()
 	defer r.Unlock()
 

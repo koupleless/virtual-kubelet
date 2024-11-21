@@ -202,7 +202,7 @@ func (vNodeController *VNodeController) SetupWithManager(ctx context.Context, mg
 				}
 				for _, vNode := range unReachableVNode {
 					if vNode.IsLeader(vNodeController.clientID) {
-						vNodeController.tunnel.OnNodeNotReady(ctx, vNode.GetNodeName())
+						vNodeController.shutdownVNode(vNode.GetNodeName())
 					}
 				}
 			})
@@ -273,7 +273,7 @@ func (vNodeController *VNodeController) onBaseDiscovered(data model.NodeInfo) {
 	if data.State == model.NodeStateActivated {
 		vNodeController.startVNode(data)
 	} else {
-		vNodeController.shutdownVNode(data.Metadata.Name)
+		// TODO: update node status
 	}
 }
 

@@ -296,9 +296,15 @@ func (pc *PodController) Err() error {
 }
 
 func (pc *PodController) AddKnownPod(pod *corev1.Pod) {
+	podCopy := pod.DeepCopy()
 	pc.knownPods.Store(utils.GetPodKey(pod), &knownPod{
-		lastPodUsed: pod,
+		lastPodStatusReceivedFromProvider: podCopy,
+		lastPodStatusUpdateSkipped:        false,
 	})
+}
+
+func (pc *PodController) GetKnownPod(key string) (any, bool) {
+	return pc.knownPods.Load(key)
 }
 
 func (pc *PodController) DeleteKnownPod(key string) {

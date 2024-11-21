@@ -272,6 +272,7 @@ func (vNodeController *VNodeController) discoverPreviousPods(ctx context.Context
 func (vNodeController *VNodeController) onBaseDiscovered(data model.NodeInfo) {
 	if data.State == model.NodeStateActivated {
 		vNodeController.startVNode(data)
+		vNodeController.vNodeStore.UpdateNodeStateOnProviderArrived(data.Metadata.Name, data.State)
 	} else {
 		// TODO: update node status
 	}
@@ -288,7 +289,6 @@ func (vNodeController *VNodeController) onBaseStatusArrived(nodeName string, dat
 	}
 
 	if vNode.IsLeader(vNodeController.clientID) {
-		vNodeController.vNodeStore.UpdateNodeHeartbeatFromProviderArrived(nodeName)
 		vNode.SyncNodeStatus(data)
 	}
 }
@@ -308,7 +308,6 @@ func (vNodeController *VNodeController) onAllBizStatusArrived(nodeName string, b
 		pods, _ := vNodeController.listPodFromKube(ctx, nodeName)
 		bizStatusDatasWithPodKey := utils.FillPodKey(pods, bizStatusDatas)
 
-		vNodeController.vNodeStore.UpdateNodeHeartbeatFromProviderArrived(nodeName)
 		vNode.SyncAllContainerInfo(ctx, bizStatusDatasWithPodKey)
 	}
 }
@@ -333,7 +332,6 @@ func (vNodeController *VNodeController) onSingleBizStatusArrived(nodeName string
 			return
 		}
 
-		vNodeController.vNodeStore.UpdateNodeHeartbeatFromProviderArrived(nodeName)
 		vNode.SyncOneContainerInfo(context.TODO(), bizStatusDatasWithPodKey[0])
 	}
 }
@@ -352,6 +350,11 @@ func (vNodeController *VNodeController) podAddHandler(ctx context.Context, podFr
 		return
 	}
 
+	key := utils.GetPodKey(podFromKubernetes)
+	if _, has := vn.GetKnownPod(key); !has {
+		vn.AddKnowPod(podFromKubernetes)
+	}
+
 	if !vn.IsLeader(vNodeController.clientID) {
 		// not leader, just return
 		return
@@ -361,10 +364,8 @@ func (vNodeController *VNodeController) podAddHandler(ctx context.Context, podFr
 	defer span.End()
 
 	// At this point we know that something in .metadata or .spec has changed, so we must proceed to sync the pod.
-	key := utils.GetPodKey(podFromKubernetes)
 	ctx = span.WithField(ctx, "key", key)
 
-	vn.AddKnowPod(podFromKubernetes)
 	vn.SyncPodsFromKubernetesEnqueue(ctx, key)
 }
 
@@ -381,6 +382,11 @@ func (vNodeController *VNodeController) podUpdateHandler(ctx context.Context, ol
 		return
 	}
 
+	key := utils.GetPodKey(newPodFromKubernetes)
+	if _, has := vNode.GetKnownPod(key); !has {
+		vNode.AddKnowPod(newPodFromKubernetes)
+	}
+
 	if !vNode.IsLeader(vNodeController.clientID) {
 		// not leader, just return
 		return
@@ -389,7 +395,6 @@ func (vNodeController *VNodeController) podUpdateHandler(ctx context.Context, ol
 	defer span.End()
 
 	// At this point we know that something in .metadata or .spec has changed, so we must proceed to sync the pod.
-	key := utils.GetPodKey(newPodFromKubernetes)
 	ctx = span.WithField(ctx, "key", key)
 	vNode.CheckAndUpdatePodStatus(ctx, key, newPodFromKubernetes)
 
@@ -506,9 +511,6 @@ func (vNodeController *VNodeController) startVNode(initData model.NodeInfo) {
 		} else {
 			vNodeController.vNodeStore.AddVNode(nodeName, vn)
 		}
-
-		// Mark the node as running in the runtime info store
-		vNodeController.vNodeStore.UpdateNodeHeartbeatFromProviderArrived(nodeName)
 
 		// Start a new goroutine to fetch node health data every 10 seconds
 		go utils.TimedTaskWithInterval(vnCtx, time.Second*10, func(ctx context.Context) {

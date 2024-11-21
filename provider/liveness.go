@@ -23,4 +23,5 @@ func (liveness *Liveness) IsAlive() bool {
 
 func (liveness *Liveness) Close() {
 	liveness.isClose = true
+	liveness.LatestHeartBeatTime = time.Now()
 }

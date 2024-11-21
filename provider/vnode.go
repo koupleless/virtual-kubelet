@@ -143,7 +143,8 @@ func (vNode *VNode) createOrRetryUpdateLease(ctx context.Context, clientID strin
 
 		newLease := lease.DeepCopy()
 		newLease.Spec.RenewTime = &metav1.MicroTime{Time: time.Now()}
-		err = vNode.client.Update(ctx, newLease)
+
+		err = vNode.client.Patch(ctx, newLease, client.MergeFrom(lease))
 		if err == nil {
 			log.G(ctx).WithField("retries", i).Debug("Successfully updated lease")
 			vNode.lease = newLease
@@ -284,13 +285,6 @@ func (vNode *VNode) leaderChanged() {
 	}
 }
 
-// AddKnowPod stores the pod in the node
-func (vNode *VNode) AddKnowPod(pod *corev1.Pod) {
-	if vNode.node != nil {
-		vNode.node.PodController().AddKnownPod(pod)
-	}
-}
-
 // CheckAndUpdatePodStatus checks and updates a pod in the node
 func (vNode *VNode) CheckAndUpdatePodStatus(ctx context.Context, key string, pod *corev1.Pod) {
 	if vNode.node != nil {
@@ -310,6 +304,20 @@ func (vNode *VNode) DeletePodsFromKubernetesForget(ctx context.Context, key stri
 	if vNode.node != nil {
 		vNode.node.PodController().DeletePodsFromKubernetesForget(ctx, key)
 	}
+}
+
+// AddKnowPod stores the pod in the node
+func (vNode *VNode) AddKnowPod(pod *corev1.Pod) {
+	if vNode.node != nil {
+		vNode.node.PodController().AddKnownPod(pod)
+	}
+}
+
+func (vNode *VNode) GetKnownPod(key string) (any, bool) {
+	if vNode.node != nil {
+		return vNode.node.PodController().GetKnownPod(key)
+	}
+	return nil, false
 }
 
 // DeleteKnownPod deletes a pod from the node

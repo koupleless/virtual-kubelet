@@ -284,10 +284,10 @@ func (vNode *VNode) leaderChanged() {
 	}
 }
 
-// InitKnowPod stores the pod in the node
-func (vNode *VNode) InitKnowPod(key string) {
+// AddKnowPod stores the pod in the node
+func (vNode *VNode) AddKnowPod(pod *corev1.Pod) {
 	if vNode.node != nil {
-		vNode.node.PodController().InitKnownPod(key)
+		vNode.node.PodController().AddKnownPod(pod)
 	}
 }
 

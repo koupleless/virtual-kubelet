@@ -203,7 +203,7 @@ func NewPodController(cfg PodControllerConfig) (*PodController, error) {
 		recorder: cfg.EventRecorder,
 	}
 
-	pc.syncPodsFromKubernetes = queue.New(cfg.SyncPodsFromKubernetesRateLimiter, "syncPodsFromKubernetes", pc.syncPodFromKubernetesHandler, cfg.SyncPodsFromKubernetesShouldRetryFunc)
+	pc.syncPodsFromKubernetes = queue.New(cfg.SyncPodsFromKubernetesRateLimiter, "syncPodsFromKubernetes", pc.syncPodsFromKubernetesHandler, cfg.SyncPodsFromKubernetesShouldRetryFunc)
 	pc.deletePodsFromKubernetes = queue.New(cfg.DeletePodsFromKubernetesRateLimiter, "deletePodsFromKubernetes", pc.deletePodsFromKubernetesHandler, cfg.DeletePodsFromKubernetesShouldRetryFunc)
 	pc.syncPodStatusFromProvider = queue.New(cfg.SyncPodStatusFromProviderRateLimiter, "syncPodStatusFromProvider", pc.syncPodStatusFromProviderHandler, cfg.SyncPodStatusFromProviderShouldRetryFunc)
 
@@ -295,8 +295,10 @@ func (pc *PodController) Err() error {
 	return pc.err
 }
 
-func (pc *PodController) InitKnownPod(key string) {
-	pc.knownPods.Store(key, &knownPod{})
+func (pc *PodController) AddKnownPod(pod *corev1.Pod) {
+	pc.knownPods.Store(utils.GetPodKey(pod), &knownPod{
+		lastPodUsed: pod,
+	})
 }
 
 func (pc *PodController) DeleteKnownPod(key string) {
@@ -346,9 +348,9 @@ func (pc *PodController) SyncPodStatusFromProviderEnqueue(ctx context.Context, k
 	pc.syncPodStatusFromProvider.Enqueue(ctx, key)
 }
 
-// syncPodFromKubernetesHandler compares the actual state with the desired, and attempts to converge the two.
-func (pc *PodController) syncPodFromKubernetesHandler(ctx context.Context, key string) error {
-	ctx, span := trace.StartSpan(ctx, "syncPodFromKubernetesHandler")
+// syncPodsFromKubernetesHandler compares the actual state with the desired, and attempts to converge the two.
+func (pc *PodController) syncPodsFromKubernetesHandler(ctx context.Context, key string) error {
+	ctx, span := trace.StartSpan(ctx, "syncPodsFromKubernetesHandler")
 	defer span.End()
 
 	// Add the current key as an attribute to the current span.

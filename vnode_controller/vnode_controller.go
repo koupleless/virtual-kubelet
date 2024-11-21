@@ -364,7 +364,7 @@ func (vNodeController *VNodeController) podAddHandler(ctx context.Context, podFr
 	key := utils.GetPodKey(podFromKubernetes)
 	ctx = span.WithField(ctx, "key", key)
 
-	vn.InitKnowPod(key)
+	vn.AddKnowPod(podFromKubernetes)
 	vn.SyncPodsFromKubernetesEnqueue(ctx, key)
 }
 

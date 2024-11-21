@@ -21,20 +21,3 @@ func TestVNode_ExitWhenLeaderChanged(t *testing.T) {
 		assert.Fail(t, "ExitWhenLeaderChanged should not called")
 	}
 }
-
-func TestVNode_ShouldRetryLease(t *testing.T) {
-	vnode := VNode{
-		shouldRetryLease: make(chan struct{}),
-	}
-	select {
-	case <-vnode.ShouldRetryLease():
-		assert.Fail(t, "ShouldRetryLease should have been called")
-	default:
-	}
-	vnode.RetryLease()
-	select {
-	case <-vnode.ShouldRetryLease():
-	default:
-		assert.Fail(t, "ShouldRetryLease should not called")
-	}
-}

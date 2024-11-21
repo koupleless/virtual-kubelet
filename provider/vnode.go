@@ -38,7 +38,6 @@ type VNode struct {
 	exit                  chan struct{} // Channel for signaling the node to exit
 	ready                 chan struct{} // Channel for signaling the node is ready
 	exitWhenLeaderChanged chan struct{} // Channel for signaling the leader has changed
-	shouldRetryLease      chan struct{} // Channel for signaling the node to retry lease
 	done                  chan struct{} // Channel for signaling the node has exited
 
 	lease    *coordinationv1.Lease // Latest lease of the node
@@ -49,6 +48,10 @@ type VNode struct {
 
 func (vNode *VNode) GetNodeName() string {
 	return vNode.name
+}
+
+func (vNode *VNode) GetLease() *coordinationv1.Lease {
+	return vNode.lease
 }
 
 // Run is the main function for a virtual node
@@ -94,19 +97,17 @@ func (vNode *VNode) Run(ctx context.Context, initData model.NodeInfo) {
 	}
 }
 
-// RenewLease renews the lease of the node
-func (vNode *VNode) RenewLease(ctx context.Context, clientID string) {
-	// Delay the first lease update
-	time.Sleep(time.Second * model.NodeLeaseUpdatePeriodSeconds)
-
+// StartLeaderElection renews the lease of the node
+func (vNode *VNode) StartLeaderElection(ctx context.Context, clientID string) {
+	vNode.createOrRetryUpdateLease(ctx, clientID)
 	// Retry updating the lease
 	utils.TimedTaskWithInterval(ctx, time.Second*model.NodeLeaseUpdatePeriodSeconds, func(ctx context.Context) {
-		vNode.retryUpdateLease(ctx, clientID)
+		vNode.createOrRetryUpdateLease(ctx, clientID)
 	})
 }
 
-// retryUpdateLease retries updating the lease of the node
-func (vNode *VNode) retryUpdateLease(ctx context.Context, clientID string) {
+// createOrRetryUpdateLease retries updating the lease of the node
+func (vNode *VNode) createOrRetryUpdateLease(ctx context.Context, clientID string) {
 	for i := 0; i < model.NodeLeaseMaxRetryTimes; i++ {
 		lease := &coordinationv1.Lease{}
 		err := vNode.client.Get(ctx, types.NamespacedName{
@@ -114,11 +115,26 @@ func (vNode *VNode) retryUpdateLease(ctx context.Context, clientID string) {
 			Namespace: corev1.NamespaceNodeLease,
 		}, lease)
 		if err != nil {
+			if apierrors.IsNotFound(err) {
+				// If not found, try to create a new lease
+				lease = vNode.newLease(clientID)
+
+				// Attempt to create the lease
+				err = vNode.client.Create(ctx, lease)
+				// If the context is canceled or deadline exceeded, return false
+				if err != nil {
+					// Log the error if there's a problem creating the lease
+					log.G(ctx).WithError(err).Errorf("node lease %s creating error", vNode.name)
+				}
+				continue
+			}
+
 			log.G(ctx).WithError(err).WithField("retries", i).Error("failed to get node lease when updating node lease")
 			time.Sleep(time.Millisecond * 200)
 			continue
 		}
 
+		vNode.lease = lease
 		// If the holder identity is not the current client id, the leader has changed
 		if lease.Spec.HolderIdentity == nil || *lease.Spec.HolderIdentity != clientID {
 			vNode.leaderChanged()
@@ -144,7 +160,6 @@ func (vNode *VNode) retryUpdateLease(ctx context.Context, clientID string) {
 	}
 
 	log.G(ctx).WithError(fmt.Errorf("failed after %d attempts to update node lease", model.NodeLeaseMaxRetryTimes)).Error("failed to update node lease")
-	vNode.leaderChanged()
 }
 
 // WaitReady waits for the node to be ready
@@ -169,84 +184,18 @@ func (vNode *VNode) WaitReady(ctx context.Context, timeout time.Duration) error 
 		return err == nil
 	}, timeout, time.Millisecond*200, func() {}, func() {})
 
-	utils.CheckAndFinallyCall(ctx, func() bool {
-		select {
-		case <-vNode.ready:
-			return true
-		default:
-			return false
-		}
-	}, timeout, time.Millisecond*200, func() {}, func() {})
+	utils.CheckAndFinallyCall(ctx, vNode.IsReady, timeout, time.Millisecond*200, func() {}, func() {})
 
 	return err
 }
 
-// CreateNodeLease creates a new lease for the node
-func (vNode *VNode) CreateNodeLease(ctx context.Context, controllerID string) bool {
-	// Initialize logger for the context
-	logger := log.G(ctx)
-
-	// Defer the function to lock the retry lease to ensure it's always called
-	defer vNode.LockRetryLease()
-
-	// Initialize lease and nodeName
-	lease := &coordinationv1.Lease{}
-
-	// Attempt to get the lease from the client
-	err := vNode.client.Get(ctx, types.NamespacedName{
-		Name:      vNode.name,
-		Namespace: corev1.NamespaceNodeLease,
-	}, lease)
-
-	// If there's an error, check if it's because the lease was not found
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			// If not found, try to create a new lease
-			lease = vNode.newLease(controllerID)
-
-			// Attempt to create the lease
-			err = vNode.client.Create(ctx, lease)
-			// If the context is canceled or deadline exceeded, return false
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				return false
-			}
-
-			// If the lease already exists, return false
-			if apierrors.IsAlreadyExists(err) {
-				return false
-			} else if err != nil {
-				// Log the error if there's a problem creating the lease
-				logger.WithError(err).Errorf("node lease %s creating error", vNode.name)
-				return false
-			}
-		} else {
-			// Log the error if there's a problem getting the lease
-			log.G(ctx).WithError(err).Errorf("failed to get node lease %s", vNode.name)
-			return false
-		}
-	} else {
-		// If the lease exists, check if it's outdated
-		if lease.Spec.RenewTime == nil || time.Now().Sub(lease.Spec.RenewTime.Time).Microseconds() > model.NodeLeaseDurationSeconds*1000*1000 {
-			// If outdated, try to update the lease
-			newLease := lease.DeepCopy()
-			newLease.Spec.RenewTime = &metav1.MicroTime{Time: time.Now()}
-			newLease.Spec.HolderIdentity = ptr.To(controllerID)
-			err = vNode.client.Update(ctx, newLease)
-			// If the update is successful, return true
-			if err == nil {
-				vNode.lease = newLease
-				return true
-			}
-			// Log the error if there's a problem updating the lease
-			logger.WithError(err).Error("failed to update outdated node lease")
-		}
-		// If the lease is not outdated, return false
+func (vNode *VNode) IsReady() bool {
+	select {
+	case <-vNode.ready:
+		return true
+	default:
 		return false
 	}
-
-	// Update the latest lease
-	vNode.lease = lease
-	return true
 }
 
 // newLease creates a new lease for the node
@@ -272,6 +221,9 @@ func (vNode *VNode) newLease(holderIdentity string) *coordinationv1.Lease {
 
 // SyncNodeStatus syncs the status of the node
 func (vNode *VNode) SyncNodeStatus(data model.NodeStatusData) {
+	if utils.NodeStatusEqual(vNode.nodeProvider.latestNodeStatusData, data) {
+		return
+	}
 	if vNode.nodeProvider != nil {
 		vNode.nodeProvider.Notify(data)
 	}
@@ -307,25 +259,6 @@ func (vNode *VNode) IsLeader(clientId string) bool {
 
 	return vNode.lease != nil && *vNode.lease.Spec.HolderIdentity == clientId &&
 		!time.Now().After(vNode.lease.Spec.RenewTime.Time.Add(time.Second*model.NodeLeaseDurationSeconds))
-}
-
-// ShouldRetryLease returns a channel that will be closed when the vnode should retry lease
-func (vNode *VNode) ShouldRetryLease() <-chan struct{} {
-	return vNode.shouldRetryLease
-}
-
-// RetryLease signals the vnode to retry the lease
-func (vNode *VNode) RetryLease() {
-	select {
-	case <-vNode.shouldRetryLease:
-	default:
-		close(vNode.shouldRetryLease)
-	}
-}
-
-// LockRetryLease locks the vnode to retry the lease
-func (vNode *VNode) LockRetryLease() {
-	vNode.shouldRetryLease = make(chan struct{})
 }
 
 // Err returns err which causes vnode exit
@@ -455,7 +388,6 @@ func NewVNode(config *model.BuildVNodeConfig, tunnel tunnel.Tunnel) (kn *VNode, 
 		ready:                 make(chan struct{}),
 		done:                  make(chan struct{}),
 		exitWhenLeaderChanged: make(chan struct{}),
-		shouldRetryLease:      make(chan struct{}),
 		Liveness:              Liveness{}, // a very old time
 	}, nil
 }

@@ -9,6 +9,7 @@ import (
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
+	"sync"
 	"time"
 
 	"github.com/koupleless/virtual-kubelet/common/log"
@@ -34,6 +35,8 @@ import (
 
 // VNodeController is the main controller for the virtual node
 type VNodeController struct {
+	sync.RWMutex
+
 	clientID string // The client ID for the controller
 
 	env string // The environment for the controller
@@ -437,6 +440,8 @@ func (vNodeController *VNodeController) podDeleteHandler(ctx context.Context, po
 
 // This function starts a new virtual node with the given node ID, initialization data, and tunnel.
 func (vNodeController *VNodeController) startVNode(initData model.NodeInfo) {
+	vNodeController.Lock()
+	defer vNodeController.Unlock()
 	var err error
 	// first apply for local lock
 	if initData.NetworkInfo.NodeIP == "" {

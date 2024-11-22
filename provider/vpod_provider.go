@@ -322,12 +322,6 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 		return nil
 	}
 
-	localPod := b.vPodStore.GetPodByKey(podKey)
-	if localPod == nil {
-		// has been deleted or not managed by current provider, just return
-		return nil
-	}
-
 	// delete from curr provider
 	b.vPodStore.DeletePod(podKey)
 	b.handleBizBatchStop(ctx, pod, pod.Spec.Containers)

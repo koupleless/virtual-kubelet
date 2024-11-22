@@ -222,9 +222,6 @@ func (vNode *VNode) newLease(holderIdentity string) *coordinationv1.Lease {
 
 // SyncNodeStatus syncs the status of the node
 func (vNode *VNode) SyncNodeStatus(data model.NodeStatusData) {
-	if utils.NodeStatusEqual(vNode.nodeProvider.latestNodeStatusData, data) {
-		return
-	}
 	if vNode.nodeProvider != nil {
 		vNode.nodeProvider.Notify(data)
 	}

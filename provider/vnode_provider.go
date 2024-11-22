@@ -155,7 +155,7 @@ func (v *VNodeProvider) BuildNode(node *corev1.Node) {
 
 	// Set the node status.
 	node.Status = corev1.NodeStatus{
-		Phase: corev1.NodePending,
+		Phase: corev1.NodeRunning,
 		Addresses: []corev1.NodeAddress{
 			{
 				Type:    corev1.NodeInternalIP,

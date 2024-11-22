@@ -272,10 +272,10 @@ func (vNodeController *VNodeController) discoverPreviousPods(ctx context.Context
 func (vNodeController *VNodeController) onBaseDiscovered(data model.NodeInfo) {
 	if data.State == model.NodeStateActivated {
 		vNodeController.startVNode(data)
-		vNodeController.vNodeStore.UpdateNodeStateOnProviderArrived(data.Metadata.Name, data.State)
 	} else {
 		// TODO: update node status
 	}
+	vNodeController.vNodeStore.UpdateNodeStateOnProviderArrived(data.Metadata.Name, data.State)
 }
 
 // onBaseStatusArrived is an event handler for when status data is received for a node.

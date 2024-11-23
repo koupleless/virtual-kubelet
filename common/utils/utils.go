@@ -166,6 +166,65 @@ func ExtractNodeIDFromNodeName(nodeName string) string {
 	return strings.Join(split[1:len(split)-1], ".")
 }
 
+// MergeNodeFromProvider constructs a virtual node based on the latest node status data.
+func MergeNodeFromProvider(node *corev1.Node, data model.NodeStatusData) *corev1.Node {
+	vnodeCopy := node.DeepCopy() // Create a deep copy of the node info.
+	// Set the node status to running.
+	vnodeCopy.Status.Phase = corev1.NodeRunning
+	// Initialize a map to hold node conditions.
+	conditionMap := map[corev1.NodeConditionType]corev1.NodeCondition{
+		corev1.NodeReady: {
+			Type:   corev1.NodeReady,
+			Status: corev1.ConditionTrue,
+		},
+		corev1.NodeMemoryPressure: {
+			Type:   corev1.NodeMemoryPressure,
+			Status: corev1.ConditionFalse,
+		},
+		corev1.NodeDiskPressure: {
+			Type:   corev1.NodeDiskPressure,
+			Status: corev1.ConditionFalse,
+		},
+		corev1.NodePIDPressure: {
+			Type:   corev1.NodePIDPressure,
+			Status: corev1.ConditionFalse,
+		},
+		corev1.NodeNetworkUnavailable: {
+			Type:   corev1.NodeNetworkUnavailable,
+			Status: corev1.ConditionFalse,
+		},
+	}
+
+	// Add custom conditions to the condition map.
+	for _, customCondition := range data.CustomConditions {
+		conditionMap[customCondition.Type] = customCondition
+	}
+
+	// Convert the condition map to a slice of conditions.
+	conditions := make([]corev1.NodeCondition, 0)
+	for _, condition := range conditionMap {
+		conditions = append(conditions, condition)
+	}
+	vnodeCopy.Status.Conditions = conditions       // Set the conditions on the vnode copy.
+	vnodeCopy.Annotations = data.CustomAnnotations // Set custom annotations.
+	// Set custom labels.
+	for key, value := range data.CustomLabels {
+		vnodeCopy.Labels[key] = value
+	}
+	// Set resource capacities and allocatable amounts.
+	if vnodeCopy.Status.Capacity == nil {
+		vnodeCopy.Status.Capacity = make(corev1.ResourceList)
+	}
+	if vnodeCopy.Status.Allocatable == nil {
+		vnodeCopy.Status.Allocatable = make(corev1.ResourceList)
+	}
+	for resourceName, status := range data.Resources {
+		vnodeCopy.Status.Capacity[resourceName] = status.Capacity
+		vnodeCopy.Status.Allocatable[resourceName] = status.Allocatable
+	}
+	return vnodeCopy // Return the constructed vnode.
+}
+
 // ConvertBizStatusToContainerStatus converts tunnel container status to Kubernetes container status.
 func ConvertBizStatusToContainerStatus(container *corev1.Container, containerStatus *corev1.ContainerStatus, data *model.BizStatusData) (*corev1.ContainerStatus, error) {
 	// this may be a little complex to handle the case that parameters is not nil or for same container name

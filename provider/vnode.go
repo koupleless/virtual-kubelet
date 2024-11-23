@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/koupleless/virtual-kubelet/tunnel"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"time"
@@ -88,12 +89,19 @@ func (vNode *VNode) Run(ctx context.Context, initData model.NodeInfo) {
 		err = errors.New("leader changed")
 	case <-vNode.exit:
 		// Node exit, process node delete and lease delete
-		node := vNode.nodeProvider.CurrNodeInfo()
-		err = vNode.client.Delete(context.Background(), node)
+		node := &corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: vNode.name,
+			},
+		}
+		err = vNode.client.Delete(ctx, node)
 		if err != nil && !apierrors.IsNotFound(err) {
 			return
 		}
-		err = vNode.client.Delete(context.Background(), vNode.lease)
+
+		err = vNode.client.Get(ctx, types.NamespacedName{
+			Name: vNode.name}, node)
+		err = vNode.client.Delete(ctx, vNode.lease)
 	}
 }
 
@@ -108,6 +116,7 @@ func (vNode *VNode) StartLeaderElection(ctx context.Context, clientID string) {
 
 // createOrRetryUpdateLease retries updating the lease of the node
 func (vNode *VNode) createOrRetryUpdateLease(ctx context.Context, clientID string) {
+	log.G(ctx).Infof("try to acquire node lease for %s by %s", vNode.name, clientID)
 	for i := 0; i < model.NodeLeaseMaxRetryTimes; i++ {
 		lease := &coordinationv1.Lease{}
 		err := vNode.client.Get(ctx, types.NamespacedName{
@@ -142,6 +151,7 @@ func (vNode *VNode) createOrRetryUpdateLease(ctx context.Context, clientID strin
 		}
 
 		newLease := lease.DeepCopy()
+		newLease.Spec.HolderIdentity = &clientID
 		newLease.Spec.RenewTime = &metav1.MicroTime{Time: time.Now()}
 
 		err = vNode.client.Patch(ctx, newLease, client.MergeFrom(lease))
@@ -343,8 +353,6 @@ func NewVNode(config *model.BuildVNodeConfig, tunnel tunnel.Tunnel) (kn *VNode, 
 			// Initialize pod provider with node namespace, IP, ID, client, and tunnel
 			podProvider = NewVPodProvider(cfg.Node.Namespace, config.NodeIP, config.NodeName, config.Client, tunnel)
 
-			// Register the node with the tunnel key
-			err = nodeProvider.Register(cfg.Node)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -362,15 +370,7 @@ func NewVNode(config *model.BuildVNodeConfig, tunnel tunnel.Tunnel) (kn *VNode, 
 			return nil
 		},
 		func(cfg *nodeutil.NodeConfig) error {
-			oldLabels := cfg.Node.Labels
-			oldLabels[model.LabelKeyOfVNodeName] = config.NodeName
-			oldLabels[model.LabelKeyOfVNodeClusterName] = config.ClusterName
-			oldLabels[model.LabelKeyOfComponent] = model.ComponentVNode
-			oldLabels[model.LabelKeyOfEnv] = config.Env
-			oldLabels[model.LabelKeyOfVNodeVersion] = config.NodeVersion
-			oldLabels[corev1.LabelHostname] = config.NodeHostname
-			cfg.Node.Labels = oldLabels
-			return nil
+			return buildNode(&cfg.Node, config)
 		},
 		// Options for creating the node
 		nodeutil.WithClient(config.Client),
@@ -395,4 +395,88 @@ func NewVNode(config *model.BuildVNodeConfig, tunnel tunnel.Tunnel) (kn *VNode, 
 		exitWhenLeaderChanged: make(chan struct{}),
 		Liveness:              Liveness{}, // a very old time
 	}, nil
+}
+
+func buildNode(node *corev1.Node, config *model.BuildVNodeConfig) error {
+	oldLabels := node.Labels
+	if oldLabels == nil {
+		oldLabels = make(map[string]string)
+	}
+	oldLabels[model.LabelKeyOfVNodeName] = config.NodeName
+	oldLabels[model.LabelKeyOfVNodeClusterName] = config.ClusterName
+	oldLabels[model.LabelKeyOfComponent] = model.ComponentVNode
+	oldLabels[model.LabelKeyOfEnv] = config.Env
+	oldLabels[model.LabelKeyOfVNodeVersion] = config.NodeVersion
+	oldLabels[corev1.LabelHostname] = config.NodeHostname
+	for k, v := range config.CustomLabels {
+		oldLabels[k] = v
+	}
+	node.Labels = oldLabels
+
+	oldAnnotations := node.Annotations
+	if oldAnnotations == nil {
+		oldAnnotations = make(map[string]string)
+	}
+	for k, v := range config.CustomAnnotations {
+		oldAnnotations[k] = v
+	}
+	node.Annotations = oldAnnotations
+
+	node.Spec.Taints = append([]corev1.Taint{
+		{
+			Key:    model.TaintKeyOfVnode,
+			Value:  "True",
+			Effect: corev1.TaintEffectNoExecute,
+		},
+		{
+			Key:    model.TaintKeyOfEnv,
+			Value:  config.Env,
+			Effect: corev1.TaintEffectNoExecute,
+		},
+	}, config.CustomTaints...)
+
+	// Set the node status.
+	node.Status = corev1.NodeStatus{
+		Phase: corev1.NodeRunning,
+		Addresses: []corev1.NodeAddress{
+			{
+				Type:    corev1.NodeInternalIP,
+				Address: config.NodeIP,
+			},
+			{
+				Type:    corev1.NodeHostName,
+				Address: config.NodeHostname,
+			},
+		},
+		Conditions: []corev1.NodeCondition{
+			{
+				Type:   corev1.NodeReady,
+				Status: corev1.ConditionTrue,
+			},
+			{
+				Type:   corev1.NodeMemoryPressure,
+				Status: corev1.ConditionFalse,
+			},
+			{
+				Type:   corev1.NodeDiskPressure,
+				Status: corev1.ConditionFalse,
+			},
+			{
+				Type:   corev1.NodePIDPressure,
+				Status: corev1.ConditionFalse,
+			},
+			{
+				Type:   corev1.NodeNetworkUnavailable,
+				Status: corev1.ConditionFalse,
+			},
+		},
+		Capacity: map[corev1.ResourceName]resource.Quantity{
+			corev1.ResourcePods: resource.MustParse("65535"),
+		},
+		Allocatable: map[corev1.ResourceName]resource.Quantity{
+			corev1.ResourcePods: resource.MustParse("65535"),
+		},
+	}
+
+	return nil
 }

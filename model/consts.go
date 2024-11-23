@@ -109,7 +109,7 @@ const (
 	// NodeLeaseDurationSeconds is the duration of a node lease in seconds.
 	NodeLeaseDurationSeconds = 40
 	// NodeLeaseUpdatePeriodSeconds is the period of updating a node lease in seconds.
-	NodeLeaseUpdatePeriodSeconds = 18
+	NodeLeaseUpdatePeriodSeconds = 10
 	// NodeLeaseMaxRetryTimes is the maximum number of times to retry updating a node lease.
 	NodeLeaseMaxRetryTimes = 5
 )

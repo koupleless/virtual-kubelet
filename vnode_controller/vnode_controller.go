@@ -191,19 +191,26 @@ func (vNodeController *VNodeController) SetupWithManager(ctx context.Context, mg
 			})
 
 			// Periodically check for nodes that are not reachable and notify their leader virtual nodes.
-			go utils.TimedTaskWithInterval(ctx, 7*time.Second, func(ctx context.Context) {
-				unReachableVNode := vNodeController.vNodeStore.GetUnReachableVNodes()
-				if unReachableVNode != nil && len(unReachableVNode) > 0 {
-					nodeNames := make([]string, 0, len(unReachableVNode))
-					for _, vNode := range unReachableVNode {
+			go utils.TimedTaskWithInterval(ctx, 3*time.Second, func(ctx context.Context) {
+				unReachableVNodes := vNodeController.vNodeStore.GetUnReachableVNodes()
+				if unReachableVNodes != nil && len(unReachableVNodes) > 0 {
+					nodeNames := make([]string, 0, len(unReachableVNodes))
+					for _, vNode := range unReachableVNodes {
 						nodeNames = append(nodeNames, vNode.GetNodeName())
 					}
 					log.G(ctx).Infof("check not reachable vnode %v", nodeNames)
 				}
-				for _, vNode := range unReachableVNode {
-					if vNode.IsLeader(vNodeController.clientID) {
-						vNodeController.shutdownVNode(vNode.GetNodeName())
+
+				deadVNodes := vNodeController.vNodeStore.GetDeadVNodes()
+				if deadVNodes != nil && len(deadVNodes) > 0 {
+					nodeNames := make([]string, 0, len(deadVNodes))
+					for _, vNode := range deadVNodes {
+						nodeNames = append(nodeNames, vNode.GetNodeName())
+						if vNode.IsLeader(vNodeController.clientID) {
+							vNodeController.shutdownVNode(vNode.GetNodeName())
+						}
 					}
+					log.G(ctx).Infof("check and shutdown dead vnode %v", nodeNames)
 				}
 			})
 
@@ -484,13 +491,14 @@ func (vNodeController *VNodeController) startVNode(initData model.NodeInfo) {
 		select {
 		// If the VNode is done, log an error and set needRestart to true
 		case <-vn.Done():
-			logrus.WithError(vn.Err()).Infof("node exit %s", nodeName)
+			logrus.WithError(vn.Err()).Infof("node runnable exit %s", nodeName)
 		// If the leader has changed, log a message and set needRestart to true
 		case <-vn.ExitWhenLeaderChanged():
 			logrus.Infof("node leader changed %s", nodeName)
 		}
 		// Cancel the context
 		vNodeController.vNodeStore.DeleteVNode(nodeName)
+		log.G(vnCtx).Infof("node exit %s", nodeName)
 		vnCancel()
 	}()
 
@@ -506,6 +514,7 @@ func (vNodeController *VNodeController) startVNode(initData model.NodeInfo) {
 		if err = vn.WaitReady(vnCtx, time.Minute); err != nil {
 			err = errpkg.Wrap(err, "Error waiting vnode ready")
 			vNodeController.vNodeStore.DeleteVNode(nodeName)
+			log.G(vnCtx).Infof("node exit %s", nodeName)
 			vnCancel()
 			return
 		} else {

@@ -19,21 +19,21 @@ var _ = Describe("VNode Lifecycle Test", func() {
 	nodeName := "suite-node-node-lifecycle"
 	nodeVersion := "1.0.0"
 	clusterName := "suite-cluster-name"
-	vnode := &v1.Node{}
+	node := &v1.Node{}
 
 	nodeInfo := prepareNode(nodeName, nodeVersion, clusterName)
 
 	Context("node online and deactive finally", func() {
-		It("node should become a ready vnode eventually", func() {
+		It("node should become a ready node eventually", func() {
 			nodeInfo.NodeInfo.State = model.NodeStateActivated
 			tl.PutNode(ctx, nodeName, nodeInfo)
 
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name: nodeName,
-				}, vnode)
+				}, node)
 				vnodeReady := false
-				for _, cond := range vnode.Status.Conditions {
+				for _, cond := range node.Status.Conditions {
 					if cond.Type == v1.NodeReady {
 						vnodeReady = cond.Status == v1.ConditionTrue
 						break
@@ -59,23 +59,30 @@ var _ = Describe("VNode Lifecycle Test", func() {
 		})
 
 		It("node should contains custom information after status sync", func() {
-			Expect(vnode.Labels[model.LabelKeyOfVNodeName]).To(Equal(nodeName))
-			Expect(vnode.Labels[model.LabelKeyOfVNodeVersion]).To(Equal(nodeVersion))
-			Expect(vnode.Labels[model.LabelKeyOfVNodeClusterName]).To(Equal(clusterName))
-			Expect(vnode.Labels[testKey]).To(Equal(testValue))
-			Expect(vnode.Labels[model.LabelKeyOfEnv]).To(Equal(env))
-			Expect(vnode.Annotations[testKey]).To(Equal(testValue))
+			err := k8sClient.Get(ctx, types.NamespacedName{
+				Name: nodeName,
+			}, node)
+
+			Expect(err).To(BeNil())
+			Expect(node.Labels[model.LabelKeyOfVNodeName]).To(Equal(nodeName))
+			Expect(node.Labels[model.LabelKeyOfVNodeVersion]).To(Equal(nodeVersion))
+			Expect(node.Labels[model.LabelKeyOfVNodeClusterName]).To(Equal(clusterName))
+			Expect(node.Labels[testKey]).To(Equal(testValue))
+			Expect(node.Labels[model.LabelKeyOfEnv]).To(Equal(env))
+			Expect(node.Annotations[testKey]).To(Equal(testValue))
 			existTestCond := false
-			for _, cond := range vnode.Status.Conditions {
+			for _, cond := range node.Status.Conditions {
 				if string(cond.Type) == testKey {
 					existTestCond = true
+					break
 				}
 			}
 			Expect(existTestCond).To(BeTrue())
 			existTestTaint := false
-			for _, taint := range vnode.Spec.Taints {
+			for _, taint := range node.Spec.Taints {
 				if taint.Key == testKey && taint.Value == testValue {
 					existTestTaint = true
+					break
 				}
 			}
 			Expect(existTestTaint).To(BeTrue())
@@ -87,7 +94,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name: nodeName,
-				}, vnode)
+				}, node)
 				lease := &v12.Lease{}
 				leaseErr := k8sClient.Get(ctx, types.NamespacedName{
 					Name:      nodeName,
@@ -99,16 +106,16 @@ var _ = Describe("VNode Lifecycle Test", func() {
 	})
 
 	Context("node online and timeout finally", func() {
-		It("node should become a ready vnode eventually", func() {
+		It("node should become a ready node eventually", func() {
 			nodeInfo.State = model.NodeStateActivated
 			tl.PutNode(ctx, nodeName, nodeInfo)
 
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name: nodeName,
-				}, vnode)
+				}, node)
 				vnodeReady := false
-				for _, cond := range vnode.Status.Conditions {
+				for _, cond := range node.Status.Conditions {
 					if cond.Type == v1.NodeReady {
 						vnodeReady = cond.Status == v1.ConditionTrue
 						break
@@ -116,7 +123,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 				}
 				return err == nil && vnodeReady
 			}, time.Second*20, time.Second).Should(BeTrue())
-			Expect(vnode).NotTo(BeNil())
+			Expect(node).NotTo(BeNil())
 		})
 
 		// TODO: enable this by update node status when deactivated
@@ -126,7 +133,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 		//	Eventually(func() bool {
 		//		err := k8sClient.Get(ctx, types.NamespacedName{
 		//			Name: nodeName,
-		//		}, vnode)
+		//		}, node)
 		//		return errors.IsNotFound(err)
 		//	}, time.Second*30, time.Second).Should(BeTrue())
 		//})

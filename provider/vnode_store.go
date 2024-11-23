@@ -64,21 +64,6 @@ func (r *VNodeStore) NodeShutdown(nodeName string) {
 	}
 }
 
-// RunningNodeNum returns the number of running nodes.
-func (r *VNodeStore) RunningNodeNum() int {
-	r.Lock()
-	defer r.Unlock()
-
-	runningVNodes := make([]*VNode, 0)
-	for _, vNode := range r.nodeNameToVNode {
-		if vNode.Liveness.IsAlive() {
-			runningVNodes = append(runningVNodes, vNode)
-		}
-	}
-
-	return len(runningVNodes)
-}
-
 // AllNodeNum returns the number of all nodes.
 func (r *VNodeStore) AllNodeNum() int {
 	r.Lock()
@@ -157,6 +142,21 @@ func (r *VNodeStore) GetLeaseOccupiedVNodes(clientID string) []*VNode {
 	return ret
 }
 
+// RunningNodeNum returns the number of running nodes.
+func (r *VNodeStore) RunningNodeNum() int {
+	r.Lock()
+	defer r.Unlock()
+
+	runningVNodes := make([]*VNode, 0)
+	for _, vNode := range r.nodeNameToVNode {
+		if !vNode.Liveness.IsDead() {
+			runningVNodes = append(runningVNodes, vNode)
+		}
+	}
+
+	return len(runningVNodes)
+}
+
 // GetUnReachableVNodes returns the node information of nodes that are not reachable.
 func (r *VNodeStore) GetUnReachableVNodes() []*VNode {
 	r.Lock()
@@ -164,7 +164,21 @@ func (r *VNodeStore) GetUnReachableVNodes() []*VNode {
 	ret := make([]*VNode, 0)
 
 	for _, vNode := range r.nodeNameToVNode {
-		if !vNode.Liveness.IsAlive() {
+		if !vNode.Liveness.IsReachable() {
+			ret = append(ret, vNode)
+		}
+	}
+	return ret
+}
+
+// GetDeadVNodes returns the node information of nodes that are not reachable.
+func (r *VNodeStore) GetDeadVNodes() []*VNode {
+	r.Lock()
+	defer r.Unlock()
+	ret := make([]*VNode, 0)
+
+	for _, vNode := range r.nodeNameToVNode {
+		if vNode.Liveness.IsDead() {
 			ret = append(ret, vNode)
 		}
 	}

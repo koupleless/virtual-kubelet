@@ -21,7 +21,7 @@ type Tracker interface {
 
 	FuncTrack(string, string, string, map[string]string, func() (error, model.ErrorCode)) error
 
-	Eventually(string, string, string, map[string]string, model.ErrorCode, func() bool, time.Duration, time.Duration, func(), func())
+	Eventually(string, string, string, map[string]string, model.ErrorCode, func() (bool, error), time.Duration, time.Duration, func(), func())
 
 	ErrorReport(string, string, string, string, map[string]string, model.ErrorCode)
 }

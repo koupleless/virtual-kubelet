@@ -20,6 +20,7 @@ type NodeMetadata struct {
 	Name        string // Name of the vnode
 	Version     string // Version of the vnode
 	ClusterName string // ClusterName of the cluster the vnode belongs to
+	VPodType    string // VPodType of the vnode
 }
 
 // NodeInfo is the data of node info.
@@ -64,6 +65,7 @@ type BuildVNodeConfig struct {
 	NodeHostname      string            // Hostname of the node
 	NodeName          string            // NodeName of the node
 	NodeVersion       string            // NodeVersion of the node
+	VPodType          string            // VPodType of the node
 	ClusterName       string            // ClusterName of the node
 	Env               string            // Environment of the node
 	CustomTaints      []v1.Taint        // Custom taints set by the tunnel
@@ -77,7 +79,7 @@ type BuildVNodeControllerConfig struct {
 	KubeCache        cache.Cache   // Cache of kube resources
 	ClientID         string        // Identity of vk instance, recommended to set it to pod name
 	Env              string        // Environment of the vk instance
-	VPodIdentity     string        // VPod special value of model.LabelKeyOfComponent
+	VPodType         string        // VPod special value of model.LabelKeyOfComponent
 	IsCluster        bool          // Whether the deployment is in a cluster
 	WorkloadMaxLevel int           // Maximum workload level
 	VNodeWorkerNum   int           // VNode container event processor worker num, default 1, means execute Container events serially

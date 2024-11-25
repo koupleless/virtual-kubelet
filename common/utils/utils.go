@@ -34,7 +34,7 @@ func TimedTaskWithInterval(ctx context.Context, interval time.Duration, task fun
 }
 
 // CheckAndFinallyCall checks a condition at a specified interval until it's true or a timeout occurs.
-func CheckAndFinallyCall(ctx context.Context, checkFunc func() bool, timeout, interval time.Duration, finally, timeoutCall func()) {
+func CheckAndFinallyCall(ctx context.Context, checkFunc func() (bool, error), timeout, interval time.Duration, finally, timeoutCall func()) {
 	checkTicker := time.NewTicker(interval)
 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
@@ -46,7 +46,12 @@ func CheckAndFinallyCall(ctx context.Context, checkFunc func() bool, timeout, in
 			timeoutCall()
 			return
 		case <-checkTicker.C:
-			if checkFunc() {
+			// TODO: handle the error
+			finished, err := checkFunc()
+			if err != nil {
+				return
+			}
+			if finished {
 				finally()
 				return
 			}

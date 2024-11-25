@@ -17,6 +17,7 @@ package provider
 import (
 	"context"
 	"github.com/koupleless/virtual-kubelet/tunnel"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"sort"
 	"strings"
 	"time"
@@ -280,7 +281,7 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 	}
 
 	// only start new containers and changed containers
-	tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodUpdate, pod.Labels, model.CodeContainerStartTimeout, func() bool {
+	tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodUpdate, pod.Labels, model.CodeContainerStartTimeout, func() (bool, error) {
 		podFromKubernetes := &corev1.Pod{}
 		err := b.client.Get(ctx, client.ObjectKey{
 			Namespace: pod.Namespace,
@@ -288,7 +289,12 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 		}, podFromKubernetes)
 		if err != nil {
 			logger.WithError(err).Error("Failed to get pod from k8s")
-			return false
+			// should failed if can't get pod from k8s
+			if errors.IsNotFound(err) {
+				// stop retry and no need to start new containers
+				return false, err
+			}
+			return false, nil
 		}
 
 		nameToContainerStatus := make(map[string]corev1.ContainerStatus)
@@ -298,10 +304,10 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 
 		for _, shouldUpdateContainer := range shouldStopContainers {
 			if status, has := nameToContainerStatus[shouldUpdateContainer.Name]; has && status.State.Terminated == nil {
-				return false
+				return false, nil
 			}
 		}
-		return true
+		return true, nil
 	}, time.Minute, time.Second, func() {
 		b.handleBizBatchStart(ctx, newPod, shouldStopContainers)
 	}, func() {

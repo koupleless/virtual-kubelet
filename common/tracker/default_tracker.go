@@ -147,7 +147,7 @@ func (t *DefaultTracker) FuncTrack(traceID, scene, event string, labels map[stri
 }
 
 // Eventually tracks an event that may timeout and reports the result
-func (t *DefaultTracker) Eventually(traceID, scene, event string, labels map[string]string, timeoutErrorCode model.ErrorCode, checkFunc func() bool, timeout time.Duration, interval time.Duration, checkPassed func(), timeoutCall func()) {
+func (t *DefaultTracker) Eventually(traceID, scene, event string, labels map[string]string, timeoutErrorCode model.ErrorCode, checkFunc func() (bool, error), timeout time.Duration, interval time.Duration, checkPassed func(), timeoutCall func()) {
 	startTime := time.Now()
 	data := logData{
 		TraceID: traceID,

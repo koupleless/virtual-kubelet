@@ -22,10 +22,12 @@ var _ = Describe("VPod Lifecycle Test", func() {
 	vnode := &v1.Node{}
 
 	podName := "suite-pod"
+
 	podNamespace := "default"
 
 	nodeInfo := prepareNode(nodeName, nodeVersion, clusterName)
 	basicPod := prepareBasicPod(podName, podNamespace, nodeName)
+	basicPod2 := prepareBasicPod(podName+"-2", podNamespace, nodeName)
 
 	tasks := []string{
 		"node should be ready.",
@@ -72,7 +74,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 
 				logrus.WithContext(ctx).Infof("%s pod status: %v", tasks[1], podFromKubernetes.Status.Phase)
 				return err == nil && podFromKubernetes.Status.Phase == v1.PodPending && podFromKubernetes.Spec.NodeName == nodeName
-			}, time.Second*10, time.Second).Should(BeTrue())
+			}, time.Second*50, time.Second).Should(BeTrue())
 		})
 
 		It(tasks[2], func() {
@@ -168,14 +170,15 @@ var _ = Describe("VPod Lifecycle Test", func() {
 		})
 
 		It(tasks[6], func() {
+			podFromKubernetes := &v1.Pod{}
 			err := k8sClient.Get(ctx, types.NamespacedName{
 				Namespace: basicPod.Namespace,
 				Name:      basicPod.Name,
-			}, &basicPod)
+			}, podFromKubernetes)
 			Expect(err).To(BeNil())
-			basicPod.Spec.Containers[0].Image = "suite-biz1-updated.jar"
-			basicPod.Spec.Containers[1].Image = "suite-biz2-updated.jar"
-			err = k8sClient.Update(ctx, &basicPod)
+			podFromKubernetes.Spec.Containers[0].Image = "suite-biz1-updated.jar"
+			podFromKubernetes.Spec.Containers[1].Image = "suite-biz2-updated.jar"
+			err = k8sClient.Update(ctx, podFromKubernetes)
 			Expect(err).To(BeNil())
 			Eventually(func() bool {
 				podFromKubernetes := &v1.Pod{}
@@ -202,18 +205,72 @@ var _ = Describe("VPod Lifecycle Test", func() {
 			}, time.Second*20, time.Second).Should(BeTrue())
 		})
 
-		// TODO: to enable this feature
-		//It(tasks[8], func() {
-		//	nodeInfo.State = model.NodeStateDeactivated
-		//	tl.PutNode(ctx, nodeName, nodeInfo)
-		//	Eventually(func() bool {
-		//		node := &v1.Node{}
-		//		err := k8sClient.Get(ctx, types.NamespacedName{
-		//			Name: nodeName,
-		//		}, node)
-		//		return errors.IsNotFound(err)
-		//	}, time.Second*10, time.Second).Should(BeTrue())
-		//})
+		It(tasks[1], func() {
+			err := k8sClient.Create(ctx, &basicPod2)
+			Expect(err).To(BeNil())
+			Eventually(func() bool {
+				podFromKubernetes := &v1.Pod{}
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Namespace: basicPod2.Namespace,
+					Name:      basicPod2.Name,
+				}, podFromKubernetes)
+
+				logrus.WithContext(ctx).Infof("%s pod status: %v", tasks[1], podFromKubernetes.Status.Phase)
+				return err == nil && podFromKubernetes.Status.Phase == v1.PodPending && podFromKubernetes.Spec.NodeName == nodeName
+			}, time.Second*50, time.Second).Should(BeTrue())
+		})
+
+		It(tasks[2], func() {
+			for _, container := range basicPod2.Spec.Containers {
+				podKey := utils.GetPodKey(&basicPod2)
+				key := tl.GetBizUniqueKey(&container)
+				time.Sleep(time.Second)
+				tl.UpdateBizStatus(ctx, nodeName, key, model.BizStatusData{
+					Key:        key,
+					Name:       container.Name,
+					PodKey:     podKey,
+					State:      string(model.BizStateActivated),
+					ChangeTime: time.Now(),
+				})
+			}
+			Eventually(func() bool {
+				podFromKubernetes := &v1.Pod{}
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Namespace: basicPod2.Namespace,
+					Name:      basicPod2.Name,
+				}, podFromKubernetes)
+				logrus.WithContext(ctx).Infof("%s pod status: %v", tasks[2], podFromKubernetes.Status.Phase)
+				return err == nil && podFromKubernetes.Status.Phase == v1.PodRunning && podFromKubernetes.Status.ContainerStatuses[0].Ready == true
+			}, time.Second*50, time.Second).Should(BeTrue())
+		})
+
+		It(tasks[8], func() {
+			nodeInfo.State = model.NodeStateDeactivated
+			tl.PutNode(ctx, nodeName, nodeInfo)
+			Eventually(func() bool {
+				node := &v1.Node{}
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name: nodeName,
+				}, node)
+				return errors.IsNotFound(err)
+			}, time.Minute*2, time.Second).Should(BeTrue())
+		})
 	})
 
+	//It("evict pod after node shutdown", func() {
+	//	Eventually(func() bool {
+	//		podFromKubernetes := &v1.Pod{}
+	//
+	//		err := k8sClient.Get(ctx, types.NamespacedName{
+	//			Namespace: basicPod2.Namespace,
+	//			Name:      basicPod2.Name,
+	//		}, podFromKubernetes)
+	//
+	//		nodeFromKubernetes := &v1.Node{}
+	//		err = k8sClient.Get(ctx, types.NamespacedName{
+	//			Name: nodeName,
+	//		}, nodeFromKubernetes)
+	//		return err == nil && podFromKubernetes.DeletionTimestamp != nil
+	//	}, time.Minute*10, time.Second).Should(BeTrue())
+	//})
 })

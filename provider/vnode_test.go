@@ -7,14 +7,14 @@ import (
 
 func TestVNode_ExitWhenLeaderChanged(t *testing.T) {
 	vnode := VNode{
-		exitWhenLeaderChanged: make(chan struct{}),
+		exitWhenLeaderAcquiredByOthers: make(chan struct{}),
 	}
 	select {
 	case <-vnode.ExitWhenLeaderChanged():
 		assert.Fail(t, "ExitWhenLeaderChanged should have been called")
 	default:
 	}
-	vnode.leaderChanged()
+	vnode.leaderAcquiredByOthers()
 	select {
 	case <-vnode.ExitWhenLeaderChanged():
 	default:

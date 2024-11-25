@@ -113,8 +113,8 @@ func TestDefaultTracker_EventuallyTimeout(t *testing.T) {
 
 	timeout := false
 	checkPass := false
-	tracker.Eventually("test_trace", "test_scene", "test_event", map[string]string{}, model.CodeTimeout, func() bool {
-		return false
+	tracker.Eventually("test_trace", "test_scene", "test_event", map[string]string{}, model.CodeTimeout, func() (bool, error) {
+		return false, nil
 	}, time.Second, time.Millisecond*100, func() {
 		checkPass = true
 		return
@@ -135,8 +135,8 @@ func TestDefaultTracker_EventuallyNoTimeout(t *testing.T) {
 
 	timeout := false
 	checkPass := false
-	tracker.Eventually("test_trace", "test_scene", "test_event", map[string]string{}, model.CodeTimeout, func() bool {
-		return true
+	tracker.Eventually("test_trace", "test_scene", "test_event", map[string]string{}, model.CodeTimeout, func() (bool, error) {
+		return true, nil
 	}, time.Second, time.Millisecond*100, func() {
 		checkPass = true
 		return

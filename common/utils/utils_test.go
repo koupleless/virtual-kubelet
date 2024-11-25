@@ -339,7 +339,8 @@ func TestFillPodKey(t *testing.T) {
 		},
 	}
 
-	bizStatusDatasWithPodKey := FillPodKey(pods, bizStatusDatas)
+	bizStatusDatasWithPodKey, bizStatusDatasWithNoPodKey := FillPodKey(pods, bizStatusDatas)
 	assert.Equal(t, "ut-ns/ut-pod1", bizStatusDatasWithPodKey[0].PodKey)
 	assert.Equal(t, "ut-ns/ut-pod2", bizStatusDatasWithPodKey[1].PodKey)
+	assert.Equal(t, len(bizStatusDatasWithNoPodKey), 0)
 }

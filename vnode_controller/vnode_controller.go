@@ -314,7 +314,7 @@ func (vNodeController *VNodeController) onAllBizStatusArrived(nodeName string, b
 	if vNode.IsLeader(vNodeController.clientID) {
 		ctx := context.Background()
 		pods, _ := vNodeController.listPodFromKube(ctx, nodeName)
-		bizStatusDatasWithPodKey := utils.FillPodKey(pods, bizStatusDatas)
+		bizStatusDatasWithPodKey, _ := utils.FillPodKey(pods, bizStatusDatas)
 
 		vNode.SyncAllContainerInfo(ctx, bizStatusDatasWithPodKey)
 	}
@@ -333,10 +333,9 @@ func (vNodeController *VNodeController) onSingleBizStatusArrived(nodeName string
 	if vNode.IsLeader(vNodeController.clientID) {
 		ctx := context.Background()
 		pods, _ := vNodeController.listPodFromKube(ctx, nodeName)
-		bizStatusDatasWithPodKey := utils.FillPodKey(pods, []model.BizStatusData{bizStatusData})
+		bizStatusDatasWithPodKey, _ := utils.FillPodKey(pods, []model.BizStatusData{bizStatusData})
 
 		if len(bizStatusDatasWithPodKey) == 0 {
-			log.G(ctx).Infof("biz container %s in k8s not found, skip sync status.", bizStatusData.Key)
 			return
 		}
 

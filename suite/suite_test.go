@@ -57,6 +57,8 @@ var _ = BeforeSuite(func() {
 	var err error
 
 	cfg, err = testEnv.Start()
+	cfg.QPS = 100
+	cfg.Burst = 200
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
@@ -71,12 +73,12 @@ var _ = BeforeSuite(func() {
 	ctx := context.Background()
 
 	vnodeController, err := vnode_controller.NewVNodeController(&model.BuildVNodeControllerConfig{
-		KubeClient:   k8sManager.GetClient(),
-		KubeCache:    k8sManager.GetCache(),
-		ClientID:     clientID,
-		Env:          env,
-		VPodIdentity: vPodIdentity,
-		IsCluster:    true,
+		KubeClient: k8sManager.GetClient(),
+		KubeCache:  k8sManager.GetCache(),
+		ClientID:   clientID,
+		Env:        env,
+		VPodType:   vPodIdentity,
+		IsCluster:  true,
 	}, &tl)
 
 	err = vnodeController.SetupWithManager(ctx, k8sManager)
@@ -121,6 +123,9 @@ func prepareNode(name, version, clusterName string) tunnel.Node {
 			},
 			NetworkInfo: model.NetworkInfo{
 				HostName: name,
+			},
+			CustomLabels: map[string]string{
+				testKey: testValue,
 			},
 			CustomTaints: []v1.Taint{
 				{

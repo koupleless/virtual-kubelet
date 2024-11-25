@@ -40,7 +40,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 					}
 				}
 				return err == nil && vnodeReady
-			}, time.Minute*20, time.Second).Should(BeTrue())
+			}, time.Second*50, time.Second).Should(BeTrue())
 		})
 
 		It("node online and should get the lease", func() {
@@ -127,16 +127,15 @@ var _ = Describe("VNode Lifecycle Test", func() {
 		})
 
 		// TODO: enable this by update node status when deactivated
-		//It("node offline with deactive message and finally exit", func() {
-		//	nodeInfo.NodeInfo.State = model.NodeStateDeactivated
-		//	tl.PutNode(ctx, nodeName, nodeInfo)
-		//	Eventually(func() bool {
-		//		err := k8sClient.Get(ctx, types.NamespacedName{
-		//			Name: nodeName,
-		//		}, node)
-		//		return errors.IsNotFound(err)
-		//	}, time.Second*30, time.Second).Should(BeTrue())
-		//})
+		It("node offline with deactive message and finally exit", func() {
+			nodeInfo.NodeInfo.State = model.NodeStateDeactivated
+			tl.PutNode(ctx, nodeName, nodeInfo)
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name: nodeName,
+				}, node)
+				return errors.IsNotFound(err)
+			}, time.Minute*2, time.Second).Should(BeTrue())
+		})
 	})
-
 })

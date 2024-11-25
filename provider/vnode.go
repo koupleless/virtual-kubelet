@@ -33,13 +33,15 @@ type VNode struct {
 
 	nodeProvider *VNodeProvider // Node provider for the virtual node
 	podProvider  *VPodProvider  // Pod provider for the virtual node
+	vpodType     string         // VPod type for the virtual node
 	node         *nodeutil.Node // Node instance for the virtual node
 	tunnel       tunnel.Tunnel
 
-	exit                  chan struct{} // Channel for signaling the node to exit
-	ready                 chan struct{} // Channel for signaling the node is ready
-	exitWhenLeaderChanged chan struct{} // Channel for signaling the leader has changed
-	done                  chan struct{} // Channel for signaling the node has exited
+	exit                           chan struct{} // Channel for signaling the node to exit
+	ready                          chan struct{} // Channel for signaling the node is ready
+	exitWhenLeaderAcquiredByOthers chan struct{} // Channel for signaling the leader has changed
+	initWhenLeaderAcquiredByMe     chan struct{}
+	done                           chan struct{} // Channel for signaling the node has exited
 
 	lease    *coordinationv1.Lease // Latest lease of the node
 	Liveness Liveness              // Liveness of the node from provider
@@ -71,7 +73,7 @@ func (vNode *VNode) Run(ctx context.Context, initData model.NodeInfo) {
 	}()
 
 	// Set the node as the leader
-	vNode.exitWhenLeaderChanged = make(chan struct{})
+	vNode.exitWhenLeaderAcquiredByOthers = make(chan struct{})
 	// TODO: remove the dep of tunnel
 	vNode.tunnel.RegisterNode(ctx, initData)
 	defer vNode.tunnel.UnRegisterNode(ctx, vNode.name)
@@ -80,44 +82,76 @@ func (vNode *VNode) Run(ctx context.Context, initData model.NodeInfo) {
 	close(vNode.ready)
 
 	// Wait for exit signal
-	select {
-	case <-ctx.Done():
-		// Context canceled, exit
-		err = errors.Wrap(ctx.Err(), "context canceled")
-	case <-vNode.exitWhenLeaderChanged:
-		// Leader changed, exit
-		err = errors.New("leader changed")
-	case <-vNode.exit:
-		// Node exit, process node delete and lease delete
-		node := &corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: vNode.name,
-			},
-		}
-		err = vNode.client.Delete(ctx, node)
-		if err != nil && !apierrors.IsNotFound(err) {
+	for {
+		select {
+		case <-ctx.Done():
+			// Context canceled, exit
+			err = errors.Wrap(ctx.Err(), "context canceled")
+			return
+		case <-vNode.exitWhenLeaderAcquiredByOthers:
+			// Leader changed, exit
+			err = errors.New("leader changed")
+			// TODO: should not exit this runnable, to recovery when leader acquired again
+			return
+		case <-vNode.initWhenLeaderAcquiredByMe:
+			vNode.discoveryPreviousPods(ctx)
+		case <-vNode.exit:
+			// Node exit, process node delete and lease delete
+			node := &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: vNode.name,
+				},
+			}
+			err = vNode.client.Delete(ctx, node)
+			if err != nil && !apierrors.IsNotFound(err) {
+				return
+			}
+
+			err = vNode.client.Get(ctx, types.NamespacedName{
+				Name: vNode.name}, node)
+			err = vNode.client.Delete(ctx, vNode.lease)
 			return
 		}
-
-		err = vNode.client.Get(ctx, types.NamespacedName{
-			Name: vNode.name}, node)
-		err = vNode.client.Delete(ctx, vNode.lease)
 	}
 }
 
 // StartLeaderElection renews the lease of the node
 func (vNode *VNode) StartLeaderElection(ctx context.Context, clientID string) {
-	vNode.createOrRetryUpdateLease(ctx, clientID)
+	//vNode.createOrRetryUpdateLease(ctx, clientID)
 	// Retry updating the lease
 	utils.TimedTaskWithInterval(ctx, time.Second*model.NodeLeaseUpdatePeriodSeconds, func(ctx context.Context) {
 		vNode.createOrRetryUpdateLease(ctx, clientID)
 	})
 }
 
+func (vNode *VNode) discoveryPreviousPods(ctx context.Context) {
+	log.G(ctx).Infof("discovery previous pods for %s", vNode.name)
+	// Discover previous pods related to the current VNode
+	listOpts := []client.ListOption{
+		client.MatchingFields{"spec.nodeName": vNode.name},
+		client.MatchingLabels{model.LabelKeyOfComponent: vNode.vpodType},
+	}
+	podList := &corev1.PodList{}
+	err := vNode.client.List(ctx, podList, listOpts...)
+	if err != nil {
+		log.G(ctx).WithError(err).Error("failed to list pods")
+		return
+	}
+
+	// Iterate through the list of pods to process each pod.
+	for _, pod := range podList.Items {
+		// Generate a unique key for the pod.
+		key := utils.GetPodKey(&pod)
+		// Sync the pods from Kubernetes to the virtual node.
+		vNode.SyncPodsFromKubernetesEnqueue(ctx, key)
+	}
+}
+
 // createOrRetryUpdateLease retries updating the lease of the node
 func (vNode *VNode) createOrRetryUpdateLease(ctx context.Context, clientID string) {
 	log.G(ctx).Infof("try to acquire node lease for %s by %s", vNode.name, clientID)
 	for i := 0; i < model.NodeLeaseMaxRetryTimes; i++ {
+		time.Sleep(time.Millisecond * 200) // TODO: add random sleep time for reduce the client rate
 		lease := &coordinationv1.Lease{}
 		err := vNode.client.Get(ctx, types.NamespacedName{
 			Name:      vNode.name,
@@ -139,15 +173,21 @@ func (vNode *VNode) createOrRetryUpdateLease(ctx context.Context, clientID strin
 			}
 
 			log.G(ctx).WithError(err).WithField("retries", i).Error("failed to get node lease when updating node lease")
-			time.Sleep(time.Millisecond * 200)
 			continue
 		}
 
+		isLeaderBefore := vNode.IsLeader(clientID)
 		vNode.lease = lease
+		isLeaderNow := vNode.IsLeader(clientID)
 		// If the holder identity is not the current client id, the leader has changed
-		if lease.Spec.HolderIdentity == nil || *lease.Spec.HolderIdentity != clientID {
-			vNode.leaderChanged()
+		if isLeaderBefore && !isLeaderNow {
+			log.G(ctx).Infof("node lease %s acquired by %s", vNode.name, vNode.lease.Spec.HolderIdentity)
+			vNode.leaderAcquiredByOthers()
 			return
+		} else if !isLeaderBefore && isLeaderNow {
+			log.G(ctx).Infof("node lease %s acquired by %s", vNode.name, clientID)
+			vNode.leaderAcquiredByMe()
+			log.G(ctx).Infof("node %s inited after leader acquired", vNode.name)
 		}
 
 		newLease := lease.DeepCopy()
@@ -156,16 +196,17 @@ func (vNode *VNode) createOrRetryUpdateLease(ctx context.Context, clientID strin
 
 		err = vNode.client.Patch(ctx, newLease, client.MergeFrom(lease))
 		if err == nil {
-			log.G(ctx).WithField("retries", i).Debug("Successfully updated lease")
+			log.G(ctx).WithField("retries", i).Infof("Successfully updated lease for %s", vNode.name)
 			vNode.lease = newLease
 			return
 		}
-		log.G(ctx).WithError(err).Error("failed to update node lease")
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			log.G(ctx).WithError(err).Errorf("failed to update node lease for %s in retry %d/%d, and stop retry.", vNode.name, i, model.NodeLeaseMaxRetryTimes)
 			return
 		}
 		// OptimisticLockError requires getting the newer version of lease to proceed.
 		if apierrors.IsConflict(err) {
+			log.G(ctx).WithError(err).Errorf("failed to update node lease for %s in retry %d/%d", vNode.name, i, model.NodeLeaseMaxRetryTimes)
 			continue
 		}
 	}
@@ -187,12 +228,12 @@ func (vNode *VNode) WaitReady(ctx context.Context, timeout time.Duration) error 
 	}
 
 	// Wait for vnode exist
-	utils.CheckAndFinallyCall(ctx, func() bool {
+	utils.CheckAndFinallyCall(ctx, func() (bool, error) {
 		vnode := &corev1.Node{}
 		err = vNode.client.Get(ctx, types.NamespacedName{
 			Name: vNode.name,
 		}, vnode)
-		return err == nil
+		return err == nil, nil
 	}, timeout, time.Millisecond*200, func() {}, func() {})
 
 	utils.CheckAndFinallyCall(ctx, vNode.IsReady, timeout, time.Millisecond*200, func() {}, func() {})
@@ -200,12 +241,12 @@ func (vNode *VNode) WaitReady(ctx context.Context, timeout time.Duration) error 
 	return err
 }
 
-func (vNode *VNode) IsReady() bool {
+func (vNode *VNode) IsReady() (bool, error) {
 	select {
 	case <-vNode.ready:
-		return true
+		return true, nil
 	default:
-		return false
+		return false, nil
 	}
 }
 
@@ -258,14 +299,14 @@ func (vNode *VNode) Done() <-chan struct{} {
 
 // ExitWhenLeaderChanged returns a channel that will be closed when the vnode leader changed
 func (vNode *VNode) ExitWhenLeaderChanged() <-chan struct{} {
-	return vNode.exitWhenLeaderChanged
+	return vNode.exitWhenLeaderAcquiredByOthers
 }
 
 // IsLeader returns a bool marked current vnode is leader or not
 func (vNode *VNode) IsLeader(clientId string) bool {
 	// current time is not after the lease renew time and the lease holder time
 
-	return vNode.lease != nil && *vNode.lease.Spec.HolderIdentity == clientId &&
+	return vNode.lease != nil && *vNode.lease.Spec.HolderIdentity != "" && *vNode.lease.Spec.HolderIdentity == clientId &&
 		!time.Now().After(vNode.lease.Spec.RenewTime.Time.Add(time.Second*model.NodeLeaseDurationSeconds))
 }
 
@@ -283,12 +324,19 @@ func (vNode *VNode) Shutdown() {
 	}
 }
 
-// leaderChanged is the func of shutting down a vnode when leader changed
-func (vNode *VNode) leaderChanged() {
+// leaderAcquiredByOthers is the func of shutting down a vnode when leader changed
+func (vNode *VNode) leaderAcquiredByOthers() {
 	select {
-	case <-vNode.exitWhenLeaderChanged:
+	case <-vNode.exitWhenLeaderAcquiredByOthers:
 	default:
-		close(vNode.exitWhenLeaderChanged)
+		close(vNode.exitWhenLeaderAcquiredByOthers)
+	}
+}
+
+func (vNode *VNode) leaderAcquiredByMe() {
+	select {
+	case vNode.initWhenLeaderAcquiredByMe <- struct{}{}:
+	default:
 	}
 }
 
@@ -381,19 +429,21 @@ func NewVNode(config *model.BuildVNodeConfig, tunnel tunnel.Tunnel) (kn *VNode, 
 	}
 
 	return &VNode{
-		name:                  config.NodeName,
-		client:                config.Client,
-		kubeCache:             config.KubeCache,
-		env:                   config.Env,
-		nodeProvider:          nodeProvider,
-		podProvider:           podProvider,
-		tunnel:                tunnel,
-		node:                  cm,
-		exit:                  make(chan struct{}),
-		ready:                 make(chan struct{}),
-		done:                  make(chan struct{}),
-		exitWhenLeaderChanged: make(chan struct{}),
-		Liveness:              Liveness{}, // a very old time
+		name:                           config.NodeName,
+		client:                         config.Client,
+		kubeCache:                      config.KubeCache,
+		env:                            config.Env,
+		nodeProvider:                   nodeProvider,
+		podProvider:                    podProvider,
+		vpodType:                       config.VPodType,
+		tunnel:                         tunnel,
+		node:                           cm,
+		exit:                           make(chan struct{}),
+		ready:                          make(chan struct{}),
+		done:                           make(chan struct{}),
+		initWhenLeaderAcquiredByMe:     make(chan struct{}, 1),
+		exitWhenLeaderAcquiredByOthers: make(chan struct{}),
+		Liveness:                       Liveness{}, // a very old time
 	}, nil
 }
 

@@ -33,9 +33,9 @@ func TestNewVNodeController_ConfigNoIdentity(t *testing.T) {
 
 func TestNewVNodeController_Success(t *testing.T) {
 	_, err := NewVNodeController(&model.BuildVNodeControllerConfig{
-		VPodIdentity: "suite",
-		KubeCache:    &informertest.FakeInformers{},
-		IsCluster:    true,
+		VPodType:  "suite",
+		KubeCache: &informertest.FakeInformers{},
+		IsCluster: true,
 	}, &tunnel.MockTunnel{})
 	assert.Nil(t, err)
 }
@@ -44,8 +44,8 @@ func TestDiscoverPreviousNode(t *testing.T) {
 	mockTunnel := tunnel.MockTunnel{}
 
 	vc, _ := NewVNodeController(&model.BuildVNodeControllerConfig{
-		KubeCache:    &informertest.FakeInformers{},
-		VPodIdentity: "suite",
+		KubeCache: &informertest.FakeInformers{},
+		VPodType:  "suite",
 	}, &mockTunnel)
 
 	nodeList := &corev1.NodeList{
@@ -94,8 +94,8 @@ func TestDiscoverPreviousNode(t *testing.T) {
 func TestDiscoverPreviousPods(t *testing.T) {
 	mockTunnel := tunnel.MockTunnel{}
 	vc, _ := NewVNodeController(&model.BuildVNodeControllerConfig{
-		KubeCache:    &informertest.FakeInformers{},
-		VPodIdentity: "suite",
+		KubeCache: &informertest.FakeInformers{},
+		VPodType:  "suite",
 	}, &mockTunnel)
 	vn := &provider.VNode{
 		//tunnel: &mockTunnel,
@@ -141,8 +141,8 @@ func TestDiscoverPreviousPods(t *testing.T) {
 func TestReconcile(t *testing.T) {
 	mockTunnel := tunnel.MockTunnel{}
 	vc, _ := NewVNodeController(&model.BuildVNodeControllerConfig{
-		VPodIdentity: "suite",
-		KubeCache:    &informertest.FakeInformers{},
+		VPodType:  "suite",
+		KubeCache: &informertest.FakeInformers{},
 	}, &mockTunnel)
 
 	result, err := vc.Reconcile(nil, reconcile.Request{})
@@ -153,8 +153,8 @@ func TestReconcile(t *testing.T) {
 func TestCallBack_NoVnode(t *testing.T) {
 	mockTunnel := tunnel.MockTunnel{}
 	vc, _ := NewVNodeController(&model.BuildVNodeControllerConfig{
-		VPodIdentity: "suite",
-		KubeCache:    &informertest.FakeInformers{},
+		VPodType:  "suite",
+		KubeCache: &informertest.FakeInformers{},
 	}, &mockTunnel)
 
 	vc.onBaseStatusArrived("test", model.NodeStatusData{})
@@ -166,8 +166,8 @@ func TestCallBack_NoVnode(t *testing.T) {
 func TestPodHandler_NoVnodeOrNotLeader(t *testing.T) {
 	mockTunnel := tunnel.MockTunnel{}
 	vc, _ := NewVNodeController(&model.BuildVNodeControllerConfig{
-		VPodIdentity: "suite",
-		KubeCache:    &informertest.FakeInformers{},
+		VPodType:  "suite",
+		KubeCache: &informertest.FakeInformers{},
 	}, &mockTunnel)
 
 	ctx := context.TODO()
@@ -217,8 +217,8 @@ func TestPodHandler_NoVnodeOrNotLeader(t *testing.T) {
 func TestWorkloadLevel(t *testing.T) {
 	mockTunnel := tunnel.MockTunnel{}
 	vc, _ := NewVNodeController(&model.BuildVNodeControllerConfig{
-		VPodIdentity: "suite",
-		KubeCache:    &informertest.FakeInformers{},
+		VPodType:  "suite",
+		KubeCache: &informertest.FakeInformers{},
 	}, &mockTunnel)
 
 	level := vc.workloadLevel()
@@ -231,8 +231,8 @@ func TestWorkloadLevel(t *testing.T) {
 func TestDelayWithWorkload(t *testing.T) {
 	mockTunnel := tunnel.MockTunnel{}
 	vc, _ := NewVNodeController(&model.BuildVNodeControllerConfig{
-		KubeCache:    &informertest.FakeInformers{},
-		VPodIdentity: "suite",
+		KubeCache: &informertest.FakeInformers{},
+		VPodType:  "suite",
 	}, &mockTunnel)
 	now := time.Now()
 	vc.delayWithWorkload(context.TODO())
@@ -250,8 +250,8 @@ func TestDelayWithWorkload(t *testing.T) {
 func TestShutdownNonExistVNode(t *testing.T) {
 	mockTunnel := tunnel.MockTunnel{}
 	vc, _ := NewVNodeController(&model.BuildVNodeControllerConfig{
-		VPodIdentity: "suite",
-		KubeCache:    &informertest.FakeInformers{},
+		VPodType:  "suite",
+		KubeCache: &informertest.FakeInformers{},
 	}, &mockTunnel)
 	vc.shutdownVNode("test-node")
 }

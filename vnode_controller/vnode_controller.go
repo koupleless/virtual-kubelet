@@ -40,7 +40,7 @@ type VNodeController struct {
 
 	env string // The environment for the controller
 
-	vPodIdentity string // The identity of the virtual pod
+	vPodType string // The identity of the virtual pod
 
 	isCluster bool // Whether the controller is in a cluster
 
@@ -71,7 +71,7 @@ func NewVNodeController(config *model.BuildVNodeControllerConfig, tunnel tunnel.
 		return nil, errors.New("config must not be nil")
 	}
 
-	if config.VPodIdentity == "" {
+	if config.VPodType == "" {
 		return nil, errors.New("config must set vpod identity")
 	}
 
@@ -88,7 +88,7 @@ func NewVNodeController(config *model.BuildVNodeControllerConfig, tunnel tunnel.
 		env:              config.Env,
 		client:           config.KubeClient,
 		cache:            config.KubeCache,
-		vPodIdentity:     config.VPodIdentity,
+		vPodType:         config.VPodType,
 		isCluster:        config.IsCluster,
 		workloadMaxLevel: config.WorkloadMaxLevel,
 		vNodeWorkerNum:   config.VNodeWorkerNum,
@@ -123,7 +123,7 @@ func (vNodeController *VNodeController) SetupWithManager(ctx context.Context, mg
 		return err
 	}
 
-	vpodRequirement, _ := labels.NewRequirement(model.LabelKeyOfComponent, selection.In, []string{vNodeController.vPodIdentity})
+	vpodRequirement, _ := labels.NewRequirement(model.LabelKeyOfComponent, selection.In, []string{vNodeController.vPodType})
 
 	podHandler := handler.TypedFuncs[*corev1.Pod, reconcile.Request]{
 		CreateFunc: func(ctx context.Context, e event.TypedCreateEvent[*corev1.Pod], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
@@ -149,11 +149,11 @@ func (vNodeController *VNodeController) SetupWithManager(ctx context.Context, mg
 
 	go func() {
 		// wait for all tunnel to be ready
-		utils.CheckAndFinallyCall(context.Background(), func() bool {
+		utils.CheckAndFinallyCall(context.Background(), func() (bool, error) {
 			if !vNodeController.tunnel.Ready() {
-				return false
+				return false, nil
 			}
-			return true
+			return true, nil
 		}, time.Minute, time.Second, func() {
 			log.G(ctx).Infof("tunnel %v are ready", vNodeController.tunnel)
 		}, func() {
@@ -247,6 +247,7 @@ func (vNodeController *VNodeController) discoverPreviousNodes(nodeList *corev1.N
 				Name:        node.Name,
 				Version:     node.Labels[model.LabelKeyOfVNodeVersion],
 				ClusterName: node.Labels[model.LabelKeyOfVNodeClusterName],
+				VPodType:    vNodeController.vPodType,
 			},
 			NetworkInfo: model.NetworkInfo{
 				NodeIP:   nodeIP,
@@ -466,6 +467,7 @@ func (vNodeController *VNodeController) startVNode(initData model.NodeInfo) {
 		NodeHostname:      initData.NetworkInfo.HostName,
 		NodeName:          initData.Metadata.Name,
 		NodeVersion:       initData.Metadata.Version,
+		VPodType:          initData.Metadata.VPodType,
 		ClusterName:       initData.Metadata.ClusterName,
 		Env:               vNodeController.env,
 		CustomTaints:      initData.CustomTaints,
@@ -505,7 +507,7 @@ func (vNodeController *VNodeController) startVNode(initData model.NodeInfo) {
 	// Start a new goroutine for leader election
 	go func() {
 		// Try to elect a leader
-		go vn.StartLeaderElection(vnCtx, vNodeController.clientID)
+		go vn.StartLeaderElection(context.Background() /* using a new context to enable keep running when vnode exit*/, vNodeController.clientID)
 
 		// Start a new goroutine to run the VNode
 		go vn.Run(vnCtx, initData)
@@ -538,19 +540,6 @@ func (vNodeController *VNodeController) startVNode(initData model.NodeInfo) {
 				log.G(vnCtx).WithError(err).Errorf("Failed to query containers info from %s", nodeName)
 			}
 		})
-
-		// Discover previous pods related to the current VNode
-		listOpts := []client.ListOption{
-			client.MatchingFields{"spec.nodeName": nodeName},
-			client.MatchingLabels{model.LabelKeyOfComponent: vNodeController.vPodIdentity},
-		}
-		podList := &corev1.PodList{}
-		err = vNodeController.client.List(vnCtx, podList, listOpts...)
-		if err != nil {
-			log.G(vnCtx).WithError(err).Error("failed to list pods")
-			return
-		}
-		vNodeController.discoverPreviousPods(vnCtx, vn, podList)
 	}()
 }
 

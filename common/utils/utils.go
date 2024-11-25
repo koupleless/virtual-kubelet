@@ -361,7 +361,7 @@ func GetBizUniqueKey(container *corev1.Container) string {
 	return getBizIdentity(container.Name, getBizVersionFromContainer(container))
 }
 
-func FillPodKey(pods []corev1.Pod, bizStatusDatas []model.BizStatusData) []model.BizStatusData {
+func FillPodKey(pods []corev1.Pod, bizStatusDatas []model.BizStatusData) (toUpdate []model.BizStatusData, toDelete []model.BizStatusData) {
 	bizKeyToPodKey := make(map[string]string)
 	// 一个 vnode 上,  所有的 biz container name 是唯一的
 	for _, pod := range pods {
@@ -374,6 +374,7 @@ func FillPodKey(pods []corev1.Pod, bizStatusDatas []model.BizStatusData) []model
 
 	// if bizStatusData.PodKey is empty, try to find it from bizKeyToPodKey
 	bizStatusDatasWithPodKey := make([]model.BizStatusData, 0, len(bizStatusDatas))
+	bizStatusDatasWithNoPodKey := make([]model.BizStatusData, 0, len(bizStatusDatas))
 	for i, _ := range bizStatusDatas {
 		if podKey, ok := bizKeyToPodKey[bizStatusDatas[i].Key]; ok && bizStatusDatas[i].PodKey == "" {
 			bizStatusDatas[i].PodKey = podKey
@@ -381,9 +382,10 @@ func FillPodKey(pods []corev1.Pod, bizStatusDatas []model.BizStatusData) []model
 		if bizStatusDatas[i].PodKey != "" {
 			bizStatusDatasWithPodKey = append(bizStatusDatasWithPodKey, bizStatusDatas[i])
 		} else {
-			log.G(context.Background()).Infof("biz container %s in k8s not found, skip sync status.", bizStatusDatas[i].Key)
+			bizStatusDatasWithNoPodKey = append(bizStatusDatasWithNoPodKey, bizStatusDatas[i])
+			log.G(context.Background()).Infof("biz container %s in k8s not found, try to uninstall.", bizStatusDatas[i].Key)
 		}
 	}
 
-	return bizStatusDatasWithPodKey
+	return bizStatusDatasWithPodKey, bizStatusDatasWithNoPodKey
 }

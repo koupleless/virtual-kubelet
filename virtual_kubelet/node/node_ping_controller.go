@@ -1,12 +1,12 @@
-package virtual_kubelet
+package node
 
 import (
 	"context"
+	"github.com/koupleless/virtual-kubelet/virtual_kubelet/internal/lock"
 	"time"
 
-	"github.com/koupleless/virtual-kubelet/common/lock"
-	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/common/trace"
+	"github.com/virtual-kubelet/virtual-kubelet/log"
 	"golang.org/x/sync/singleflight"
 	"k8s.io/apimachinery/pkg/util/wait"
 )

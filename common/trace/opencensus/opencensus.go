@@ -23,9 +23,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/koupleless/virtual-kubelet/common/errdefs"
-	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/common/trace"
+	"github.com/virtual-kubelet/virtual-kubelet/errdefs"
+	"github.com/virtual-kubelet/virtual-kubelet/log"
 	octrace "go.opencensus.io/trace"
 )
 

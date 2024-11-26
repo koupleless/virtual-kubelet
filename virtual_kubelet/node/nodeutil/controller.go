@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"github.com/koupleless/virtual-kubelet/virtual_kubelet"
+	"github.com/koupleless/virtual-kubelet/virtual_kubelet/node"
 	"k8s.io/client-go/kubernetes/scheme"
 	"net/http"
 	"path"
@@ -13,8 +13,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"time"
 
-	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/pkg/errors"
+	"github.com/virtual-kubelet/virtual-kubelet/log"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
@@ -25,8 +25,8 @@ import (
 //
 // Must be created with constructor `NewNode`.
 type Node struct {
-	nc *virtual_kubelet.NodeController
-	pc *virtual_kubelet.PodController
+	nc *node.NodeController
+	pc *node.PodController
 
 	ready chan struct{}
 	done  chan struct{}
@@ -42,12 +42,12 @@ type Node struct {
 }
 
 // NodeController returns the configured node controller.
-func (n *Node) NodeController() *virtual_kubelet.NodeController {
+func (n *Node) NodeController() *node.NodeController {
 	return n.nc
 }
 
 // PodController returns the configured pod controller.
-func (n *Node) PodController() *virtual_kubelet.PodController {
+func (n *Node) PodController() *node.PodController {
 	return n.pc
 }
 
@@ -240,9 +240,9 @@ func NewNode(name string, newProvider NewProviderFunc, opts ...NodeOpt) (*Node, 
 		return nil, errors.Wrap(err, "error creating provider")
 	}
 
-	nodeControllerOpts := []virtual_kubelet.NodeControllerOpt{}
+	nodeControllerOpts := []node.NodeControllerOpt{}
 
-	nodeController, err := virtual_kubelet.NewNodeController(
+	nodeController, err := node.NewNodeController(
 		nodeProvider,
 		&cfg.Node,
 		cfg.Client,
@@ -258,7 +258,7 @@ func NewNode(name string, newProvider NewProviderFunc, opts ...NodeOpt) (*Node, 
 		cfg.EventRecorder = eb.NewRecorder(scheme.Scheme, v1.EventSource{Component: path.Join(name, "pod-controller")})
 	}
 
-	podController, err := virtual_kubelet.NewPodController(virtual_kubelet.PodControllerConfig{
+	podController, err := node.NewPodController(node.PodControllerConfig{
 		NodeName:      name,
 		EventRecorder: cfg.EventRecorder,
 		Client:        cfg.Client,

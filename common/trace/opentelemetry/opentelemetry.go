@@ -31,8 +31,8 @@ import (
 
 	"go.opentelemetry.io/otel/codes"
 
-	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/common/trace"
+	"github.com/virtual-kubelet/virtual-kubelet/log"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	ot "go.opentelemetry.io/otel/trace"

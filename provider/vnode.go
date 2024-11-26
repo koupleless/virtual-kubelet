@@ -4,17 +4,17 @@ import (
 	"context"
 	"fmt"
 	"github.com/koupleless/virtual-kubelet/tunnel"
+	"github.com/koupleless/virtual-kubelet/virtual_kubelet/node"
+	nodeutil2 "github.com/koupleless/virtual-kubelet/virtual_kubelet/node/nodeutil"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"time"
 
-	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
-	"github.com/koupleless/virtual-kubelet/virtual_kubelet"
-	"github.com/koupleless/virtual-kubelet/virtual_kubelet/nodeutil"
 	"github.com/pkg/errors"
+	"github.com/virtual-kubelet/virtual-kubelet/log"
 	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -31,10 +31,10 @@ type VNode struct {
 	client    client.Client // Kubernetes client
 	kubeCache cache.Cache   // Kubernetes cache
 
-	nodeProvider *VNodeProvider // Node provider for the virtual node
-	podProvider  *VPodProvider  // Pod provider for the virtual node
-	vpodType     string         // VPod type for the virtual node
-	node         *nodeutil.Node // Node instance for the virtual node
+	nodeProvider *VNodeProvider  // Node provider for the virtual node
+	podProvider  *VPodProvider   // Pod provider for the virtual node
+	vpodType     string          // VPod type for the virtual node
+	node         *nodeutil2.Node // Node instance for the virtual node
 	tunnel       tunnel.Tunnel
 
 	exit                           chan struct{} // Channel for signaling the node to exit
@@ -392,10 +392,10 @@ func NewVNode(config *model.BuildVNodeConfig, tunnel tunnel.Tunnel) (kn *VNode, 
 	var podProvider *VPodProvider
 
 	// Create a new node with the formatted name and configuration
-	cm, err := nodeutil.NewNode(
+	cm, err := nodeutil2.NewNode(
 		config.NodeName,
 		// Function to create providers and register the node
-		func(cfg nodeutil.ProviderConfig) (nodeutil.Provider, virtual_kubelet.NodeProvider, error) {
+		func(cfg nodeutil2.ProviderConfig) (nodeutil2.Provider, node.NodeProvider, error) {
 			// Create a new VirtualKubeletNode provider with configuration
 			nodeProvider = NewVNodeProvider(config)
 			// Initialize pod provider with node namespace, IP, ID, client, and tunnel
@@ -408,7 +408,7 @@ func NewVNode(config *model.BuildVNodeConfig, tunnel tunnel.Tunnel) (kn *VNode, 
 			return podProvider, nodeProvider, nil
 		},
 		// Function to configure the node
-		func(cfg *nodeutil.NodeConfig) error {
+		func(cfg *nodeutil2.NodeConfig) error {
 			// Set the node's architecture and operating system
 			cfg.Node.Status.NodeInfo.Architecture = runtime.GOARCH
 			cfg.Node.Status.NodeInfo.OperatingSystem = runtime.GOOS
@@ -417,12 +417,12 @@ func NewVNode(config *model.BuildVNodeConfig, tunnel tunnel.Tunnel) (kn *VNode, 
 			cfg.NumWorkers = config.WorkerNum
 			return nil
 		},
-		func(cfg *nodeutil.NodeConfig) error {
+		func(cfg *nodeutil2.NodeConfig) error {
 			return buildNode(&cfg.Node, config)
 		},
 		// Options for creating the node
-		nodeutil.WithClient(config.Client),
-		nodeutil.WithCache(config.KubeCache),
+		nodeutil2.WithClient(config.Client),
+		nodeutil2.WithCache(config.KubeCache),
 	)
 	if err != nil {
 		return nil, err

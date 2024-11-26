@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package virtual_kubelet
+package node
 
 import (
 	"context"
 	"fmt"
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
+	"github.com/koupleless/virtual-kubelet/virtual_kubelet/internal/queue"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,11 +27,10 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/koupleless/virtual-kubelet/common/errdefs"
-	"github.com/koupleless/virtual-kubelet/common/log"
-	"github.com/koupleless/virtual-kubelet/common/queue"
 	"github.com/koupleless/virtual-kubelet/common/trace"
 	pkgerrors "github.com/pkg/errors"
+	"github.com/virtual-kubelet/virtual-kubelet/errdefs"
+	"github.com/virtual-kubelet/virtual-kubelet/log"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/wait"

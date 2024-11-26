@@ -17,6 +17,8 @@ package provider
 import (
 	"context"
 	"github.com/koupleless/virtual-kubelet/tunnel"
+	"github.com/koupleless/virtual-kubelet/virtual_kubelet/node"
+	"github.com/koupleless/virtual-kubelet/virtual_kubelet/node/nodeutil"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sort"
 	"strings"
@@ -26,19 +28,17 @@ import (
 	"github.com/koupleless/virtual-kubelet/common/tracker"
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
-	"github.com/koupleless/virtual-kubelet/virtual_kubelet"
-	"github.com/koupleless/virtual-kubelet/virtual_kubelet/nodeutil"
 	pkgerrors "github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/koupleless/virtual-kubelet/common/log"
+	"github.com/virtual-kubelet/virtual-kubelet/log"
 	corev1 "k8s.io/api/core/v1"
 )
 
 // Define the VPodProvider struct
 var _ nodeutil.Provider = &VPodProvider{}
-var _ virtual_kubelet.PodNotifier = &VPodProvider{}
+var _ node.PodNotifier = &VPodProvider{}
 
 // VPodProvider is a struct that implements the nodeutil.Provider and virtual_kubelet.PodNotifier interfaces
 type VPodProvider struct {

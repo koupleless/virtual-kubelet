@@ -16,18 +16,18 @@ package provider
 
 import (
 	"context"
-	"github.com/koupleless/virtual-kubelet/common/log"
 	"github.com/koupleless/virtual-kubelet/common/utils"
+	"github.com/koupleless/virtual-kubelet/virtual_kubelet/node"
+	"github.com/virtual-kubelet/virtual-kubelet/log"
 	"k8s.io/apimachinery/pkg/types"
 	"sync"
 
 	"github.com/koupleless/virtual-kubelet/model"
-	"github.com/koupleless/virtual-kubelet/virtual_kubelet"
 	corev1 "k8s.io/api/core/v1"
 )
 
 // The following line ensures that VNodeProvider implements the NodeProvider interface.
-var _ virtual_kubelet.NodeProvider = &VNodeProvider{}
+var _ node.NodeProvider = &VNodeProvider{}
 
 // VNodeProvider is a struct that implements the NodeProvider interface.
 type VNodeProvider struct {

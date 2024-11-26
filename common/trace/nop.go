@@ -17,7 +17,7 @@ package trace
 import (
 	"context"
 
-	"github.com/koupleless/virtual-kubelet/common/log"
+	"github.com/virtual-kubelet/virtual-kubelet/log"
 )
 
 type nopTracer struct{}

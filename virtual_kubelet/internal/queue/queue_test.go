@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/koupleless/virtual-kubelet/common/log"
-	logruslogger "github.com/koupleless/virtual-kubelet/common/log/logrus"
 	"github.com/sirupsen/logrus"
+	"github.com/virtual-kubelet/virtual-kubelet/log"
+	logruslogger "github.com/virtual-kubelet/virtual-kubelet/log/logrus"
 	"golang.org/x/time/rate"
 	"gotest.tools/assert"
 	is "gotest.tools/assert/cmp"

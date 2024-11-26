@@ -168,7 +168,7 @@ func (b *VPodProvider) handleBizBatchStart(ctx context.Context, pod *corev1.Pod,
 	for _, container := range containers {
 		err := tracker.G().FuncTrack(labelMap[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventContainerStart, labelMap, func() (error, model.ErrorCode) {
 			err := utils.CallWithRetry(ctx, func(_ int) (bool, error) {
-				innerErr := b.tunnel.StartBiz(ctx, b.nodeName, podKey, &container)
+				innerErr := b.tunnel.StartBiz(b.nodeName, podKey, &container)
 
 				return innerErr != nil, innerErr
 			}, nil)
@@ -198,7 +198,7 @@ func (b *VPodProvider) handleBizBatchStop(ctx context.Context, pod *corev1.Pod, 
 	for _, container := range containers {
 		err := tracker.G().FuncTrack(labelMap[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventContainerShutdown, labelMap, func() (error, model.ErrorCode) {
 			err := utils.CallWithRetry(ctx, func(_ int) (bool, error) {
-				innerErr := b.tunnel.StopBiz(ctx, b.nodeName, podKey, &container)
+				innerErr := b.tunnel.StopBiz(b.nodeName, podKey, &container)
 
 				return innerErr != nil, innerErr
 			}, nil)

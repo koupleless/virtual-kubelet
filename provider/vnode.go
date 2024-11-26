@@ -75,8 +75,8 @@ func (vNode *VNode) Run(ctx context.Context, initData model.NodeInfo) {
 	// Set the node as the leader
 	vNode.exitWhenLeaderAcquiredByOthers = make(chan struct{})
 	// TODO: remove the dep of tunnel
-	vNode.tunnel.RegisterNode(ctx, initData)
-	defer vNode.tunnel.UnRegisterNode(ctx, vNode.name)
+	vNode.tunnel.RegisterNode(initData)
+	defer vNode.tunnel.UnRegisterNode(vNode.name)
 
 	// Signal that the node is ready
 	close(vNode.ready)

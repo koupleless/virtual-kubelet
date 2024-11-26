@@ -82,7 +82,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 				podKey := utils.GetPodKey(&basicPod)
 				key := tl.GetBizUniqueKey(&container)
 				time.Sleep(time.Second)
-				tl.UpdateBizStatus(ctx, nodeName, key, model.BizStatusData{
+				tl.UpdateBizStatus(nodeName, key, model.BizStatusData{
 					Key:        key,
 					Name:       container.Name,
 					PodKey:     podKey,
@@ -105,7 +105,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 			container := basicPod.Spec.Containers[0]
 			podKey := utils.GetPodKey(&basicPod)
 			key := tl.GetBizUniqueKey(&container)
-			tl.UpdateBizStatus(ctx, nodeName, key, model.BizStatusData{
+			tl.UpdateBizStatus(nodeName, key, model.BizStatusData{
 				Key:        key,
 				Name:       container.Name,
 				PodKey:     podKey,
@@ -127,7 +127,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 			container := basicPod.Spec.Containers[0]
 			podKey := utils.GetPodKey(&basicPod) + "-wrong"
 			key := tl.GetBizUniqueKey(&container)
-			tl.UpdateBizStatus(ctx, nodeName, key, model.BizStatusData{
+			tl.UpdateBizStatus(nodeName, key, model.BizStatusData{
 				Key:        key,
 				Name:       container.Name,
 				PodKey:     podKey,
@@ -150,7 +150,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 			container := basicPod.Spec.Containers[0]
 			podKey := utils.GetPodKey(&basicPod)
 			key := tl.GetBizUniqueKey(&container)
-			tl.UpdateBizStatus(ctx, nodeName, key, model.BizStatusData{
+			tl.UpdateBizStatus(nodeName, key, model.BizStatusData{
 				Key:        key,
 				Name:       container.Name,
 				PodKey:     podKey,
@@ -225,7 +225,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 				podKey := utils.GetPodKey(&basicPod2)
 				key := tl.GetBizUniqueKey(&container)
 				time.Sleep(time.Second)
-				tl.UpdateBizStatus(ctx, nodeName, key, model.BizStatusData{
+				tl.UpdateBizStatus(nodeName, key, model.BizStatusData{
 					Key:        key,
 					Name:       container.Name,
 					PodKey:     podKey,

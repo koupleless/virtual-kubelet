@@ -28,7 +28,7 @@ type MockTunnel struct {
 	NodeNotReady     map[string]bool
 }
 
-func (m *MockTunnel) OnNodeNotReady(ctx context.Context, nodeName string) {
+func (m *MockTunnel) OnNodeNotReady(nodeName string) {
 	m.Lock()
 	defer m.Unlock()
 	delete(m.nodeStorage, nodeName)
@@ -50,7 +50,7 @@ func (m *MockTunnel) DeleteNode(nodeName string) {
 	delete(m.nodeStorage, nodeName)
 }
 
-func (m *MockTunnel) UpdateBizStatus(ctx context.Context, nodeName, containerKey string, data model.BizStatusData) {
+func (m *MockTunnel) UpdateBizStatus(nodeName, containerKey string, data model.BizStatusData) {
 	m.Lock()
 	defer m.Unlock()
 
@@ -67,7 +67,7 @@ func (m *MockTunnel) Key() string {
 	return "mock_tunnel"
 }
 
-func (m *MockTunnel) Start(ctx context.Context, clientID string, env string) error {
+func (m *MockTunnel) Start(clientID string, env string) error {
 	m.bizStatusStorage = map[string]map[string]model.BizStatusData{}
 	m.nodeStorage = map[string]Node{}
 	m.NodeNotReady = map[string]bool{}
@@ -89,15 +89,15 @@ func (m *MockTunnel) RegisterCallback(
 	m.OnSingleBizStatusArrived = OnSingleBizStatusArrived
 }
 
-func (m *MockTunnel) RegisterNode(ctx context.Context, initData model.NodeInfo) {
+func (m *MockTunnel) RegisterNode(initData model.NodeInfo) {
 	return
 }
 
-func (m *MockTunnel) UnRegisterNode(ctx context.Context, nodeName string) {
+func (m *MockTunnel) UnRegisterNode(nodeName string) {
 	return
 }
 
-func (m *MockTunnel) FetchHealthData(ctx context.Context, nodeName string) error {
+func (m *MockTunnel) FetchHealthData(nodeName string) error {
 	data, has := m.nodeStorage[nodeName]
 	if has {
 		m.OnBaseStatusArrived(nodeName, data.NodeStatusData)
@@ -105,7 +105,7 @@ func (m *MockTunnel) FetchHealthData(ctx context.Context, nodeName string) error
 	return nil
 }
 
-func (m *MockTunnel) QueryAllBizStatusData(ctx context.Context, nodeName string) error {
+func (m *MockTunnel) QueryAllBizStatusData(nodeName string) error {
 	_, has := m.nodeStorage[nodeName]
 	if has {
 		m.OnAllBizStatusArrived(nodeName, convertContainerMap2ContainerList(m.bizStatusStorage[nodeName]))
@@ -113,7 +113,7 @@ func (m *MockTunnel) QueryAllBizStatusData(ctx context.Context, nodeName string)
 	return nil
 }
 
-func (m *MockTunnel) StartBiz(ctx context.Context, nodeName, podKey string, container *corev1.Container) error {
+func (m *MockTunnel) StartBiz(nodeName, podKey string, container *corev1.Container) error {
 	m.Lock()
 	defer m.Unlock()
 	key := utils.GetBizUniqueKey(container)
@@ -139,7 +139,7 @@ func (m *MockTunnel) StartBiz(ctx context.Context, nodeName, podKey string, cont
 	return nil
 }
 
-func (m *MockTunnel) StopBiz(ctx context.Context, nodeName, podKey string, container *corev1.Container) error {
+func (m *MockTunnel) StopBiz(nodeName, podKey string, container *corev1.Container) error {
 	m.Lock()
 	defer m.Unlock()
 	containerMap := m.bizStatusStorage[nodeName]

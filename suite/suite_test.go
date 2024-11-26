@@ -89,7 +89,7 @@ var _ = BeforeSuite(func() {
 		&tl,
 	}
 	for _, t := range tunnels {
-		err = t.Start(ctx, clientID, env)
+		err = t.Start(clientID, env)
 		if err != nil {
 			log.G(ctx).WithError(err).Error("failed to start tunnel", t.Key())
 		} else {

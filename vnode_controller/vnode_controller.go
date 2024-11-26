@@ -525,7 +525,7 @@ func (vNodeController *VNodeController) startVNode(initData model.NodeInfo) {
 		// Start a new goroutine to fetch node health data every 10 seconds
 		go utils.TimedTaskWithInterval(vnCtx, time.Second*10, func(ctx context.Context) {
 			log.G(vnCtx).Info("fetch node health data for node ", nodeName)
-			err = vNodeController.tunnel.FetchHealthData(vnCtx, nodeName)
+			err = vNodeController.tunnel.FetchHealthData(nodeName)
 			if err != nil {
 				log.G(vnCtx).WithError(err).Errorf("Failed to fetch node health info from %s", nodeName)
 			}
@@ -534,7 +534,7 @@ func (vNodeController *VNodeController) startVNode(initData model.NodeInfo) {
 		// Start a new goroutine to query all container status data every 15 seconds
 		go utils.TimedTaskWithInterval(vnCtx, time.Second*15, func(ctx context.Context) {
 			log.G(vnCtx).Info("query all container status data for node ", nodeName)
-			err = vNodeController.tunnel.QueryAllBizStatusData(vnCtx, nodeName)
+			err = vNodeController.tunnel.QueryAllBizStatusData(nodeName)
 			if err != nil {
 				log.G(vnCtx).WithError(err).Errorf("Failed to query containers info from %s", nodeName)
 			}

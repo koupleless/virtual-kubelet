@@ -181,7 +181,7 @@ func (vNode *VNode) createOrRetryUpdateLease(ctx context.Context, clientID strin
 		isLeaderNow := vNode.IsLeader(clientID)
 		// If the holder identity is not the current client id, the leader has changed
 		if isLeaderBefore && !isLeaderNow {
-			log.G(ctx).Infof("node lease %s acquired by %s", vNode.name, vNode.lease.Spec.HolderIdentity)
+			log.G(ctx).Infof("node lease %s acquired by %s", vNode.name, *vNode.lease.Spec.HolderIdentity)
 			vNode.leaderAcquiredByOthers()
 			return
 		} else if !isLeaderBefore && isLeaderNow {

@@ -230,7 +230,7 @@ func MergeNodeFromProvider(node *corev1.Node, data model.NodeStatusData) *corev1
 	return vnodeCopy // Return the constructed vnode.
 }
 
-// ConvertBizStatusToContainerStatus converts tunnel container status to Kubernetes container status.
+// ConvertBizStatusToContainerStatus converts tunnel container status to Kubernetes container status, if not the status for the container, then create a empty state container status
 func ConvertBizStatusToContainerStatus(container *corev1.Container, containerStatus *corev1.ContainerStatus, data *model.BizStatusData) (*corev1.ContainerStatus, error) {
 	// this may be a little complex to handle the case that parameters is not nil or for same container name
 	if containerStatus == nil {

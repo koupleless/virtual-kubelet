@@ -20,7 +20,6 @@ type NodeMetadata struct {
 	Name        string // Name of the vnode
 	Version     string // Version of the vnode
 	ClusterName string // ClusterName of the cluster the vnode belongs to
-	VPodType    string // VPodType of the vnode
 }
 
 // NodeInfo is the data of node info.

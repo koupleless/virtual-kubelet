@@ -5,8 +5,8 @@ import (
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet/internal/lock"
 	"time"
 
-	"github.com/koupleless/virtual-kubelet/common/trace"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
+	"github.com/virtual-kubelet/virtual-kubelet/trace"
 	"golang.org/x/sync/singleflight"
 	"k8s.io/apimachinery/pkg/util/wait"
 )

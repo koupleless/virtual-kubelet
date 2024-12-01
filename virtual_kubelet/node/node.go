@@ -16,7 +16,6 @@ package node
 
 import (
 	"context"
-	"fmt"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sync"
 	"time"
@@ -95,8 +94,6 @@ func NewNodeController(p NodeProvider, node *corev1.Node, client client.Client, 
 		n.statusInterval = DefaultStatusUpdateInterval
 	}
 
-	n.nodePingController = newNodePingController(n.p, n.pingInterval, n.pingTimeout)
-
 	return n, nil
 }
 
@@ -146,8 +143,9 @@ type NodeController struct { //nolint:revive
 	errMu  sync.Mutex
 	err    error
 
-	nodePingController *nodePingController
-	pingTimeout        *time.Duration
+	// this is only usefully when the vk is deploy beside the node
+	//nodePingController *nodePingController
+	pingTimeout *time.Duration
 
 	group wait.Group
 }
@@ -183,7 +181,7 @@ func (n *NodeController) Run(ctx context.Context) (retErr error) {
 		n.chStatusUpdate <- node
 	})
 
-	n.group.StartWithContext(ctx, n.nodePingController.Run)
+	//n.group.StartWithContext(ctx, n.nodePingController.Run)
 
 	n.serverNodeLock.Lock()
 	providerNode := n.serverNode.DeepCopy()
@@ -302,12 +300,6 @@ func (n *NodeController) updateStatus(ctx context.Context, providerNode *corev1.
 	defer func() {
 		span.SetStatus(err)
 	}()
-
-	if result, err := n.nodePingController.getResult(ctx); err != nil {
-		return err
-	} else if result.error != nil {
-		return fmt.Errorf("Not updating node status because node ping failed: %w", result.error)
-	}
 
 	updateNodeStatusHeartbeat(providerNode)
 

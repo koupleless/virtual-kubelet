@@ -39,14 +39,12 @@ const (
 	LabelKeyOfComponent = "virtual-kubelet.koupleless.io/component"
 	// LabelKeyOfEnv is a constant string used as a key for environment in Kubernetes objects.
 	LabelKeyOfEnv = "virtual-kubelet.koupleless.io/env"
-	// LabelKeyOfVnodeTunnel is a constant string used as a key for vnode tunnel in Kubernetes objects.
-	LabelKeyOfVnodeTunnel = "vnode.koupleless.io/tunnel"
-	// LabelKeyOfVNodeName is a constant string used as a key for vnode name in Kubernetes objects.
-	LabelKeyOfVNodeName = "vnode.koupleless.io/name"
-	// LabelKeyOfVNodeVersion is a constant string used as a key for vnode version in Kubernetes objects.
-	LabelKeyOfVNodeVersion = "vnode.koupleless.io/version"
-	// LabelKeyOfVNodeClusterName is the constant string used as a key for vnode cluster name in Kubernetes objects.
-	LabelKeyOfVNodeClusterName = "vnode.koupleless.io/cluster-name"
+	// LabelKeyOfBaseName is a constant string used as a key for base name.
+	LabelKeyOfBaseName = "base.koupleless.io/name"
+	// LabelKeyOfBaseVersion is a constant string used as a key for base version.
+	LabelKeyOfBaseVersion = "base.koupleless.io/version"
+	// LabelKeyOfBaseClusterName is the constant string used as a key for base cluster name.
+	LabelKeyOfBaseClusterName = "base.koupleless.io/cluster-name"
 )
 
 const (

@@ -452,11 +452,11 @@ func buildNode(node *corev1.Node, config *model.BuildVNodeConfig) error {
 	if oldLabels == nil {
 		oldLabels = make(map[string]string)
 	}
-	oldLabels[model.LabelKeyOfVNodeName] = config.NodeName
-	oldLabels[model.LabelKeyOfVNodeClusterName] = config.ClusterName
+	oldLabels[model.LabelKeyOfBaseName] = config.NodeName
+	oldLabels[model.LabelKeyOfBaseClusterName] = config.ClusterName
 	oldLabels[model.LabelKeyOfComponent] = model.ComponentVNode
 	oldLabels[model.LabelKeyOfEnv] = config.Env
-	oldLabels[model.LabelKeyOfVNodeVersion] = config.NodeVersion
+	oldLabels[model.LabelKeyOfBaseVersion] = config.NodeVersion
 	oldLabels[corev1.LabelHostname] = config.NodeHostname
 	for k, v := range config.CustomLabels {
 		oldLabels[k] = v

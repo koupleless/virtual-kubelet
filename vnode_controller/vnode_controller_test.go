@@ -54,19 +54,17 @@ func TestDiscoverPreviousNode(t *testing.T) {
 				ObjectMeta: v1.ObjectMeta{
 					Name: "test-node-without-tunnel",
 					Labels: map[string]string{
-						model.LabelKeyOfComponent:    model.ComponentVNode,
-						model.LabelKeyOfEnv:          "suite",
-						model.LabelKeyOfVNodeName:    "test-cluster-name",
-						model.LabelKeyOfVNodeVersion: "1.0.0",
+						model.LabelKeyOfComponent:   model.ComponentVNode,
+						model.LabelKeyOfEnv:         "suite",
+						model.LabelKeyOfBaseName:    "test-cluster-name",
+						model.LabelKeyOfBaseVersion: "1.0.0",
 					},
 				},
 			},
 			{
 				ObjectMeta: v1.ObjectMeta{
-					Name: "vnode.test-node-with-tunnel",
-					Labels: map[string]string{
-						model.LabelKeyOfVnodeTunnel: mockTunnel.Key(),
-					},
+					Name:   "vnode.test-node-with-tunnel",
+					Labels: map[string]string{},
 				},
 				Status: corev1.NodeStatus{
 					Addresses: []corev1.NodeAddress{

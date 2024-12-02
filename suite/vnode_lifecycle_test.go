@@ -64,9 +64,9 @@ var _ = Describe("VNode Lifecycle Test", func() {
 			}, node)
 
 			Expect(err).To(BeNil())
-			Expect(node.Labels[model.LabelKeyOfVNodeName]).To(Equal(nodeName))
-			Expect(node.Labels[model.LabelKeyOfVNodeVersion]).To(Equal(nodeVersion))
-			Expect(node.Labels[model.LabelKeyOfVNodeClusterName]).To(Equal(clusterName))
+			Expect(node.Labels[model.LabelKeyOfBaseName]).To(Equal(nodeName))
+			Expect(node.Labels[model.LabelKeyOfBaseVersion]).To(Equal(nodeVersion))
+			Expect(node.Labels[model.LabelKeyOfBaseClusterName]).To(Equal(clusterName))
 			Expect(node.Labels[testKey]).To(Equal(testValue))
 			Expect(node.Labels[model.LabelKeyOfEnv]).To(Equal(env))
 			Expect(node.Annotations[testKey]).To(Equal(testValue))

@@ -449,26 +449,33 @@ func (vNodeController *VNodeController) startVNode(initData model.NodeInfo) {
 		return
 	}
 
-	vnCtx, vnCancel := context.WithCancel(context.WithValue(context.Background(), "nodeName", nodeName))
+	vNodeController.createAndRunVNode(initData)
+}
 
+func (vNodeController *VNodeController) createAndRunVNode(initData model.NodeInfo) {
+	nodeName := initData.Metadata.Name
+	vnCtx, vnCancel := context.WithCancel(context.WithValue(context.Background(), "nodeName", nodeName))
 	defer func() {
-		vNodeController.deleteVNode(vnCtx, vNode)
 		vnCancel()
-		vNode.ToDone()
 	}()
 
-	vn, err := vNodeController.createVNode(vnCtx, initData)
+	vNode, err := vNodeController.createVNode(vnCtx, initData)
 	if err != nil {
 		err = errpkg.Wrap(err, "Error creating vnode")
 		return
 	}
 
-	vNodeController.runVNode(vnCtx, vn, initData)
+	vNodeController.runVNode(vnCtx, vNode, initData)
+	defer func() {
+		log.G(vnCtx).Infof("vnode %s to state: done", vNode.GetNodeName())
+		vNode.ToDone()
+	}()
 
 	go func() {
 		select {
 		case <-vNode.Exit():
 			log.G(vnCtx).Infof("vnode exit: %s", vNode.GetNodeName())
+			vNodeController.deleteVNode(vnCtx, vNode)
 			return
 		}
 	}()
@@ -495,8 +502,8 @@ func (vNodeController *VNodeController) createVNode(vnCtx context.Context, initD
 		initData.NetworkInfo.NodeIP = "127.0.0.1"
 	}
 
-	var vn *provider.VNode
-	vn, err = provider.NewVNode(&model.BuildVNodeConfig{
+	var vNode *provider.VNode
+	vNode, err = provider.NewVNode(&model.BuildVNodeConfig{
 		Client:            vNodeController.client,
 		KubeCache:         vNodeController.cache,
 		NodeIP:            initData.NetworkInfo.NodeIP,
@@ -516,12 +523,19 @@ func (vNodeController *VNodeController) createVNode(vnCtx context.Context, initD
 		return nil, err
 	}
 
-	err = vNodeController.vNodeStore.AddVNode(nodeName, vn)
+	err = vNodeController.vNodeStore.AddVNode(nodeName, vNode)
 	if err != nil {
 		err = errpkg.Wrap(err, "Error addVNode vnode: "+nodeName)
 		return nil, err
 	}
-	return vn, err
+
+	go func() {
+		select {
+		case <-vNode.Exit():
+			vNodeController.deleteVNode(vnCtx, vNode)
+		}
+	}()
+	return vNode, err
 }
 
 func (vNodeController *VNodeController) runVNode(vnCtx context.Context, vNode *provider.VNode, initData model.NodeInfo) {

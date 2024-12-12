@@ -15,7 +15,6 @@ import (
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/provider"
 	errpkg "github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
 	"github.com/virtual-kubelet/virtual-kubelet/trace"
 	corev1 "k8s.io/api/core/v1"
@@ -149,7 +148,7 @@ func (vNodeController *VNodeController) SetupWithManager(ctx context.Context, mg
 
 	go func() {
 		// wait for all tunnel to be ready
-		utils.CheckAndFinallyCall(context.Background(), func() (bool, error) {
+		utils.CheckAndFinallyCall(context.Background(), func(ctx context.Context) (bool, error) {
 			if !vNodeController.tunnel.Ready() {
 				return false, nil
 			}
@@ -443,22 +442,61 @@ func (vNodeController *VNodeController) podDeleteHandler(ctx context.Context, po
 func (vNodeController *VNodeController) startVNode(initData model.NodeInfo) {
 	vNodeController.Lock()
 	defer vNodeController.Unlock()
-	// first apply for local lock
-	if initData.NetworkInfo.NodeIP == "" {
-		initData.NetworkInfo.NodeIP = "127.0.0.1"
-	}
 
 	nodeName := initData.Metadata.Name
-
 	vNode := vNodeController.vNodeStore.GetVNode(nodeName)
-	// if already exist
 	if vNode != nil {
 		return
 	}
 
-	log.G(context.Background()).Infof("starting vnode %s", nodeName)
-	var err error
-	vn, err := provider.NewVNode(&model.BuildVNodeConfig{
+	vnCtx, vnCancel := context.WithCancel(context.WithValue(context.Background(), "nodeName", nodeName))
+
+	defer func() {
+		vNodeController.deleteVNode(vnCtx, vNode)
+		vnCancel()
+		vNode.ToDone()
+	}()
+
+	vn, err := vNodeController.createVNode(vnCtx, initData)
+	if err != nil {
+		err = errpkg.Wrap(err, "Error creating vnode")
+		return
+	}
+
+	vNodeController.runVNode(vnCtx, vn, initData)
+
+	go func() {
+		select {
+		case <-vNode.Exit():
+			log.G(vnCtx).Infof("vnode exit: %s", vNode.GetNodeName())
+			return
+		}
+	}()
+}
+
+func (vNodeController *VNodeController) deleteVNode(vnCtx context.Context, vNode *provider.VNode) {
+	log.G(vnCtx).Infof("start to remove vnode %s because vnode exited", vNode.GetNodeName())
+
+	vNodeController.vNodeStore.DeleteVNode(vNode.GetNodeName())
+
+	err := vNode.Remove(vnCtx)
+	if err != nil {
+		log.G(vnCtx).WithError(err).Errorf("failed to remove node %s", vNode.GetNodeName())
+	}
+
+	log.G(vnCtx).Infof("remove node %s success", vNode.GetNodeName())
+}
+
+func (vNodeController *VNodeController) createVNode(vnCtx context.Context, initData model.NodeInfo) (kn *provider.VNode, err error) {
+	nodeName := initData.Metadata.Name
+	log.G(vnCtx).Infof("create vnode %s", nodeName)
+
+	if initData.NetworkInfo.NodeIP == "" {
+		initData.NetworkInfo.NodeIP = "127.0.0.1"
+	}
+
+	var vn *provider.VNode
+	vn, err = provider.NewVNode(&model.BuildVNodeConfig{
 		Client:            vNodeController.client,
 		KubeCache:         vNodeController.cache,
 		NodeIP:            initData.NetworkInfo.NodeIP,
@@ -474,71 +512,90 @@ func (vNodeController *VNodeController) startVNode(initData model.NodeInfo) {
 		WorkerNum:         vNodeController.vNodeWorkerNum,
 	}, vNodeController.tunnel)
 	if err != nil {
-		err = errpkg.Wrap(err, "Error creating vnode")
+		err = errpkg.Wrap(err, "Error new vnode: "+nodeName)
+		return nil, err
+	}
+
+	err = vNodeController.vNodeStore.AddVNode(nodeName, vn)
+	if err != nil {
+		err = errpkg.Wrap(err, "Error addVNode vnode: "+nodeName)
+		return nil, err
+	}
+	return vn, err
+}
+
+func (vNodeController *VNodeController) runVNode(vnCtx context.Context, vNode *provider.VNode, initData model.NodeInfo) {
+	log.G(context.Background()).Infof("start to run vnode %s", vNode.GetNodeName())
+	go vNode.StartLeaderElection(vnCtx, vNodeController.clientID)
+
+	go func() {
+		for {
+			select {
+			case <-vNode.WhenLeaderAcquiredByMe:
+				vNodeController.takeOverVNode(vnCtx, vNode, initData)
+			case <-vnCtx.Done():
+				return
+			}
+		}
+	}()
+}
+
+func (vNodeController *VNodeController) takeOverVNode(vnCtx context.Context, vNode *provider.VNode, initData model.NodeInfo) {
+	log.G(context.Background()).Infof("start to take over vnode %s", vNode.GetNodeName())
+	takeOverVnCtx, takeOverCancel := context.WithCancel(context.WithValue(vnCtx, "nodeName", vNode.GetNodeName()))
+	defer takeOverCancel()
+
+	var err error
+
+	err = vNode.Run(takeOverVnCtx, initData)
+	if err != nil {
+		log.G(takeOverVnCtx).WithError(err).Errorf("failed to run vnode and release: %s", vNode.GetNodeName())
+		takeOverCancel()
 		return
 	}
 
-	vNodeController.vNodeStore.AddVNode(nodeName, vn)
+	if err = vNode.WaitReady(takeOverVnCtx, time.Minute); err != nil {
+		log.G(takeOverVnCtx).WithError(err).Errorf("vnode is not ready: %s", vNode.GetNodeName())
+		takeOverCancel()
+		return
+	}
 
-	// Create a new context with the nodeName as a value
-	vnCtx := context.WithValue(context.Background(), "nodeName", nodeName)
-	// Create a new context with a cancel function
-	vnCtx, vnCancel := context.WithCancel(vnCtx)
+	vNodeController.connectWithInterval(takeOverVnCtx, vNode)
 
-	// Start a new goroutine
-	go func() {
-		// Start a select statement
-		select {
-		// If the VNode is done, log an error and set needRestart to true
-		case <-vn.Done():
-			logrus.WithError(vn.Err()).Infof("node runnable exit %s", nodeName)
-		// If the leader has changed, log a message and set needRestart to true
-		case <-vn.ExitWhenLeaderChanged():
-			logrus.Infof("node leader changed %s", nodeName)
+	select {
+	case <-vNode.WhenLeaderAcquiredByOthers:
+		log.G(takeOverVnCtx).Infof("release vnode %s because leader is acquired by others", vNode.GetNodeName())
+		takeOverCancel()
+		return
+	case <-vnCtx.Done():
+		log.G(takeOverVnCtx).Infof("release vnode %s because vnCtx is done", vNode.GetNodeName())
+		takeOverCancel()
+		return
+	}
+}
+
+func (vNodeController *VNodeController) connectWithInterval(takeOverVnCtx context.Context, vNode *provider.VNode) {
+	nodeName := vNode.GetNodeName()
+
+	var err error
+
+	// Start a new goroutine to fetch node health data every 10 seconds
+	go utils.TimedTaskWithInterval(takeOverVnCtx, time.Second*10, func(ctx context.Context) {
+		log.G(takeOverVnCtx).Info("fetch node health data for node ", nodeName)
+		err = vNodeController.tunnel.FetchHealthData(nodeName)
+		if err != nil {
+			log.G(takeOverVnCtx).WithError(err).Errorf("Failed to fetch node health info from %s", nodeName)
 		}
-		// Cancel the context
-		vNodeController.vNodeStore.DeleteVNode(nodeName)
-		log.G(vnCtx).Infof("node exit %s", nodeName)
-		vnCancel()
-	}()
+	})
 
-	// Start a new goroutine for leader election
-	go func() {
-		// Try to elect a leader
-		go vn.StartLeaderElection(context.Background() /* using a new context to enable keep running when vnode exit*/, vNodeController.clientID)
-
-		// Start a new goroutine to run the VNode
-		go vn.Run(vnCtx, initData)
-
-		// If the VNode is not ready after a minute, log an error and cancel the context
-		if err = vn.WaitReady(vnCtx, time.Minute); err != nil {
-			err = errpkg.Wrap(err, "Error waiting vnode ready")
-			vNodeController.vNodeStore.DeleteVNode(nodeName)
-			log.G(vnCtx).Infof("node exit %s", nodeName)
-			vnCancel()
-			return
-		} else {
-			vNodeController.vNodeStore.AddVNode(nodeName, vn)
+	// Start a new goroutine to query all container status data every 15 seconds
+	go utils.TimedTaskWithInterval(takeOverVnCtx, time.Second*15, func(ctx context.Context) {
+		log.G(takeOverVnCtx).Info("query all container status data for node ", nodeName)
+		err = vNodeController.tunnel.QueryAllBizStatusData(nodeName)
+		if err != nil {
+			log.G(takeOverVnCtx).WithError(err).Errorf("Failed to query containers info from %s", nodeName)
 		}
-
-		// Start a new goroutine to fetch node health data every 10 seconds
-		go utils.TimedTaskWithInterval(vnCtx, time.Second*10, func(ctx context.Context) {
-			log.G(vnCtx).Info("fetch node health data for node ", nodeName)
-			err = vNodeController.tunnel.FetchHealthData(nodeName)
-			if err != nil {
-				log.G(vnCtx).WithError(err).Errorf("Failed to fetch node health info from %s", nodeName)
-			}
-		})
-
-		// Start a new goroutine to query all container status data every 15 seconds
-		go utils.TimedTaskWithInterval(vnCtx, time.Second*15, func(ctx context.Context) {
-			log.G(vnCtx).Info("query all container status data for node ", nodeName)
-			err = vNodeController.tunnel.QueryAllBizStatusData(nodeName)
-			if err != nil {
-				log.G(vnCtx).WithError(err).Errorf("Failed to query containers info from %s", nodeName)
-			}
-		})
-	}()
+	})
 }
 
 // This function calculates the workload level based on the number of running nodes and the total number of nodes.

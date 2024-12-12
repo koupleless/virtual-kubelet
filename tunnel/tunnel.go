@@ -31,7 +31,7 @@ type Tunnel interface {
 	RegisterCallback(OnBaseDiscovered, OnBaseStatusArrived, OnAllBizStatusArrived, OnSingleBizStatusArrived)
 
 	// RegisterNode is the func call when a vnode start successfully, you can implement it on demand
-	RegisterNode(initData model.NodeInfo)
+	RegisterNode(initData model.NodeInfo) error
 
 	// UnRegisterNode is the func call when a vnode shutdown successfully, you can implement it on demand
 	UnRegisterNode(nodeName string)

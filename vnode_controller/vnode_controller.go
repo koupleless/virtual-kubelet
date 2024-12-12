@@ -454,14 +454,12 @@ func (vNodeController *VNodeController) startVNode(initData model.NodeInfo) {
 
 func (vNodeController *VNodeController) createAndRunVNode(initData model.NodeInfo) {
 	nodeName := initData.Metadata.Name
-	vnCtx, vnCancel := context.WithCancel(context.WithValue(context.Background(), "nodeName", nodeName))
-	defer func() {
-		vnCancel()
-	}()
+	vnCtx, vnCtxCancel := context.WithCancel(context.WithValue(context.Background(), "nodeName", nodeName))
 
 	vNode, err := vNodeController.createVNode(vnCtx, initData)
 	if err != nil {
 		err = errpkg.Wrap(err, "Error creating vnode")
+		vnCtxCancel()
 		return
 	}
 
@@ -476,6 +474,7 @@ func (vNodeController *VNodeController) createAndRunVNode(initData model.NodeInf
 		case <-vNode.Exit():
 			log.G(vnCtx).Infof("vnode exit: %s", vNode.GetNodeName())
 			vNodeController.deleteVNode(vnCtx, vNode)
+			vnCtxCancel()
 			return
 		}
 	}()

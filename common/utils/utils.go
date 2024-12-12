@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	errpkg "github.com/pkg/errors"
 	"os"
 	"strings"
 	"time"
@@ -34,7 +35,7 @@ func TimedTaskWithInterval(ctx context.Context, interval time.Duration, task fun
 }
 
 // CheckAndFinallyCall checks a condition at a specified interval until it's true or a timeout occurs.
-func CheckAndFinallyCall(ctx context.Context, checkFunc func() (bool, error), timeout, interval time.Duration, finally, timeoutCall func()) {
+func CheckAndFinallyCall(ctx context.Context, checkFunc func(context.Context) (bool, error), timeout, interval time.Duration, finally, timeoutCall func()) error {
 	checkTicker := time.NewTicker(interval)
 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
@@ -44,16 +45,16 @@ func CheckAndFinallyCall(ctx context.Context, checkFunc func() (bool, error), ti
 		case <-ctx.Done():
 			logrus.Info("Check and Finally call timeout")
 			timeoutCall()
-			return
+			return fmt.Errorf("check time out")
 		case <-checkTicker.C:
-			// TODO: handle the error
-			finished, err := checkFunc()
+			finished, err := checkFunc(ctx)
 			if err != nil {
-				return
+				err = errpkg.Wrap(err, "Error when checking condition")
+				return err
 			}
 			if finished {
 				finally()
-				return
+				return nil
 			}
 		}
 	}

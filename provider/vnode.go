@@ -57,6 +57,10 @@ func (vNode *VNode) GetLease() *coordinationv1.Lease {
 	return vNode.lease
 }
 
+func (vNode *VNode) SetLease(lease *coordinationv1.Lease) {
+	vNode.lease = lease
+}
+
 func (vNode *VNode) Remove(vnCtx context.Context) (err error) {
 	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
@@ -146,15 +150,6 @@ func (vNode *VNode) checkNodeExistsInClient(vnCtx context.Context) (bool, error)
 	return err == nil, err
 }
 
-// StartLeaderElection renews the lease of the node
-func (vNode *VNode) StartLeaderElection(vnCtx context.Context, clientID string) {
-	//vNode.createOrRetryUpdateLease(ctx, clientID)
-	// Retry updating the lease
-	utils.TimedTaskWithInterval(vnCtx, time.Second*model.NodeLeaseUpdatePeriodSeconds, func(vnCtx context.Context) {
-		vNode.createOrRetryUpdateLease(vnCtx, clientID)
-	})
-}
-
 func (vNode *VNode) discoveryPreviousPods(ctx context.Context) {
 	log.G(ctx).Infof("discovery previous pods for %s", vNode.name)
 	// Discover previous pods related to the current VNode
@@ -176,73 +171,6 @@ func (vNode *VNode) discoveryPreviousPods(ctx context.Context) {
 		// Sync the pods from Kubernetes to the virtual node.
 		vNode.SyncPodsFromKubernetesEnqueue(ctx, key)
 	}
-}
-
-// createOrRetryUpdateLease retries updating the lease of the node
-func (vNode *VNode) createOrRetryUpdateLease(ctx context.Context, clientID string) {
-	log.G(ctx).Infof("try to acquire node lease for %s by %s", vNode.name, clientID)
-	for i := 0; i < model.NodeLeaseMaxRetryTimes; i++ {
-		time.Sleep(time.Millisecond * 200) // TODO: add random sleep time for reduce the client rate
-		lease := &coordinationv1.Lease{}
-		err := vNode.client.Get(ctx, types.NamespacedName{
-			Name:      vNode.name,
-			Namespace: corev1.NamespaceNodeLease,
-		}, lease)
-		if err != nil {
-			if apierrors.IsNotFound(err) {
-				// If not found, try to create a new lease
-				lease = vNode.newLease(clientID)
-
-				// Attempt to create the lease
-				err = vNode.client.Create(ctx, lease)
-				// If the context is canceled or deadline exceeded, return false
-				if err != nil {
-					// Log the error if there's a problem creating the lease
-					log.G(ctx).WithError(err).Errorf("node lease %s creating error", vNode.name)
-				}
-				continue
-			}
-
-			log.G(ctx).WithError(err).WithField("retries", i).Error("failed to get node lease when updating node lease")
-			continue
-		}
-
-		isLeaderBefore := vNode.IsLeader(clientID)
-		vNode.lease = lease
-		isLeaderNow := vNode.IsLeader(clientID)
-		// If the holder identity is not the current client id, the leader has changed
-		if isLeaderBefore && !isLeaderNow {
-			log.G(ctx).Infof("node lease %s acquired by %s", vNode.name, *vNode.lease.Spec.HolderIdentity)
-			vNode.leaderAcquiredByOthers()
-			return
-		} else if !isLeaderBefore && isLeaderNow {
-			log.G(ctx).Infof("node lease %s acquired by %s", vNode.name, clientID)
-			vNode.leaderAcquiredByMe()
-			log.G(ctx).Infof("node %s inited after leader acquired", vNode.name)
-		}
-
-		newLease := lease.DeepCopy()
-		newLease.Spec.HolderIdentity = &clientID
-		newLease.Spec.RenewTime = &metav1.MicroTime{Time: time.Now()}
-
-		err = vNode.client.Patch(ctx, newLease, client.MergeFrom(lease))
-		if err == nil {
-			log.G(ctx).WithField("retries", i).Infof("Successfully updated lease for %s", vNode.name)
-			vNode.lease = newLease
-			return
-		}
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			log.G(ctx).WithError(err).Errorf("failed to update node lease for %s in retry %d/%d, and stop retry.", vNode.name, i, model.NodeLeaseMaxRetryTimes)
-			return
-		}
-		// OptimisticLockError requires getting the newer version of lease to proceed.
-		if apierrors.IsConflict(err) {
-			log.G(ctx).WithError(err).Errorf("failed to update node lease for %s in retry %d/%d", vNode.name, i, model.NodeLeaseMaxRetryTimes)
-			continue
-		}
-	}
-
-	log.G(ctx).WithError(fmt.Errorf("failed after %d attempts to update node lease", model.NodeLeaseMaxRetryTimes)).Error("failed to update node lease")
 }
 
 // WaitReady waits for the node to be ready
@@ -280,8 +208,8 @@ func (vNode *VNode) resetActivationStatus() {
 	vNode.ready = make(chan struct{})
 }
 
-// newLease creates a new lease for the node
-func (vNode *VNode) newLease(holderIdentity string) *coordinationv1.Lease {
+// NewLease creates a new lease for the node
+func (vNode *VNode) NewLease(holderIdentity string) *coordinationv1.Lease {
 	lease := &coordinationv1.Lease{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      vNode.name,
@@ -322,19 +250,14 @@ func (vNode *VNode) SyncOneContainerInfo(ctx context.Context, bizStatusData mode
 	}
 }
 
-//// Done returns a channel that will be closed when the vnode has exited.
-//func (vNode *VNode) Done() <-chan struct{} {
-//	return vNode.done
-//}
+// Done returns a channel that will be closed when the vnode has exited.
+func (vNode *VNode) Done() <-chan struct{} {
+	return vNode.done
+}
 
 func (vNode *VNode) Exit() <-chan struct{} {
 	return vNode.exit
 }
-
-//// ExitWhenLeaderChanged returns a channel that will be closed when the vnode leader changed
-//func (vNode *VNode) ExitWhenLeaderChanged() <-chan struct{} {
-//	return vNode.WhenLeaderAcquiredByOthers
-//}
 
 // IsLeader returns a bool marked current vnode is leader or not
 func (vNode *VNode) IsLeader(clientId string) bool {
@@ -358,15 +281,15 @@ func (vNode *VNode) Shutdown() {
 	}
 }
 
-// leaderAcquiredByOthers is the func of shutting down a vnode when leader changed
-func (vNode *VNode) leaderAcquiredByOthers() {
+// LeaderAcquiredByOthers is the func of shutting down a vnode when leader changed
+func (vNode *VNode) LeaderAcquiredByOthers() {
 	select {
 	case vNode.WhenLeaderAcquiredByOthers <- struct{}{}:
 	default:
 	}
 }
 
-func (vNode *VNode) leaderAcquiredByMe() {
+func (vNode *VNode) LeaderAcquiredByMe() {
 	select {
 	case vNode.WhenLeaderAcquiredByMe <- struct{}{}:
 	default:
@@ -379,10 +302,6 @@ func (vNode *VNode) ToDone() {
 	default:
 		close(vNode.done)
 	}
-}
-
-func (vNode *VNode) Done() <-chan struct{} {
-	return vNode.done
 }
 
 // CheckAndUpdatePodStatus checks and updates a pod in the node

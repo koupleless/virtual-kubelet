@@ -6,11 +6,15 @@ import (
 	"fmt"
 	"github.com/koupleless/virtual-kubelet/tunnel"
 	"github.com/koupleless/virtual-kubelet/vnode_controller/predicates"
+	coordinationv1 "k8s.io/api/coordination/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
 	"sync"
 	"time"
 
+	mapset "github.com/deckarep/golang-set"
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/provider"
@@ -56,6 +60,8 @@ type VNodeController struct {
 	tunnel tunnel.Tunnel
 
 	vNodeStore *provider.VNodeStore // The runtime info store for the controller
+
+	takeOveredVNodeName mapset.Set
 }
 
 // Reconcile is the main reconcile function for the controller
@@ -83,17 +89,18 @@ func NewVNodeController(config *model.BuildVNodeControllerConfig, tunnel tunnel.
 	}
 
 	return &VNodeController{
-		clientID:         config.ClientID,
-		env:              config.Env,
-		client:           config.KubeClient,
-		cache:            config.KubeCache,
-		vPodType:         config.VPodType,
-		isCluster:        config.IsCluster,
-		workloadMaxLevel: config.WorkloadMaxLevel,
-		vNodeWorkerNum:   config.VNodeWorkerNum,
-		vNodeStore:       provider.NewVNodeStore(),
-		ready:            make(chan struct{}),
-		tunnel:           tunnel,
+		clientID:            config.ClientID,
+		env:                 config.Env,
+		client:              config.KubeClient,
+		cache:               config.KubeCache,
+		vPodType:            config.VPodType,
+		isCluster:           config.IsCluster,
+		workloadMaxLevel:    config.WorkloadMaxLevel,
+		vNodeWorkerNum:      config.VNodeWorkerNum,
+		vNodeStore:          provider.NewVNodeStore(),
+		ready:               make(chan struct{}),
+		tunnel:              tunnel,
+		takeOveredVNodeName: mapset.NewSet(),
 	}, nil
 }
 
@@ -515,12 +522,13 @@ func (vNodeController *VNodeController) createVNode(vnCtx context.Context, initD
 		return nil, err
 	}
 
+	log.G(vnCtx).Infof("created vnode %s success", vNode.GetNodeName())
 	return vNode, err
 }
 
 func (vNodeController *VNodeController) runVNode(vnCtx context.Context, vNode *provider.VNode, initData model.NodeInfo) {
-	log.G(context.Background()).Infof("start to run vnode %s", vNode.GetNodeName())
-	go vNode.StartLeaderElection(vnCtx, vNodeController.clientID)
+	log.G(vnCtx).Infof("start to run vnode %s", vNode.GetNodeName())
+	go vNodeController.startLeaderElection(vnCtx, vNode)
 
 	go func() {
 		for {
@@ -534,8 +542,81 @@ func (vNodeController *VNodeController) runVNode(vnCtx context.Context, vNode *p
 	}()
 }
 
+func (vNodeController *VNodeController) startLeaderElection(vnCtx context.Context, vNode *provider.VNode) {
+	utils.TimedTaskWithInterval(vnCtx, time.Second*model.NodeLeaseUpdatePeriodSeconds, func(vnCtx context.Context) {
+		vNodeController.createOrRetryUpdateLease(vnCtx, vNode)
+	})
+}
+
+func (vNodeController *VNodeController) createOrRetryUpdateLease(vnCtx context.Context, vNode *provider.VNode) {
+	log.G(vnCtx).Infof("try to acquire node lease for %s by %s", vNode.GetNodeName(), vNodeController.clientID)
+	for i := 0; i < model.NodeLeaseMaxRetryTimes; i++ {
+		time.Sleep(time.Millisecond * 200) // TODO: add random sleep time for reduce the client rate
+		lease := &coordinationv1.Lease{}
+		err := vNodeController.client.Get(vnCtx, types.NamespacedName{
+			Name:      vNode.GetNodeName(),
+			Namespace: corev1.NamespaceNodeLease,
+		}, lease)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				// If not found, try to create a new lease
+				lease = vNode.NewLease(vNodeController.clientID)
+
+				// Attempt to create the lease
+				err = vNodeController.client.Create(vnCtx, lease)
+				// If the context is canceled or deadline exceeded, return false
+				if err != nil {
+					// Log the error if there's a problem creating the lease
+					log.G(vnCtx).WithError(err).Errorf("node lease %s creating error", vNode.GetNodeName())
+				}
+				continue
+			}
+
+			log.G(vnCtx).WithError(err).WithField("retries", i).Error("failed to get node lease when updating node lease")
+			continue
+		}
+
+		isLeaderBefore := vNode.IsLeader(vNodeController.clientID)
+		vNode.SetLease(lease)
+		isLeaderNow := vNode.IsLeader(vNodeController.clientID)
+		// If the holder identity is not the current client id, the leader has changed
+		if isLeaderBefore && !isLeaderNow {
+			log.G(vnCtx).Infof("node lease %s acquired by %s", vNode.GetNodeName(), *vNode.GetLease().Spec.HolderIdentity)
+			vNode.LeaderAcquiredByOthers()
+			return
+		} else if isLeaderNow && !vNodeController.takeOveredVNodeName.Contains(vNode.GetNodeName()) {
+			log.G(vnCtx).Infof("node lease %s acquired by %s", vNode.GetNodeName(), vNodeController.clientID)
+			vNode.LeaderAcquiredByMe()
+			log.G(vnCtx).Infof("node %s inited after leader acquired", vNode.GetNodeName())
+		}
+
+		newLease := lease.DeepCopy()
+		newLease.Spec.HolderIdentity = &vNodeController.clientID
+		newLease.Spec.RenewTime = &metav1.MicroTime{Time: time.Now()}
+
+		err = vNodeController.client.Patch(vnCtx, newLease, client.MergeFrom(lease))
+		if err == nil {
+			log.G(vnCtx).WithField("retries", i).Infof("Successfully updated lease for %s", vNode.GetNodeName())
+			vNode.SetLease(lease)
+			return
+		}
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			log.G(vnCtx).WithError(err).Errorf("failed to update node lease for %s in retry %d/%d, and stop retry.", vNode.GetNodeName(), i, model.NodeLeaseMaxRetryTimes)
+			return
+		}
+		// OptimisticLockError requires getting the newer version of lease to proceed.
+		if apierrors.IsConflict(err) {
+			log.G(vnCtx).WithError(err).Errorf("failed to update node lease for %s in retry %d/%d", vNode.GetNodeName(), i, model.NodeLeaseMaxRetryTimes)
+			continue
+		}
+	}
+}
+
 func (vNodeController *VNodeController) takeOverVNode(vnCtx context.Context, vNode *provider.VNode, initData model.NodeInfo) {
 	log.G(context.Background()).Infof("start to take over vnode %s", vNode.GetNodeName())
+	vNodeController.takeOveredVNodeName.Add(vNode.GetNodeName())
+	defer vNodeController.takeOveredVNodeName.Remove(vNode.GetNodeName())
+
 	takeOverVnCtx, takeOverCancel := context.WithCancel(context.WithValue(vnCtx, "nodeName", vNode.GetNodeName()))
 	defer takeOverCancel()
 
@@ -555,6 +636,8 @@ func (vNodeController *VNodeController) takeOverVNode(vnCtx context.Context, vNo
 	}
 
 	vNodeController.connectWithInterval(takeOverVnCtx, vNode)
+
+	log.G(takeOverVnCtx).Infof("take over vnode %s completed", vNode.GetNodeName())
 
 	select {
 	case <-vNode.WhenLeaderAcquiredByOthers:

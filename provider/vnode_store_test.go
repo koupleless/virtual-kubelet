@@ -70,7 +70,7 @@ func TestGetLeaseOutdatedVNodeName(t *testing.T) {
 		Liveness: Liveness{},
 	}
 
-	vNode.lease = vNode.newLease(clientId)
+	vNode.lease = vNode.NewLease(clientId)
 	vNode.lease.Spec.RenewTime.Time = time.Now().Add(-time.Second * model.NodeLeaseDurationSeconds)
 	store.AddVNode(nodeName, vNode)
 	nameList := store.GetLeaseOutdatedVNodeNames(clientId)

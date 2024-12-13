@@ -13,7 +13,7 @@ func TestVNode_ExitWhenLeaderChanged(t *testing.T) {
 	//	assert.Fail(t, "ExitWhenLeaderChanged should have been called")
 	//default:
 	//}
-	//vnode.leaderAcquiredByOthers()
+	//vnode.LeaderAcquiredByOthers()
 	//select {
 	//case <-vnode.ExitWhenLeaderChanged():
 	//default:

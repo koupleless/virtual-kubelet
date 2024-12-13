@@ -189,30 +189,6 @@ func (vNodeController *VNodeController) SetupWithManager(ctx context.Context, mg
 				}
 			})
 
-			// Periodically check for nodes that are not reachable and notify their leader virtual nodes.
-			go utils.TimedTaskWithInterval(ctx, 3*time.Second, func(ctx context.Context) {
-				unReachableVNodes := vNodeController.vNodeStore.GetUnReachableVNodes()
-				if unReachableVNodes != nil && len(unReachableVNodes) > 0 {
-					nodeNames := make([]string, 0, len(unReachableVNodes))
-					for _, vNode := range unReachableVNodes {
-						nodeNames = append(nodeNames, vNode.GetNodeName())
-					}
-					log.G(ctx).Infof("check not reachable vnode %v", nodeNames)
-				}
-
-				deadVNodes := vNodeController.vNodeStore.GetDeadVNodes()
-				if deadVNodes != nil && len(deadVNodes) > 0 {
-					nodeNames := make([]string, 0, len(deadVNodes))
-					for _, vNode := range deadVNodes {
-						nodeNames = append(nodeNames, vNode.GetNodeName())
-						if vNode.IsLeader(vNodeController.clientID) {
-							vNodeController.shutdownVNode(vNode.GetNodeName())
-						}
-					}
-					log.G(ctx).Infof("check and shutdown dead vnode %v", nodeNames)
-				}
-			})
-
 			// Signal that the controller is ready.
 			close(vNodeController.ready)
 		} else {
@@ -349,19 +325,23 @@ func (vNodeController *VNodeController) podAddHandler(ctx context.Context, podFr
 
 	nodeName := podFromKubernetes.Spec.NodeName
 	// check node name in local storage
-	vn := vNodeController.vNodeStore.GetVNodeByNodeName(nodeName)
-	if vn == nil {
+	vNode := vNodeController.vNodeStore.GetVNodeByNodeName(nodeName)
+	if vNode == nil {
 		// node not exist, invalid add req
 		return
 	}
 
 	key := utils.GetPodKey(podFromKubernetes)
-	if _, has := vn.GetKnownPod(key); !has {
-		vn.AddKnowPod(podFromKubernetes)
+	if _, has := vNode.GetKnownPod(key); !has {
+		vNode.AddKnowPod(podFromKubernetes)
 	}
 
-	if !vn.IsLeader(vNodeController.clientID) {
-		// not leader, just return
+	if !vNode.IsLeader(vNodeController.clientID) {
+		return
+	}
+
+	if !vNode.IsReady() {
+		log.G(ctx).Warnf("pod added in vnode %s but vnode is not ready: ", vNode.GetNodeName())
 		return
 	}
 
@@ -371,7 +351,7 @@ func (vNodeController *VNodeController) podAddHandler(ctx context.Context, podFr
 	// At this point we know that something in .metadata or .spec has changed, so we must proceed to sync the pod.
 	ctx = span.WithField(ctx, "key", key)
 
-	vn.SyncPodsFromKubernetesEnqueue(ctx, key)
+	vNode.SyncPodsFromKubernetesEnqueue(ctx, key)
 }
 
 // This function handles pod updates by checking if the pod is new or if its status has changed.
@@ -394,6 +374,11 @@ func (vNodeController *VNodeController) podUpdateHandler(ctx context.Context, ol
 
 	if !vNode.IsLeader(vNodeController.clientID) {
 		// not leader, just return
+		return
+	}
+
+	if !vNode.IsReady() {
+		log.G(ctx).Warnf("pod updated in vnode %s but vnode is not ready: ", vNode.GetNodeName())
 		return
 	}
 	ctx, span := trace.StartSpan(ctx, "UpdateFunc")
@@ -425,6 +410,12 @@ func (vNodeController *VNodeController) podDeleteHandler(ctx context.Context, po
 		// not leader, just return
 		return
 	}
+
+	if !vNode.IsReady() {
+		log.G(ctx).Warnf("pod deleted in vnode %s but vnode is not ready: ", vNode.GetNodeName())
+		return
+	}
+
 	ctx, span := trace.StartSpan(ctx, "DeleteFunc")
 	defer span.End()
 
@@ -464,18 +455,14 @@ func (vNodeController *VNodeController) createAndRunVNode(initData model.NodeInf
 	}
 
 	vNodeController.runVNode(vnCtx, vNode, initData)
-	defer func() {
-		log.G(vnCtx).Infof("vnode %s to state: done", vNode.GetNodeName())
-		vNode.ToDone()
-	}()
 
 	go func() {
 		select {
-		case <-vNode.Exit():
-			log.G(vnCtx).Infof("vnode exit: %s", vNode.GetNodeName())
+		case <-vNode.Done():
+			log.G(vnCtx).Infof("vnode done: %s, try to delete node", vNode.GetNodeName())
 			vNodeController.deleteVNode(vnCtx, vNode)
+			log.G(vnCtx).Infof("vnode done: %s, deleted node", vNode.GetNodeName())
 			vnCtxCancel()
-			return
 		}
 	}()
 }
@@ -528,12 +515,6 @@ func (vNodeController *VNodeController) createVNode(vnCtx context.Context, initD
 		return nil, err
 	}
 
-	go func() {
-		select {
-		case <-vNode.Exit():
-			vNodeController.deleteVNode(vnCtx, vNode)
-		}
-	}()
 	return vNode, err
 }
 
@@ -560,7 +541,7 @@ func (vNodeController *VNodeController) takeOverVNode(vnCtx context.Context, vNo
 
 	var err error
 
-	err = vNode.Run(takeOverVnCtx, initData)
+	err = vNode.Run(vnCtx, takeOverVnCtx, initData)
 	if err != nil {
 		log.G(takeOverVnCtx).WithError(err).Errorf("failed to run vnode and release: %s", vNode.GetNodeName())
 		takeOverCancel()
@@ -602,11 +583,23 @@ func (vNodeController *VNodeController) connectWithInterval(takeOverVnCtx contex
 	})
 
 	// Start a new goroutine to query all container status data every 15 seconds
-	go utils.TimedTaskWithInterval(takeOverVnCtx, time.Second*15, func(ctx context.Context) {
+	go utils.TimedTaskWithInterval(takeOverVnCtx, time.Second*15, func(context.Context) {
 		log.G(takeOverVnCtx).Info("query all container status data for node ", nodeName)
 		err = vNodeController.tunnel.QueryAllBizStatusData(nodeName)
 		if err != nil {
 			log.G(takeOverVnCtx).WithError(err).Errorf("Failed to query containers info from %s", nodeName)
+		}
+	})
+
+	go utils.TimedTaskWithInterval(takeOverVnCtx, 3*time.Second, func(takeOverVnCtx context.Context) {
+		if vNode.Liveness.IsDead() {
+			log.G(takeOverVnCtx).Infof("check and shutdown dead vnode: %s", nodeName)
+			vNodeController.shutdownVNode(vNode.GetNodeName())
+			return
+		}
+
+		if !vNode.Liveness.IsReachable() {
+			log.G(takeOverVnCtx).Infof("node %s is not reachable", nodeName)
 		}
 	})
 }
@@ -637,7 +630,7 @@ func (vNodeController *VNodeController) delayWithWorkload(ctx context.Context) {
 // This function shuts down a VNode by calling its Shutdown method and updating the runtime info store.
 func (vNodeController *VNodeController) shutdownVNode(nodeName string) {
 	vNodeController.vNodeStore.NodeShutdown(nodeName)
-	vNodeController.vNodeStore.DeleteVNode(nodeName)
+	//vNodeController.vNodeStore.DeleteVNode(nodeName)
 }
 
 // getPodFromKube loads a pod from the node's pod controller

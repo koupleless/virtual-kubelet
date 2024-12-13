@@ -85,7 +85,7 @@ func (vNode *VNode) Remove(vnCtx context.Context) (err error) {
 	return err
 }
 
-func (vNode *VNode) Run(takeOverVnCtx context.Context, initData model.NodeInfo) (err error) {
+func (vNode *VNode) Run(vnCtx context.Context, takeOverVnCtx context.Context, initData model.NodeInfo) (err error) {
 	defer func() {
 		vNode.err = err
 	}()
@@ -119,6 +119,12 @@ func (vNode *VNode) Run(takeOverVnCtx context.Context, initData model.NodeInfo) 
 
 	go func() {
 		select {
+		case <-vNode.Exit():
+			vNode.resetActivationStatus()
+			vNode.tunnel.UnRegisterNode(vNode.name)
+
+			log.G(vnCtx).Infof("clear resources vnode %s completed, to state: done", vNode.GetNodeName())
+			vNode.ToDone()
 		case <-takeOverVnCtx.Done():
 			vNode.resetActivationStatus()
 			vNode.tunnel.UnRegisterNode(vNode.name)
@@ -257,17 +263,17 @@ func (vNode *VNode) WaitReady(ctx context.Context, timeout time.Duration) error 
 	}
 }
 
-//func (vNode *VNode) IsReady() (bool, error) {
-//	select {
-//	case <-vNode.ready:
-//		return true, nil
-//	default:
-//		return false, nil
-//	}
-//}
-
 func (vNode *VNode) activate() {
 	close(vNode.ready)
+}
+
+func (vNode *VNode) IsReady() bool {
+	select {
+	case <-vNode.ready:
+		return true
+	default:
+		return false
+	}
 }
 
 func (vNode *VNode) resetActivationStatus() {
@@ -373,6 +379,10 @@ func (vNode *VNode) ToDone() {
 	default:
 		close(vNode.done)
 	}
+}
+
+func (vNode *VNode) Done() <-chan struct{} {
+	return vNode.done
 }
 
 // CheckAndUpdatePodStatus checks and updates a pod in the node

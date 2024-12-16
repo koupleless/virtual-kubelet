@@ -112,6 +112,9 @@ func GetEnv(key, defaultValue string) string {
 
 // GetPodKey constructs a pod key from a pod object.
 func GetPodKey(pod *corev1.Pod) string {
+	if pod == nil {
+		return ""
+	}
 	return pod.Namespace + "/" + pod.Name
 }
 

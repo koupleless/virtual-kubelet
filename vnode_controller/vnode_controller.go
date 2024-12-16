@@ -347,10 +347,11 @@ func (vNodeController *VNodeController) podAddHandler(ctx context.Context, podFr
 		return
 	}
 
-	if !vNode.IsReady() {
-		log.G(ctx).Warnf("pod added in vnode %s but vnode is not ready: ", vNode.GetNodeName())
+	if !vNodeController.isValidStatus(ctx, vNode) {
 		return
 	}
+
+	log.G(ctx).Infof("start to add pod %s with handler in node: %s", utils.GetPodKey(podFromKubernetes), vNode.GetNodeName())
 
 	ctx, span := trace.StartSpan(ctx, "AddFunc")
 	defer span.End()
@@ -359,6 +360,26 @@ func (vNodeController *VNodeController) podAddHandler(ctx context.Context, podFr
 	ctx = span.WithField(ctx, "key", key)
 
 	vNode.SyncPodsFromKubernetesEnqueue(ctx, key)
+}
+
+func (vNodeController *VNodeController) isValidStatus(ctx context.Context, vNode *provider.VNode) bool {
+	if !vNode.IsReady() {
+		log.G(ctx).Warnf("pod added in vnode %s but vnode is not ready: ", vNode.GetNodeName())
+		return false
+	}
+
+	if vNode.Liveness.IsDead() {
+		log.G(ctx).Infof("check and shutdown dead vnode: %s", vNode.GetNodeName())
+		vNodeController.shutdownVNode(vNode.GetNodeName())
+		return false
+	}
+
+	if !vNode.Liveness.IsReachable() {
+		log.G(ctx).Infof("node %s is not reachable", vNode.GetNodeName())
+		return false
+	}
+
+	return true
 }
 
 // This function handles pod updates by checking if the pod is new or if its status has changed.
@@ -384,10 +405,10 @@ func (vNodeController *VNodeController) podUpdateHandler(ctx context.Context, ol
 		return
 	}
 
-	if !vNode.IsReady() {
-		log.G(ctx).Warnf("pod updated in vnode %s but vnode is not ready: ", vNode.GetNodeName())
+	if !vNodeController.isValidStatus(ctx, vNode) {
 		return
 	}
+
 	ctx, span := trace.StartSpan(ctx, "UpdateFunc")
 	defer span.End()
 
@@ -396,6 +417,7 @@ func (vNodeController *VNodeController) podUpdateHandler(ctx context.Context, ol
 	vNode.CheckAndUpdatePodStatus(ctx, key, newPodFromKubernetes)
 
 	if podShouldEnqueue(oldPodFromKubernetes, newPodFromKubernetes) {
+		log.G(ctx).Infof("start to update pod %s(old) -> %s(new) with handler in node: %s", utils.GetPodKey(oldPodFromKubernetes), utils.GetPodKey(newPodFromKubernetes), vNode.GetNodeName())
 		vNode.SyncPodsFromKubernetesEnqueue(ctx, key)
 	}
 }
@@ -418,10 +440,11 @@ func (vNodeController *VNodeController) podDeleteHandler(ctx context.Context, po
 		return
 	}
 
-	if !vNode.IsReady() {
-		log.G(ctx).Warnf("pod deleted in vnode %s but vnode is not ready: ", vNode.GetNodeName())
+	if !vNodeController.isValidStatus(ctx, vNode) {
 		return
 	}
+
+	log.G(ctx).Infof("start to delete pod %s with handler in node: %s", utils.GetPodKey(podFromKubernetes), vNode.GetNodeName())
 
 	ctx, span := trace.StartSpan(ctx, "DeleteFunc")
 	defer span.End()

@@ -96,11 +96,12 @@ func (vNode *VNode) Run(vnCtx context.Context, takeOverVnCtx context.Context, in
 
 	vNode.resetActivationStatus()
 
-	err = vNode.node.Run(takeOverVnCtx)
-	if err != nil {
-		log.G(takeOverVnCtx).WithError(err).Errorf("failed to run node: %s", vNode.GetNodeName())
-		return err
-	}
+	go func() {
+		go vNode.node.Run(takeOverVnCtx)
+		if err != nil {
+			log.G(takeOverVnCtx).WithError(err).Errorf("failed to run node: %s", vNode.GetNodeName())
+		}
+	}()
 
 	err = vNode.node.WaitReady(takeOverVnCtx, time.Minute)
 	if err != nil {

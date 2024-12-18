@@ -212,33 +212,8 @@ func (vNodeController *VNodeController) SetupWithManager(ctx context.Context, mg
 func (vNodeController *VNodeController) discoverPreviousNodes(nodeList *corev1.NodeList) {
 	// Iterate through the list of nodes to process each node.
 	for _, node := range nodeList.Items {
-		// Initialize node IP and hostname with default values.
-		nodeIP := "127.0.0.1"
-		nodeHostname := "unknown"
-		// Iterate through the node's addresses to find the internal IP and hostname.
-		for _, addr := range node.Status.Addresses {
-			if addr.Type == corev1.NodeInternalIP {
-				nodeIP = addr.Address
-			} else if addr.Type == corev1.NodeHostName {
-				nodeHostname = addr.Address
-			}
-		}
 		// Start the virtual node with the extracted information.
-		vNodeController.startVNode(model.NodeInfo{
-			Metadata: model.NodeMetadata{
-				Name:        node.Name,
-				Version:     node.Labels[model.LabelKeyOfBaseVersion],
-				ClusterName: node.Labels[model.LabelKeyOfBaseClusterName],
-			},
-			NetworkInfo: model.NetworkInfo{
-				NodeIP:   nodeIP,
-				HostName: nodeHostname,
-			},
-			CustomLabels:      node.Labels,
-			CustomAnnotations: node.Annotations,
-			CustomTaints:      node.Spec.Taints,
-			State:             model.NodeStateActivated,
-		})
+		vNodeController.startVNode(utils.ConvertNodeToNodeInfo(&node))
 	}
 }
 

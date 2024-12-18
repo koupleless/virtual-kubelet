@@ -127,7 +127,6 @@ func (vNode *VNode) Run(vnCtx context.Context, takeOverVnCtx context.Context, in
 		case <-vNode.Exit():
 			vNode.resetActivationStatus()
 			vNode.tunnel.UnRegisterNode(vNode.name)
-
 			log.G(vnCtx).Infof("clear resources vnode %s completed, to state: done", vNode.GetNodeName())
 			vNode.ToDone()
 		case <-takeOverVnCtx.Done():

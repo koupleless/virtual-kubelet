@@ -393,3 +393,32 @@ func FillPodKey(pods []corev1.Pod, bizStatusDatas []model.BizStatusData) (toUpda
 
 	return bizStatusDatasWithPodKey, bizStatusDatasWithNoPodKey
 }
+
+func ConvertNodeToNodeInfo(node *corev1.Node) model.NodeInfo {
+	nodeIP := "127.0.0.1"
+	nodeHostname := "unknown"
+
+	for _, addr := range node.Status.Addresses {
+		if addr.Type == corev1.NodeInternalIP {
+			nodeIP = addr.Address
+		} else if addr.Type == corev1.NodeHostName {
+			nodeHostname = addr.Address
+		}
+	}
+
+	return model.NodeInfo{
+		Metadata: model.NodeMetadata{
+			Name:        node.Name,
+			Version:     node.Labels[model.LabelKeyOfBaseVersion],
+			ClusterName: node.Labels[model.LabelKeyOfBaseClusterName],
+		},
+		NetworkInfo: model.NetworkInfo{
+			NodeIP:   nodeIP,
+			HostName: nodeHostname,
+		},
+		CustomLabels:      node.Labels,
+		CustomAnnotations: node.Annotations,
+		CustomTaints:      node.Spec.Taints,
+		State:             model.NodeStateActivated,
+	}
+}

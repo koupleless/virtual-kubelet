@@ -89,8 +89,8 @@ func (m *MockTunnel) RegisterCallback(
 	m.OnSingleBizStatusArrived = OnSingleBizStatusArrived
 }
 
-func (m *MockTunnel) RegisterNode(initData model.NodeInfo) {
-	return
+func (m *MockTunnel) RegisterNode(initData model.NodeInfo) error {
+	return nil
 }
 
 func (m *MockTunnel) UnRegisterNode(nodeName string) {

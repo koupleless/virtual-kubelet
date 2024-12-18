@@ -50,7 +50,7 @@ func TestCheckAndFinallyCall_NoTimeout(t *testing.T) {
 	checkTimes := 0
 	finally := false
 	timeout := false
-	go CheckAndFinallyCall(context.Background(), func() (bool, error) {
+	go CheckAndFinallyCall(context.Background(), func(context.Context) (bool, error) {
 		checkTimes++
 		return status, nil
 	}, time.Second*10, time.Second, func() {
@@ -72,7 +72,7 @@ func TestCheckAndFinallyCall_Timeout(t *testing.T) {
 	checkTimes := 0
 	finally := false
 	timeout := false
-	go CheckAndFinallyCall(context.Background(), func() (bool, error) {
+	go CheckAndFinallyCall(context.Background(), func(context.Context) (bool, error) {
 		checkTimes++
 		return status, nil
 	}, time.Second*2+time.Millisecond*100, time.Second, func() {

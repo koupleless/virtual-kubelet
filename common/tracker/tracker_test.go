@@ -1,6 +1,7 @@
 package tracker
 
 import (
+	"context"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/stretchr/testify/assert"
 	"reflect"
@@ -17,7 +18,7 @@ func (m mockTracker) FuncTrack(s string, s2 string, s3 string, m2 map[string]str
 	panic("implement me")
 }
 
-func (m mockTracker) Eventually(s string, s2 string, s3 string, m2 map[string]string, code model.ErrorCode, f func() (bool, error), duration time.Duration, duration2 time.Duration, f2 func(), f3 func()) {
+func (m mockTracker) Eventually(s string, s2 string, s3 string, m2 map[string]string, code model.ErrorCode, f func(ctx context.Context) (bool, error), duration time.Duration, duration2 time.Duration, f2 func(), f3 func()) {
 	panic("implement me")
 }
 

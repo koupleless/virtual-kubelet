@@ -281,7 +281,7 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 	}
 
 	// only start new containers and changed containers
-	tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodUpdate, pod.Labels, model.CodeContainerStartTimeout, func() (bool, error) {
+	tracker.G().Eventually(pod.Labels[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventVPodUpdate, pod.Labels, model.CodeContainerStartTimeout, func(context.Context) (bool, error) {
 		podFromKubernetes := &corev1.Pod{}
 		err := b.client.Get(ctx, client.ObjectKey{
 			Namespace: pod.Namespace,

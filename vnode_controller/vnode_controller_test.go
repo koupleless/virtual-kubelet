@@ -2,6 +2,7 @@ package vnode_controller
 
 import (
 	"context"
+	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/provider"
 	"github.com/koupleless/virtual-kubelet/tunnel"
@@ -87,6 +88,65 @@ func TestDiscoverPreviousNode(t *testing.T) {
 	vc.discoverPreviousNodes(nodeList)
 	time.Sleep(20 * time.Second)
 	assert.Equal(t, 2, len(vc.vNodeStore.GetVNodes()))
+}
+
+func TestRunVNode(t *testing.T) {
+	// init mocked vNodeController
+	mockTunnel := tunnel.MockTunnel{}
+	vc, _ := NewVNodeController(&model.BuildVNodeControllerConfig{
+		KubeCache: &informertest.FakeInformers{},
+		VPodType:  "suite",
+		ClientID:  "mockClientID",
+	}, &mockTunnel)
+
+	node := corev1.Node{
+		ObjectMeta: v1.ObjectMeta{
+			Name: "vnode.test-node-with-tunnel",
+			Labels: map[string]string{
+				model.LabelKeyOfBaseVersion:     "1.0.0",
+				model.LabelKeyOfBaseClusterName: "vnode-test-cluster-name",
+				model.LabelKeyOfBaseName:        "mockVNode",
+				model.LabelKeyOfEnv:             "dev",
+				model.LabelKeyOfComponent:       "vnode",
+			},
+			Annotations: map[string]string{},
+		},
+		Status: corev1.NodeStatus{
+			Addresses: []corev1.NodeAddress{
+				{
+					Type:    corev1.NodeInternalIP,
+					Address: "10.0.0.1",
+				},
+				{
+					Type:    corev1.NodeHostName,
+					Address: "test-node",
+				},
+			},
+		},
+	}
+
+	nodeInfo := utils.ConvertNodeToNodeInfo(&node)
+
+	vc.client = fake.NewFakeClient(&node)
+	vc.cache = &informertest.FakeInformers{}
+
+	// init mocked vNode
+	vnCtx, vnCtxCancel := context.WithCancel(context.WithValue(context.Background(), "nodeName", node.Name))
+	vNode, _ := vc.createVNode(vnCtx, nodeInfo)
+	vNode.Liveness.UpdateHeartBeatTime()
+
+	// runVNode
+	vc.runVNode(vnCtx, vNode, nodeInfo)
+
+	// case1: leader election success, take over the vnode and run
+	time.Sleep(5 * time.Second)
+	assert.True(t, vc.takeOveredVNodeName.Contains("vnode.test-node-with-tunnel"))
+	assert.Equal(t, 1, len(vc.vNodeStore.GetVNodes()))
+
+	// case2: leader election success, take over the vnode but vnode is dead, which triggers vnCtxCancel()
+	vnCtxCancel()
+	time.Sleep(5 * time.Second)
+	assert.False(t, vc.takeOveredVNodeName.Contains("vnode.test-node-with-tunnel"))
 }
 
 func TestDiscoverPreviousPods(t *testing.T) {

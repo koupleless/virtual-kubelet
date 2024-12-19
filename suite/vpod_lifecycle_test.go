@@ -20,12 +20,13 @@ var _ = Describe("VPod Lifecycle Test", func() {
 	nodeVersion := "1.0.0"
 	clusterName := "suite-cluster-name"
 	vnode := &v1.Node{}
+	baseName := "suite-base-name"
 
 	podName := "suite-pod"
 
 	podNamespace := "default"
 
-	nodeInfo := prepareNode(nodeName, nodeVersion, clusterName)
+	nodeInfo := prepareNode(nodeName, nodeVersion, baseName, clusterName)
 	basicPod := prepareBasicPod(podName, podNamespace, nodeName)
 	basicPod2 := prepareBasicPod(podName+"-2", podNamespace, nodeName)
 

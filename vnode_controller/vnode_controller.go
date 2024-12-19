@@ -245,6 +245,7 @@ func (vNodeController *VNodeController) discoverPreviousNodes(nodeList *corev1.N
 		vNodeController.startVNode(model.NodeInfo{
 			Metadata: model.NodeMetadata{
 				Name:        node.Name,
+				BaseName:    node.Labels[model.LabelKeyOfBaseName],
 				Version:     node.Labels[model.LabelKeyOfBaseVersion],
 				ClusterName: node.Labels[model.LabelKeyOfBaseClusterName],
 			},
@@ -464,6 +465,7 @@ func (vNodeController *VNodeController) startVNode(initData model.NodeInfo) {
 		NodeIP:            initData.NetworkInfo.NodeIP,
 		NodeHostname:      initData.NetworkInfo.HostName,
 		NodeName:          initData.Metadata.Name,
+		BaseName:          initData.Metadata.BaseName,
 		NodeVersion:       initData.Metadata.Version,
 		VPodType:          vNodeController.vPodType,
 		ClusterName:       initData.Metadata.ClusterName,

@@ -113,11 +113,12 @@ var _ = AfterSuite(func() {
 	testEnv.Stop()
 })
 
-func prepareNode(name, version, clusterName string) tunnel.Node {
+func prepareNode(name, version, baseName, clusterName string) tunnel.Node {
 	return tunnel.Node{
 		NodeInfo: model.NodeInfo{
 			Metadata: model.NodeMetadata{
 				Name:        name,
+				BaseName:    baseName,
 				Version:     version,
 				ClusterName: clusterName,
 			},

@@ -17,7 +17,8 @@ type NetworkInfo struct {
 
 // NodeMetadata is the base data of a vnode, will be transfer to default labels of a vnode
 type NodeMetadata struct {
-	Name        string // Name of the vnode
+	Name        string // Name of the vnode instance
+	BaseName    string // BaseName of the base the vnode belongs to
 	Version     string // Version of the vnode
 	ClusterName string // ClusterName of the cluster the vnode belongs to
 }
@@ -64,6 +65,7 @@ type BuildVNodeConfig struct {
 	NodeHostname      string            // Hostname of the node
 	NodeName          string            // NodeName of the node
 	NodeVersion       string            // NodeVersion of the node
+	BaseName          string            // BaseName of the base, which is the app name of base
 	VPodType          string            // VPodType of the node
 	ClusterName       string            // ClusterName of the node
 	Env               string            // Environment of the node

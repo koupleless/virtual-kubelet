@@ -18,10 +18,11 @@ var _ = Describe("VNode Lifecycle Test", func() {
 
 	nodeName := "suite-node-node-lifecycle"
 	nodeVersion := "1.0.0"
+	baseName := "suite-base-name"
 	clusterName := "suite-cluster-name"
 	node := &v1.Node{}
 
-	nodeInfo := prepareNode(nodeName, nodeVersion, clusterName)
+	nodeInfo := prepareNode(nodeName, nodeVersion, baseName, clusterName)
 
 	Context("node online and deactive finally", func() {
 		It("node should become a ready node eventually", func() {

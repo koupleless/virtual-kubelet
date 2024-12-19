@@ -41,6 +41,7 @@ func (m *MockTunnel) PutNode(ctx context.Context, nodeName string, node Node) {
 
 	m.nodeStorage[nodeName] = node
 	m.OnBaseDiscovered(node.NodeInfo)
+	m.OnBaseStatusArrived(nodeName, node.NodeStatusData)
 }
 
 func (m *MockTunnel) DeleteNode(nodeName string) {

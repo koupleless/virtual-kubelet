@@ -51,7 +51,8 @@ var _ = Describe("VNode Lifecycle Test", func() {
 					Name:      nodeName,
 					Namespace: v1.NamespaceNodeLease,
 				}, lease)
-				return err == nil
+				return err == nil && *lease.Spec.HolderIdentity == clientID &&
+					!time.Now().After(lease.Spec.RenewTime.Time.Add(time.Second*model.NodeLeaseDurationSeconds))
 			}, time.Second*30, time.Second).Should(BeTrue())
 		})
 

@@ -41,10 +41,8 @@ type NodeResource struct {
 
 // NodeStatusData is the status of a node, you can set some custom attributes in this data structure
 type NodeStatusData struct {
-	Resources         map[v1.ResourceName]NodeResource // Resources of the node
-	CustomLabels      map[string]string                // Custom labels set by the tunnel
-	CustomAnnotations map[string]string                // Custom annotations set by the tunnel
-	CustomConditions  []v1.NodeCondition               // Custom conditions set by the tunnel
+	Resources        map[v1.ResourceName]NodeResource // Resources of the node
+	CustomConditions []v1.NodeCondition               // Custom conditions set by the tunnel
 }
 
 // BizStatusData is the status data of a container

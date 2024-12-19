@@ -128,6 +128,9 @@ func prepareNode(name, version, baseName, clusterName string) tunnel.Node {
 			CustomLabels: map[string]string{
 				testKey: testValue,
 			},
+			//CustomAnnotations: map[string]string{
+			//	testKey: testValue,
+			//},
 			CustomTaints: []v1.Taint{
 				{
 					Key:    testKey,

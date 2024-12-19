@@ -150,13 +150,6 @@ func PodsEqual(pod1, pod2 *corev1.Pod) bool {
 		cmp.Equal(pod1.ObjectMeta.Finalizers, pod2.Finalizers)
 }
 
-func NodeStatusEqual(status1, status2 model.NodeStatusData) bool {
-	return cmp.Equal(status1.Resources, status2.Resources) &&
-		cmp.Equal(status1.CustomConditions, status2.CustomConditions) &&
-		cmp.Equal(status1.CustomAnnotations, status2.CustomAnnotations) &&
-		cmp.Equal(status1.CustomLabels, status2.CustomLabels)
-}
-
 // FormatNodeName constructs a node name based on node ID and environment.
 func FormatNodeName(nodeID, env string) string {
 	return fmt.Sprintf("%s.%s.%s", model.VNodePrefix, nodeID, env)
@@ -211,20 +204,6 @@ func MergeNodeFromProvider(node *corev1.Node, data model.NodeStatusData) *corev1
 		conditions = append(conditions, condition)
 	}
 	vnodeCopy.Status.Conditions = conditions // Set the conditions on the vnode copy.
-	if vnodeCopy.Annotations == nil {
-		vnodeCopy.Annotations = make(map[string]string)
-	}
-	if vnodeCopy.Labels == nil {
-		vnodeCopy.Labels = make(map[string]string)
-	}
-	// Set custom annotations.
-	for key, value := range data.CustomAnnotations {
-		vnodeCopy.Annotations[key] = value
-	}
-	// Set custom labels.
-	for key, value := range data.CustomLabels {
-		vnodeCopy.Labels[key] = value
-	}
 	// Set resource capacities and allocatable amounts.
 	if vnodeCopy.Status.Capacity == nil {
 		vnodeCopy.Status.Capacity = make(corev1.ResourceList)

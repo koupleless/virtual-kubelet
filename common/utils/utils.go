@@ -210,8 +210,17 @@ func MergeNodeFromProvider(node *corev1.Node, data model.NodeStatusData) *corev1
 	for _, condition := range conditionMap {
 		conditions = append(conditions, condition)
 	}
-	vnodeCopy.Status.Conditions = conditions       // Set the conditions on the vnode copy.
-	vnodeCopy.Annotations = data.CustomAnnotations // Set custom annotations.
+	vnodeCopy.Status.Conditions = conditions // Set the conditions on the vnode copy.
+	if vnodeCopy.Annotations == nil {
+		vnodeCopy.Annotations = make(map[string]string)
+	}
+	if vnodeCopy.Labels == nil {
+		vnodeCopy.Labels = make(map[string]string)
+	}
+	// Set custom annotations.
+	for key, value := range data.CustomAnnotations {
+		vnodeCopy.Annotations[key] = value
+	}
 	// Set custom labels.
 	for key, value := range data.CustomLabels {
 		vnodeCopy.Labels[key] = value

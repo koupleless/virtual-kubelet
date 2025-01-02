@@ -126,13 +126,11 @@ func (vNode *VNode) Run(vnCtx context.Context, takeOverVnCtx context.Context, in
 	go func() {
 		select {
 		case <-vNode.Exit():
-			vNode.resetActivationStatus()
-			vNode.tunnel.UnRegisterNode(vNode.name)
+			vNode.cleanUp()
 			log.G(vnCtx).Infof("clear resources vnode %s completed, to state: done", vNode.GetNodeName())
 			vNode.ToDone()
 		case <-takeOverVnCtx.Done():
-			vNode.resetActivationStatus()
-			vNode.tunnel.UnRegisterNode(vNode.name)
+			vNode.cleanUp()
 		}
 	}()
 
@@ -141,6 +139,11 @@ func (vNode *VNode) Run(vnCtx context.Context, takeOverVnCtx context.Context, in
 	vNode.discoveryPreviousPods(takeOverVnCtx)
 
 	return nil
+}
+
+func (vNode *VNode) cleanUp() {
+	vNode.resetActivationStatus()
+	vNode.tunnel.UnRegisterNode(vNode.name)
 }
 
 func (vNode *VNode) checkNodeExistsInClient(vnCtx context.Context) (bool, error) {

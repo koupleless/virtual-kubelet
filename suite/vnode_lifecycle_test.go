@@ -18,10 +18,11 @@ var _ = Describe("VNode Lifecycle Test", func() {
 
 	nodeName := "suite-node-node-lifecycle"
 	nodeVersion := "1.0.0"
+	baseName := "suite-base-name"
 	clusterName := "suite-cluster-name"
 	node := &v1.Node{}
 
-	nodeInfo := prepareNode(nodeName, nodeVersion, clusterName)
+	nodeInfo := prepareNode(nodeName, nodeVersion, baseName, clusterName)
 
 	Context("node online and deactive finally", func() {
 		It("node should become a ready node eventually", func() {
@@ -50,7 +51,8 @@ var _ = Describe("VNode Lifecycle Test", func() {
 					Name:      nodeName,
 					Namespace: v1.NamespaceNodeLease,
 				}, lease)
-				return err == nil
+				return err == nil && *lease.Spec.HolderIdentity == clientID &&
+					!time.Now().After(lease.Spec.RenewTime.Time.Add(time.Second*model.NodeLeaseDurationSeconds))
 			}, time.Second*30, time.Second).Should(BeTrue())
 		})
 
@@ -64,7 +66,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 			}, node)
 
 			Expect(err).To(BeNil())
-			Expect(node.Labels[model.LabelKeyOfBaseName]).To(Equal(nodeName))
+			Expect(node.Labels[model.LabelKeyOfBaseName]).To(Equal(baseName))
 			Expect(node.Labels[model.LabelKeyOfBaseVersion]).To(Equal(nodeVersion))
 			Expect(node.Labels[model.LabelKeyOfBaseClusterName]).To(Equal(clusterName))
 			Expect(node.Labels[testKey]).To(Equal(testValue))

@@ -113,11 +113,12 @@ var _ = AfterSuite(func() {
 	testEnv.Stop()
 })
 
-func prepareNode(name, version, clusterName string) tunnel.Node {
+func prepareNode(name, version, baseName, clusterName string) tunnel.Node {
 	return tunnel.Node{
 		NodeInfo: model.NodeInfo{
 			Metadata: model.NodeMetadata{
 				Name:        name,
+				BaseName:    baseName,
 				Version:     version,
 				ClusterName: clusterName,
 			},
@@ -125,6 +126,9 @@ func prepareNode(name, version, clusterName string) tunnel.Node {
 				HostName: name,
 			},
 			CustomLabels: map[string]string{
+				testKey: testValue,
+			},
+			CustomAnnotations: map[string]string{
 				testKey: testValue,
 			},
 			CustomTaints: []v1.Taint{
@@ -142,12 +146,6 @@ func prepareNode(name, version, clusterName string) tunnel.Node {
 					Capacity:    *resource.NewQuantity(10240, resource.BinarySI),
 					Allocatable: *resource.NewQuantity(10240, resource.BinarySI),
 				},
-			},
-			CustomLabels: map[string]string{
-				testKey: testValue,
-			},
-			CustomAnnotations: map[string]string{
-				testKey: testValue,
 			},
 			CustomConditions: []v1.NodeCondition{
 				{

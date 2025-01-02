@@ -436,7 +436,7 @@ func buildNode(node *corev1.Node, config *model.BuildVNodeConfig) error {
 	if oldLabels == nil {
 		oldLabels = make(map[string]string)
 	}
-	oldLabels[model.LabelKeyOfBaseName] = config.NodeName
+	oldLabels[model.LabelKeyOfBaseName] = config.BaseName
 	oldLabels[model.LabelKeyOfBaseClusterName] = config.ClusterName
 	oldLabels[model.LabelKeyOfComponent] = model.ComponentVNode
 	oldLabels[model.LabelKeyOfEnv] = config.Env

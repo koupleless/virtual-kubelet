@@ -209,7 +209,22 @@ func (vNodeController *VNodeController) discoverPreviousNodes(nodeList *corev1.N
 	// Iterate through the list of nodes to process each node.
 	for _, node := range nodeList.Items {
 		// Start the virtual node with the extracted information.
-		vNodeController.startVNode(utils.ConvertNodeToNodeInfo(&node))
+		vNodeController.startVNode(model.NodeInfo{
+			Metadata: model.NodeMetadata{
+				Name:        node.Name,
+				BaseName:    node.Labels[model.LabelKeyOfBaseName],
+				Version:     node.Labels[model.LabelKeyOfBaseVersion],
+				ClusterName: node.Labels[model.LabelKeyOfBaseClusterName],
+			},
+			NetworkInfo: model.NetworkInfo{
+				NodeIP:   nodeIP,
+				HostName: nodeHostname,
+			},
+			CustomLabels:      node.Labels,
+			CustomAnnotations: node.Annotations,
+			CustomTaints:      node.Spec.Taints,
+			State:             model.NodeStateActivated,
+		})
 	}
 }
 
@@ -501,6 +516,7 @@ func (vNodeController *VNodeController) createVNode(vnCtx context.Context, initD
 		NodeIP:            initData.NetworkInfo.NodeIP,
 		NodeHostname:      initData.NetworkInfo.HostName,
 		NodeName:          initData.Metadata.Name,
+		BaseName:          initData.Metadata.BaseName,
 		NodeVersion:       initData.Metadata.Version,
 		VPodType:          vNodeController.vPodType,
 		ClusterName:       initData.Metadata.ClusterName,

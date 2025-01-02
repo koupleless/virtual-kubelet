@@ -262,9 +262,28 @@ func (vNode *VNode) Exit() <-chan struct{} {
 // IsLeader returns a bool marked current vnode is leader or not
 func (vNode *VNode) IsLeader(clientId string) bool {
 	// current time is not after the lease renew time and the lease holder time
+	if vNode.lease == nil {
+		log.L.Warnf("vnode %s does not have lease", vNode.name)
+		return false
+	}
 
-	return vNode.lease != nil && *vNode.lease.Spec.HolderIdentity != "" && *vNode.lease.Spec.HolderIdentity == clientId &&
-		!time.Now().After(vNode.lease.Spec.RenewTime.Time.Add(time.Second*model.NodeLeaseDurationSeconds))
+	if *vNode.lease.Spec.HolderIdentity == "" {
+		log.L.Warnf("vnode %s does not have lease holder", vNode.name)
+		return false
+	}
+
+	if *vNode.lease.Spec.HolderIdentity != clientId {
+		return false
+	}
+
+	now := time.Now()
+	expiredTime := vNode.lease.Spec.RenewTime.Time.Add(time.Second * model.NodeLeaseDurationSeconds)
+	if now.After(expiredTime) {
+		log.L.Warnf("vnode %s has expired lease, now is %s , lease is %s , expired at %s", vNode.name, time.Now().Format(time.RFC3339), vNode.lease.Spec.RenewTime.Time.Format(time.RFC3339), expiredTime.Format(time.RFC3339))
+		return false
+	}
+
+	return true
 }
 
 // Err returns err which causes vnode exit

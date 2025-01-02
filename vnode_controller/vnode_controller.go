@@ -313,44 +313,47 @@ func (vNodeController *VNodeController) podAddHandler(ctx context.Context, podFr
 		return
 	}
 
-	key := utils.GetPodKey(podFromKubernetes)
-	if _, has := vNode.GetKnownPod(key); !has {
+	podKey := utils.GetPodKey(podFromKubernetes)
+	if _, has := vNode.GetKnownPod(podKey); !has {
 		vNode.AddKnowPod(podFromKubernetes)
 	}
 
+	log.G(ctx).Infof("try to add pod %s with handler in vnode: %s", podKey, vNode.GetNodeName())
 	if !vNode.IsLeader(vNodeController.clientID) {
+		log.G(ctx).Infof("can not add pod %s because is not the leader of vnode: %s", podKey, vNode.GetNodeName())
 		return
 	}
 
 	if !vNodeController.isValidStatus(ctx, vNode) {
+		log.G(ctx).Warnf("can not add pod %s because vnode %s is invalid: ", podKey, vNode.GetNodeName())
 		return
 	}
 
-	log.G(ctx).Infof("start to add pod %s with handler in node: %s", utils.GetPodKey(podFromKubernetes), vNode.GetNodeName())
+	log.G(ctx).Infof("start to add pod %s with handler in vnode: %s", podKey, vNode.GetNodeName())
 
 	ctx, span := trace.StartSpan(ctx, "AddFunc")
 	defer span.End()
 
 	// At this point we know that something in .metadata or .spec has changed, so we must proceed to sync the pod.
-	ctx = span.WithField(ctx, "key", key)
+	ctx = span.WithField(ctx, "key", podKey)
 
-	vNode.SyncPodsFromKubernetesEnqueue(ctx, key)
+	vNode.SyncPodsFromKubernetesEnqueue(ctx, podKey)
 }
 
 func (vNodeController *VNodeController) isValidStatus(ctx context.Context, vNode *provider.VNode) bool {
 	if !vNode.IsReady() {
-		log.G(ctx).Warnf("pod added in vnode %s but vnode is not ready: ", vNode.GetNodeName())
+		log.G(ctx).Warnf("vnode %s is not ready: ", vNode.GetNodeName())
 		return false
 	}
 
 	if vNode.Liveness.IsDead() {
-		log.G(ctx).Infof("check and shutdown dead vnode: %s", vNode.GetNodeName())
+		log.G(ctx).Warnf("check and shutdown dead vnode: %s", vNode.GetNodeName())
 		vNodeController.shutdownVNode(vNode.GetNodeName())
 		return false
 	}
 
 	if !vNode.Liveness.IsReachable() {
-		log.G(ctx).Infof("node %s is not reachable", vNode.GetNodeName())
+		log.G(ctx).Warnf("node %s is not reachable", vNode.GetNodeName())
 		return false
 	}
 
@@ -370,17 +373,19 @@ func (vNodeController *VNodeController) podUpdateHandler(ctx context.Context, ol
 		return
 	}
 
-	key := utils.GetPodKey(newPodFromKubernetes)
-	if _, has := vNode.GetKnownPod(key); !has {
+	podKey := utils.GetPodKey(newPodFromKubernetes)
+	if _, has := vNode.GetKnownPod(podKey); !has {
 		vNode.AddKnowPod(newPodFromKubernetes)
 	}
 
+	log.G(ctx).Infof("try to update pod %s with handler in vnode: %s", podKey, vNode.GetNodeName())
 	if !vNode.IsLeader(vNodeController.clientID) {
-		// not leader, just return
+		log.G(ctx).Infof("can not update pod %s because is not the leader of vnode: %s", podKey, vNode.GetNodeName())
 		return
 	}
 
 	if !vNodeController.isValidStatus(ctx, vNode) {
+		log.G(ctx).Warnf("can not update pod %s because vnode %s is invalid: ", podKey, vNode.GetNodeName())
 		return
 	}
 
@@ -388,12 +393,12 @@ func (vNodeController *VNodeController) podUpdateHandler(ctx context.Context, ol
 	defer span.End()
 
 	// At this point we know that something in .metadata or .spec has changed, so we must proceed to sync the pod.
-	ctx = span.WithField(ctx, "key", key)
-	vNode.CheckAndUpdatePodStatus(ctx, key, newPodFromKubernetes)
+	ctx = span.WithField(ctx, "key", podKey)
+	vNode.CheckAndUpdatePodStatus(ctx, podKey, newPodFromKubernetes)
 
 	if podShouldEnqueue(oldPodFromKubernetes, newPodFromKubernetes) {
 		log.G(ctx).Infof("start to update pod %s(old) -> %s(new) with handler in node: %s", utils.GetPodKey(oldPodFromKubernetes), utils.GetPodKey(newPodFromKubernetes), vNode.GetNodeName())
-		vNode.SyncPodsFromKubernetesEnqueue(ctx, key)
+		vNode.SyncPodsFromKubernetesEnqueue(ctx, podKey)
 	}
 }
 
@@ -415,7 +420,9 @@ func (vNodeController *VNodeController) podDeleteHandler(ctx context.Context, po
 		return
 	}
 
+	podKey := utils.GetPodKey(podFromKubernetes)
 	if !vNodeController.isValidStatus(ctx, vNode) {
+		log.G(ctx).Warnf("can not delete pod %s because vnode %s is invalid: ", podKey, vNode.GetNodeName())
 		return
 	}
 
@@ -424,13 +431,11 @@ func (vNodeController *VNodeController) podDeleteHandler(ctx context.Context, po
 	ctx, span := trace.StartSpan(ctx, "DeleteFunc")
 	defer span.End()
 
-	key := utils.GetPodKey(podFromKubernetes)
-
-	ctx = span.WithField(ctx, "key", key)
-	vNode.DeleteKnownPod(key)
-	vNode.SyncPodsFromKubernetesEnqueue(ctx, key)
+	ctx = span.WithField(ctx, "key", podKey)
+	vNode.DeleteKnownPod(podKey)
+	vNode.SyncPodsFromKubernetesEnqueue(ctx, podKey)
 	// If this pod was in the deletion queue, forget about it
-	key = fmt.Sprintf("%v/%v", key, podFromKubernetes.UID)
+	key := fmt.Sprintf("%v/%v", podKey, podFromKubernetes.UID)
 	vNode.DeletePodsFromKubernetesForget(ctx, key)
 }
 
@@ -567,6 +572,7 @@ func (vNodeController *VNodeController) createOrRetryUpdateLease(vnCtx context.C
 					// Log the error if there's a problem creating the lease
 					log.G(vnCtx).WithError(err).Errorf("node lease %s creating error", vNode.GetNodeName())
 				}
+				log.G(vnCtx).Infof("node lease %s created: %s", vNode.GetNodeName(), lease.Spec.RenewTime)
 				continue
 			}
 
@@ -654,8 +660,8 @@ func (vNodeController *VNodeController) connectWithInterval(takeOverVnCtx contex
 
 	var err error
 
-	// Start a new goroutine to fetch node health data every 10 seconds
-	go utils.TimedTaskWithInterval(takeOverVnCtx, time.Second*10, func(ctx context.Context) {
+	// Start a new goroutine to fetch node health data every NodeToFetchHeartBeatInterval seconds
+	go utils.TimedTaskWithInterval(takeOverVnCtx, time.Second*model.NodeToFetchHeartBeatInterval, func(ctx context.Context) {
 		log.G(takeOverVnCtx).Info("fetch node health data for node ", nodeName)
 		err = vNodeController.tunnel.FetchHealthData(nodeName)
 		if err != nil {
@@ -663,8 +669,8 @@ func (vNodeController *VNodeController) connectWithInterval(takeOverVnCtx contex
 		}
 	})
 
-	// Start a new goroutine to query all container status data every 15 seconds
-	go utils.TimedTaskWithInterval(takeOverVnCtx, time.Second*15, func(context.Context) {
+	// Start a new goroutine to query all container status data every NodeToFetchAllBizStatusInterval seconds
+	go utils.TimedTaskWithInterval(takeOverVnCtx, time.Second*model.NodeToFetchAllBizStatusInterval, func(context.Context) {
 		log.G(takeOverVnCtx).Info("query all container status data for node ", nodeName)
 		err = vNodeController.tunnel.QueryAllBizStatusData(nodeName)
 		if err != nil {
@@ -672,7 +678,7 @@ func (vNodeController *VNodeController) connectWithInterval(takeOverVnCtx contex
 		}
 	})
 
-	go utils.TimedTaskWithInterval(takeOverVnCtx, 3*time.Second, func(takeOverVnCtx context.Context) {
+	go utils.TimedTaskWithInterval(takeOverVnCtx, model.NodeToCheckUnreachableAndDeadStatusInterval*time.Second, func(takeOverVnCtx context.Context) {
 		if vNode.Liveness.IsDead() {
 			log.G(takeOverVnCtx).Infof("check and shutdown dead vnode: %s", nodeName)
 			vNodeController.shutdownVNode(vNode.GetNodeName())
@@ -680,7 +686,7 @@ func (vNodeController *VNodeController) connectWithInterval(takeOverVnCtx contex
 		}
 
 		if !vNode.Liveness.IsReachable() {
-			log.G(takeOverVnCtx).Infof("node %s is not reachable", nodeName)
+			log.G(takeOverVnCtx).Warnf("node %s is not reachable in interval checking", nodeName)
 		}
 	})
 }
@@ -711,7 +717,6 @@ func (vNodeController *VNodeController) delayWithWorkload(ctx context.Context) {
 // This function shuts down a VNode by calling its Shutdown method and updating the runtime info store.
 func (vNodeController *VNodeController) shutdownVNode(nodeName string) {
 	vNodeController.vNodeStore.NodeShutdown(nodeName)
-	//vNodeController.vNodeStore.DeleteVNode(nodeName)
 }
 
 // getPodFromKube loads a pod from the node's pod controller
@@ -751,15 +756,39 @@ func deleteGraceTimeEqual(old, new *int64) bool {
 // Returns: A boolean value indicating if the two pods are equal.
 func podShouldEnqueue(oldPod, newPod *corev1.Pod) bool {
 	if oldPod == nil || newPod == nil {
+		log.L.Warnf("pod will not update because %s(old) or %s(new) is nil", utils.GetPodKey(oldPod), utils.GetPodKey(newPod))
 		return false
 	}
 	if !utils.PodsEqual(oldPod, newPod) {
+		log.L.Infof("pod will update because %s(old) -> %s(new) info is updated (new)", utils.GetPodKey(oldPod), utils.GetPodKey(newPod))
 		return true
 	}
+	if podShouldEnqueueForDelete(oldPod, newPod) {
+		log.L.Infof("pod will update for delete %s", utils.GetPodKey(oldPod))
+		return true
+	}
+
+	if podShouldEnqueueForAdd(oldPod, newPod) {
+		log.L.Infof("pod will update for add %s", utils.GetPodKey(oldPod))
+		return true
+	}
+
+	log.L.Infof("pod %s(old) -> %s(new) will not execute", utils.GetPodKey(oldPod), utils.GetPodKey(newPod))
+	return false
+}
+
+func podShouldEnqueueForDelete(oldPod, newPod *corev1.Pod) bool {
 	if !deleteGraceTimeEqual(oldPod.DeletionGracePeriodSeconds, newPod.DeletionGracePeriodSeconds) {
 		return true
 	}
 	if !oldPod.DeletionTimestamp.Equal(newPod.DeletionTimestamp) {
+		return true
+	}
+	return false
+}
+
+func podShouldEnqueueForAdd(oldPod, newPod *corev1.Pod) bool {
+	if oldPod.Spec.NodeName == "" && newPod.Spec.NodeName != "" {
 		return true
 	}
 	return false

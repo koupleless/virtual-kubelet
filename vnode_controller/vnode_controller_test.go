@@ -140,13 +140,13 @@ func TestRunVNode(t *testing.T) {
 
 	// case1: leader election success, take over the vnode and run
 	time.Sleep(5 * time.Second)
-	assert.True(t, vc.takeOveredVNodeName.Contains("vnode.test-node-with-tunnel"))
+	assert.True(t, vNode.TakeOvered)
 	assert.Equal(t, 1, len(vc.vNodeStore.GetVNodes()))
 
 	// case2: leader election success, take over the vnode but vnode is dead, which triggers vnCtxCancel()
 	vnCtxCancel()
 	time.Sleep(5 * time.Second)
-	assert.False(t, vc.takeOveredVNodeName.Contains("vnode.test-node-with-tunnel"))
+	assert.False(t, vNode.TakeOvered)
 }
 
 func TestDiscoverPreviousPods(t *testing.T) {

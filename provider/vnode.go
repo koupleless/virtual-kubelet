@@ -46,7 +46,8 @@ type VNode struct {
 	lease    *coordinationv1.Lease // Latest lease of the node
 	Liveness Liveness              // Liveness of the node from provider
 
-	err error // Error that caused the node to exit
+	TakeOvered bool  // take overed by current vnodeController
+	err        error // Error that caused the node to exit
 }
 
 func (vNode *VNode) GetNodeName() string {

@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	mapset "github.com/deckarep/golang-set"
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/provider"
@@ -60,8 +59,6 @@ type VNodeController struct {
 	tunnel tunnel.Tunnel
 
 	vNodeStore *provider.VNodeStore // The runtime info store for the controller
-
-	takeOveredVNodeName mapset.Set
 }
 
 // Reconcile is the main reconcile function for the controller
@@ -89,18 +86,17 @@ func NewVNodeController(config *model.BuildVNodeControllerConfig, tunnel tunnel.
 	}
 
 	return &VNodeController{
-		clientID:            config.ClientID,
-		env:                 config.Env,
-		client:              config.KubeClient,
-		cache:               config.KubeCache,
-		vPodType:            config.VPodType,
-		isCluster:           config.IsCluster,
-		workloadMaxLevel:    config.WorkloadMaxLevel,
-		vNodeWorkerNum:      config.VNodeWorkerNum,
-		vNodeStore:          provider.NewVNodeStore(),
-		ready:               make(chan struct{}),
-		tunnel:              tunnel,
-		takeOveredVNodeName: mapset.NewSet(),
+		clientID:         config.ClientID,
+		env:              config.Env,
+		client:           config.KubeClient,
+		cache:            config.KubeCache,
+		vPodType:         config.VPodType,
+		isCluster:        config.IsCluster,
+		workloadMaxLevel: config.WorkloadMaxLevel,
+		vNodeWorkerNum:   config.VNodeWorkerNum,
+		vNodeStore:       provider.NewVNodeStore(),
+		ready:            make(chan struct{}),
+		tunnel:           tunnel,
 	}, nil
 }
 
@@ -588,7 +584,7 @@ func (vNodeController *VNodeController) createOrRetryUpdateLease(vnCtx context.C
 			log.G(vnCtx).Infof("node lease %s acquired by %s", vNode.GetNodeName(), *vNode.GetLease().Spec.HolderIdentity)
 			vNode.LeaderAcquiredByOthers()
 			return
-		} else if isLeaderNow && !vNodeController.takeOveredVNodeName.Contains(vNode.GetNodeName()) {
+		} else if isLeaderNow && !vNode.TakeOvered {
 			log.G(vnCtx).Infof("node lease %s acquired by %s", vNode.GetNodeName(), vNodeController.clientID)
 			vNode.LeaderAcquiredByMe()
 			log.G(vnCtx).Infof("node %s inited after leader acquired", vNode.GetNodeName())
@@ -618,8 +614,10 @@ func (vNodeController *VNodeController) createOrRetryUpdateLease(vnCtx context.C
 
 func (vNodeController *VNodeController) takeOverVNode(vnCtx context.Context, vNode *provider.VNode, initData model.NodeInfo) {
 	log.G(context.Background()).Infof("start to take over vnode %s", vNode.GetNodeName())
-	vNodeController.takeOveredVNodeName.Add(vNode.GetNodeName())
-	defer vNodeController.takeOveredVNodeName.Remove(vNode.GetNodeName())
+	vNode.TakeOvered = true
+	defer func() {
+		vNode.TakeOvered = false
+	}()
 
 	takeOverVnCtx, takeOverCancel := context.WithCancel(context.WithValue(vnCtx, "nodeName", vNode.GetNodeName()))
 	defer takeOverCancel()

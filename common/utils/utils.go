@@ -397,6 +397,7 @@ func ConvertNodeToNodeInfo(node *corev1.Node) model.NodeInfo {
 	return model.NodeInfo{
 		Metadata: model.NodeMetadata{
 			Name:        node.Name,
+			BaseName:    node.Labels[model.LabelKeyOfBaseName],
 			Version:     node.Labels[model.LabelKeyOfBaseVersion],
 			ClusterName: node.Labels[model.LabelKeyOfBaseClusterName],
 		},

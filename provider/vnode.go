@@ -145,7 +145,7 @@ func (vNode *VNode) Run(vnCtx context.Context, takeOverVnCtx context.Context, in
 
 func (vNode *VNode) checkNodeExistsInClient(vnCtx context.Context) (bool, error) {
 	vnode := &corev1.Node{}
-	err := vNode.client.Get(vnCtx, types.NamespacedName{
+	err := vNode.kubeCache.Get(vnCtx, types.NamespacedName{
 		Name: vNode.name,
 	}, vnode)
 	return err == nil, err

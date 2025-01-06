@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	errpkg "github.com/pkg/errors"
 	"os"
 	"strings"
 	"time"
@@ -34,7 +35,7 @@ func TimedTaskWithInterval(ctx context.Context, interval time.Duration, task fun
 }
 
 // CheckAndFinallyCall checks a condition at a specified interval until it's true or a timeout occurs.
-func CheckAndFinallyCall(ctx context.Context, checkFunc func() (bool, error), timeout, interval time.Duration, finally, timeoutCall func()) {
+func CheckAndFinallyCall(ctx context.Context, checkFunc func(context.Context) (bool, error), timeout, interval time.Duration, finally, timeoutCall func()) error {
 	checkTicker := time.NewTicker(interval)
 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
@@ -44,16 +45,16 @@ func CheckAndFinallyCall(ctx context.Context, checkFunc func() (bool, error), ti
 		case <-ctx.Done():
 			logrus.Info("Check and Finally call timeout")
 			timeoutCall()
-			return
+			return fmt.Errorf("check time out")
 		case <-checkTicker.C:
-			// TODO: handle the error
-			finished, err := checkFunc()
+			finished, err := checkFunc(ctx)
 			if err != nil {
-				return
+				err = errpkg.Wrap(err, "Error when checking condition")
+				return err
 			}
 			if finished {
 				finally()
-				return
+				return nil
 			}
 		}
 	}
@@ -111,6 +112,9 @@ func GetEnv(key, defaultValue string) string {
 
 // GetPodKey constructs a pod key from a pod object.
 func GetPodKey(pod *corev1.Pod) string {
+	if pod == nil {
+		return ""
+	}
 	return pod.Namespace + "/" + pod.Name
 }
 
@@ -376,4 +380,34 @@ func FillPodKey(pods []corev1.Pod, bizStatusDatas []model.BizStatusData) (toUpda
 	}
 
 	return bizStatusDatasWithPodKey, bizStatusDatasWithNoPodKey
+}
+
+func ConvertNodeToNodeInfo(node *corev1.Node) model.NodeInfo {
+	nodeIP := "127.0.0.1"
+	nodeHostname := "unknown"
+
+	for _, addr := range node.Status.Addresses {
+		if addr.Type == corev1.NodeInternalIP {
+			nodeIP = addr.Address
+		} else if addr.Type == corev1.NodeHostName {
+			nodeHostname = addr.Address
+		}
+	}
+
+	return model.NodeInfo{
+		Metadata: model.NodeMetadata{
+			Name:        node.Name,
+			BaseName:    node.Labels[model.LabelKeyOfBaseName],
+			Version:     node.Labels[model.LabelKeyOfBaseVersion],
+			ClusterName: node.Labels[model.LabelKeyOfBaseClusterName],
+		},
+		NetworkInfo: model.NetworkInfo{
+			NodeIP:   nodeIP,
+			HostName: nodeHostname,
+		},
+		CustomLabels:      node.Labels,
+		CustomAnnotations: node.Annotations,
+		CustomTaints:      node.Spec.Taints,
+		State:             model.NodeStateActivated,
+	}
 }

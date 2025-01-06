@@ -18,9 +18,9 @@ func (liveness *Liveness) UpdateHeartBeatTime() {
 }
 
 // close by deactive message
-// or timeout for module.NodeLeaseDurationSeconds, this may caused by base offline or leader changed
+// or timeout for module.NodeLeaseDurationSeconds, this may caused by base offline
 func (liveness *Liveness) IsDead() bool {
-	return liveness.isClose || time.Since(liveness.LatestHeartBeatTime) >= model.NodeLeaseDurationSeconds*time.Second
+	return liveness.isClose || time.Since(liveness.LatestHeartBeatTime) >= model.NodeToDeadMaxSeconds*time.Second
 }
 
 // close because the base upload the deactive message
@@ -31,5 +31,5 @@ func (liveness *Liveness) Close() {
 
 // unReachable check the node is unreachable
 func (liveness *Liveness) IsReachable() bool {
-	return !liveness.isClose && time.Since(liveness.LatestHeartBeatTime) <= model.NodeLeaseUpdatePeriodSeconds*time.Second
+	return !liveness.isClose && time.Since(liveness.LatestHeartBeatTime) <= model.NodeToUnreachableMaxSeconds*time.Second
 }

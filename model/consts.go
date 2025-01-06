@@ -110,4 +110,16 @@ const (
 	NodeLeaseUpdatePeriodSeconds = 10
 	// NodeLeaseMaxRetryTimes is the maximum number of times to retry updating a node lease.
 	NodeLeaseMaxRetryTimes = 5
+
+	// NodeToUnreachableMaxSeconds is the maximum unreachable duration, if latest heart beat + NodeToUnreachableMaxSeconds > time.now, the vnode is unreachable
+	NodeToUnreachableMaxSeconds = 25
+	// NodeToDeadMaxSeconds is the maximum offline duration,  if latest heart beat + NodeToDeadMaxSeconds > time.now, the vnode is dead
+	NodeToDeadMaxSeconds = 60
+
+	// NodeToFetchHeartBeatInterval is the interval to fetch node's heart beat, NodeToFetchHeartBeatInterval should be less than NodeToUnreachableMaxSeconds
+	NodeToFetchHeartBeatInterval = 10
+	// NodeToFetchAllBizStatusInterval is the interval to fetch biz's status
+	NodeToFetchAllBizStatusInterval = 15
+	// NodeToCheckUnreachableAndDeadStatusInterval is the interval to check if node status is unreachable or dead
+	NodeToCheckUnreachableAndDeadStatusInterval = 3
 )

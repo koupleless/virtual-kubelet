@@ -597,7 +597,7 @@ func (vNodeController *VNodeController) createOrRetryUpdateLease(vnCtx context.C
 
 		err = vNodeController.client.Patch(vnCtx, newLease, client.MergeFrom(lease))
 		if err == nil {
-			log.G(vnCtx).WithField("retries", i).Infof("Successfully updated lease for %s", vNode.GetNodeName())
+			log.G(vnCtx).WithField("retries", i).Debugf("Successfully updated lease for %s", vNode.GetNodeName())
 			vNode.SetLease(lease)
 			return
 		}

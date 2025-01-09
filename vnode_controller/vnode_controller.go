@@ -549,7 +549,7 @@ func (vNodeController *VNodeController) startLeaderElection(vnCtx context.Contex
 }
 
 func (vNodeController *VNodeController) createOrRetryUpdateLease(vnCtx context.Context, vNode *provider.VNode) {
-	log.G(vnCtx).Infof("try to acquire node lease for %s by %s", vNode.GetNodeName(), vNodeController.clientID)
+	log.G(vnCtx).Debugf("try to acquire node lease for %s by %s", vNode.GetNodeName(), vNodeController.clientID)
 	for i := 0; i < model.NodeLeaseMaxRetryTimes; i++ {
 		time.Sleep(time.Millisecond * 200) // TODO: add random sleep time for reduce the client rate
 		lease := &coordinationv1.Lease{}

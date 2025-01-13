@@ -15,6 +15,8 @@
 package provider
 
 import (
+	"context"
+	"github.com/virtual-kubelet/virtual-kubelet/log"
 	"strings"
 	"sync"
 	"time"
@@ -76,10 +78,16 @@ func (r *VPodStore) GetPods() []*corev1.Pod {
 	return ret
 }
 
-func (r *VPodStore) CheckContainerStatusNeedSync(bizStatusData model.BizStatusData) bool {
+func (r *VPodStore) CheckContainerStatusNeedSync(ctx context.Context, bizStatusData model.BizStatusData) bool {
 	r.Lock()
 	defer r.Unlock()
 
+	keys := make([]string, 0, len(r.podKeyToPod))
+	for key := range r.podKeyToPod {
+		keys = append(keys, key)
+	}
+
+	log.G(ctx).Infof("podKeyToPod: %v", keys)
 	if pod, found := r.podKeyToPod[bizStatusData.PodKey]; found {
 		var matchedStatus *corev1.ContainerStatus
 		var matchedContainer *corev1.Container
@@ -96,6 +104,8 @@ func (r *VPodStore) CheckContainerStatusNeedSync(bizStatusData model.BizStatusDa
 
 		// the earliest change time of the container status when no time
 		oldChangeTime := time.Time{}
+
+		log.G(ctx).Infof("start bizStatusData: %v; oldChangeTime: %v, matchedContainer: %v, matchedStatus: %v", bizStatusData, oldChangeTime, matchedContainer, matchedStatus)
 		if matchedContainer != nil {
 			if matchedStatus != nil {
 				if matchedStatus.State.Running != nil {
@@ -111,6 +121,7 @@ func (r *VPodStore) CheckContainerStatusNeedSync(bizStatusData model.BizStatusDa
 		}
 
 		// TODO: 优化 bizStatusData.ChangeTime，只有 bizState 变化的时间才需要更新
+		log.G(ctx).Infof("end bizStatusData: %v; oldChangeTime: %v", bizStatusData, oldChangeTime)
 		if bizStatusData.ChangeTime.After(oldChangeTime) {
 			return true
 		} else {
@@ -119,5 +130,6 @@ func (r *VPodStore) CheckContainerStatusNeedSync(bizStatusData model.BizStatusDa
 	}
 
 	// no pod found, no need to sync
+	log.G(ctx).Warnf("biz podKey %s not found.", bizStatusData.PodKey)
 	return false
 }

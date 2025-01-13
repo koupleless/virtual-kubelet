@@ -128,7 +128,7 @@ func (b *VPodProvider) SyncAllBizStatusToKube(ctx context.Context, bizStatusData
 				}
 			}
 			// Attempt to update the container status
-			toUpdate := b.vPodStore.CheckContainerStatusNeedSync(bizStatusData)
+			toUpdate := b.vPodStore.CheckContainerStatusNeedSync(ctx, bizStatusData)
 			// If the update was successful, add the container information to the updated list
 			if toUpdate {
 				toUpdateBizStatusDatas = append(toUpdateBizStatusDatas, bizStatusData)
@@ -146,7 +146,7 @@ func (b *VPodProvider) SyncAllBizStatusToKube(ctx context.Context, bizStatusData
 
 // SyncBizStatusToKube is a method of VPodProvider that synchronizes the information of a single container
 func (b *VPodProvider) SyncBizStatusToKube(ctx context.Context, bizStatusData model.BizStatusData) {
-	needSync := b.vPodStore.CheckContainerStatusNeedSync(bizStatusData)
+	needSync := b.vPodStore.CheckContainerStatusNeedSync(ctx, bizStatusData)
 	if needSync {
 		// only when container status updated, update related pod status
 		b.syncBizStatusToKube(ctx, bizStatusData)
@@ -330,7 +330,8 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 
 	// delete from curr provider
 	b.vPodStore.DeletePod(podKey)
-	b.handleBizBatchStop(ctx, pod, pod.Spec.Containers)
+	// should not stop biz when delete pod, it should stopped when pod
+	//b.handleBizBatchStop(ctx, pod, pod.Spec.Containers)
 	b.notify(pod)
 	return nil
 }

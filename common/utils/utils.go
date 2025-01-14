@@ -118,6 +118,14 @@ func GetPodKey(pod *corev1.Pod) string {
 	return pod.Namespace + "/" + pod.Name
 }
 
+func GetNameSpaceAndNameFromPodKey(podKey string) (string, string) {
+	split := strings.Split(podKey, "/")
+	if len(split) == 2 {
+		return split[0], split[1]
+	}
+	return "", ""
+}
+
 // GetPodKeyFromContainerKey extracts the pod key from a container key.
 func GetPodKeyFromContainerKey(containerKey string) string {
 	return strings.Join(strings.Split(containerKey, "/")[:2], "/")

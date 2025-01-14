@@ -386,7 +386,7 @@ func NewVNode(config *model.BuildVNodeConfig, tunnel tunnel.Tunnel) (kn *VNode, 
 			// Create a new VirtualKubeletNode provider with configuration
 			nodeProvider = NewVNodeProvider(config)
 			// Initialize pod provider with node namespace, IP, ID, client, and tunnel
-			podProvider = NewVPodProvider(cfg.Node.Namespace, config.NodeIP, config.NodeName, config.Client, tunnel)
+			podProvider = NewVPodProvider(cfg.Node.Namespace, config.NodeIP, config.NodeName, config.Client, config.KubeCache, tunnel)
 
 			if err != nil {
 				return nil, nil, err

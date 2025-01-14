@@ -76,48 +76,43 @@ func (r *VPodStore) GetPods() []*corev1.Pod {
 	return ret
 }
 
-func (r *VPodStore) CheckContainerStatusNeedSync(bizStatusData model.BizStatusData) bool {
+func (r *VPodStore) CheckContainerStatusNeedSync(pod *corev1.Pod, bizStatusData model.BizStatusData) bool {
 	r.Lock()
 	defer r.Unlock()
 
-	if pod, found := r.podKeyToPod[bizStatusData.PodKey]; found {
-		var matchedStatus *corev1.ContainerStatus
-		var matchedContainer *corev1.Container
-		for _, status := range pod.Status.ContainerStatuses {
-			if (status.Name == bizStatusData.Name) && strings.Contains(status.Image, ".jar") {
-				matchedStatus = &status
-			}
+	var matchedStatus *corev1.ContainerStatus
+	var matchedContainer *corev1.Container
+	for _, status := range pod.Status.ContainerStatuses {
+		if (status.Name == bizStatusData.Name) && strings.Contains(status.Image, ".jar") {
+			matchedStatus = &status
 		}
-		for _, container := range pod.Spec.Containers {
-			if container.Name == bizStatusData.Name {
-				matchedContainer = &container
-			}
-		}
-
-		// the earliest change time of the container status when no time
-		oldChangeTime := time.Time{}
-		if matchedContainer != nil {
-			if matchedStatus != nil {
-				if matchedStatus.State.Running != nil {
-					oldChangeTime = matchedStatus.State.Running.StartedAt.Time
-				}
-				if matchedStatus.State.Terminated != nil {
-					oldChangeTime = matchedStatus.State.Terminated.FinishedAt.Time
-				}
-				if matchedStatus.State.Waiting != nil && pod.Status.Conditions != nil && len(pod.Status.Conditions) > 0 {
-					oldChangeTime = pod.Status.Conditions[0].LastTransitionTime.Time
-				}
-			}
-		}
-
-		// TODO: 优化 bizStatusData.ChangeTime，只有 bizState 变化的时间才需要更新
-		if bizStatusData.ChangeTime.After(oldChangeTime) {
-			return true
-		} else {
-			return false
+	}
+	for _, container := range pod.Spec.Containers {
+		if container.Name == bizStatusData.Name {
+			matchedContainer = &container
 		}
 	}
 
-	// no pod found, no need to sync
-	return false
+	// the earliest change time of the container status when no time
+	oldChangeTime := time.Time{}
+	if matchedContainer != nil {
+		if matchedStatus != nil {
+			if matchedStatus.State.Running != nil {
+				oldChangeTime = matchedStatus.State.Running.StartedAt.Time
+			}
+			if matchedStatus.State.Terminated != nil {
+				oldChangeTime = matchedStatus.State.Terminated.FinishedAt.Time
+			}
+			if matchedStatus.State.Waiting != nil && pod.Status.Conditions != nil && len(pod.Status.Conditions) > 0 {
+				oldChangeTime = pod.Status.Conditions[0].LastTransitionTime.Time
+			}
+		}
+	}
+
+	// TODO: 优化 bizStatusData.ChangeTime，只有 bizState 变化的时间才需要更新
+	if bizStatusData.ChangeTime.After(oldChangeTime) {
+		return true
+	} else {
+		return false
+	}
 }

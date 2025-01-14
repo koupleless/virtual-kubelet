@@ -20,6 +20,8 @@ import (
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet/node"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet/node/nodeutil"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sort"
 	"strings"
 	"time"
@@ -46,6 +48,7 @@ type VPodProvider struct {
 	nodeName  string
 	localIP   string
 	client    client.Client
+	cache     cache.Cache
 	vPodStore *VPodStore // store the pod from provider
 
 	tunnel tunnel.Tunnel
@@ -61,12 +64,13 @@ func (b *VPodProvider) NotifyPods(_ context.Context, cb func(*corev1.Pod)) {
 }
 
 // NewVPodProvider is a function that creates a new VPodProvider instance
-func NewVPodProvider(namespace, localIP, nodeName string, client client.Client, tunnel tunnel.Tunnel) *VPodProvider {
+func NewVPodProvider(namespace, localIP, nodeName string, client client.Client, cache cache.Cache, tunnel tunnel.Tunnel) *VPodProvider {
 	provider := &VPodProvider{
 		Namespace: namespace,
 		localIP:   localIP,
 		nodeName:  nodeName,
 		client:    client,
+		cache:     cache,
 		tunnel:    tunnel,
 		vPodStore: NewVPodStore(),
 	}
@@ -127,8 +131,17 @@ func (b *VPodProvider) SyncAllBizStatusToKube(ctx context.Context, bizStatusData
 					ChangeTime: now,
 				}
 			}
+
+			namespace, name := utils.GetNameSpaceAndNameFromPodKey(bizStatusData.PodKey)
+			pod := &corev1.Pod{}
+			err := b.cache.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, pod)
+			if err != nil {
+				log.G(ctx).WithError(err).Errorf("Failed to get pod %s from cache", podKey)
+				continue
+			}
+
 			// Attempt to update the container status
-			toUpdate := b.vPodStore.CheckContainerStatusNeedSync(ctx, bizStatusData)
+			toUpdate := b.vPodStore.CheckContainerStatusNeedSync(pod, bizStatusData)
 			// If the update was successful, add the container information to the updated list
 			if toUpdate {
 				toUpdateBizStatusDatas = append(toUpdateBizStatusDatas, bizStatusData)
@@ -146,7 +159,16 @@ func (b *VPodProvider) SyncAllBizStatusToKube(ctx context.Context, bizStatusData
 
 // SyncBizStatusToKube is a method of VPodProvider that synchronizes the information of a single container
 func (b *VPodProvider) SyncBizStatusToKube(ctx context.Context, bizStatusData model.BizStatusData) {
-	needSync := b.vPodStore.CheckContainerStatusNeedSync(ctx, bizStatusData)
+	namespace, name := utils.GetNameSpaceAndNameFromPodKey(bizStatusData.PodKey)
+	pod := &corev1.Pod{}
+	err := b.cache.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, pod)
+	if err != nil {
+		log.G(ctx).WithError(err).Error("Failed to get pod from cache")
+		return
+	}
+
+	needSync := b.vPodStore.CheckContainerStatusNeedSync(pod, bizStatusData)
+	log.G(ctx).Infof("container %s/%s need update: %v", bizStatusData.PodKey, bizStatusData.Key, needSync)
 	if needSync {
 		// only when container status updated, update related pod status
 		b.syncBizStatusToKube(ctx, bizStatusData)

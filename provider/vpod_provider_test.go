@@ -7,12 +7,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/cache/informertest"
 	"testing"
 	"time"
 )
 
 func TestSyncRelatedPodStatus(t *testing.T) {
-	provider := NewVPodProvider("default", "127.0.0.1", "123", nil, &tunnel.MockTunnel{})
+	provider := NewVPodProvider("default", "127.0.0.1", "123", nil, nil, &tunnel.MockTunnel{})
 	provider.syncBizStatusToKube(context.TODO(), model.BizStatusData{
 		Key:        "test-biz-key",
 		Name:       "test-name",
@@ -26,7 +27,7 @@ func TestSyncRelatedPodStatus(t *testing.T) {
 
 func TestSyncAllContainerInfo(t *testing.T) {
 	tl := &tunnel.MockTunnel{}
-	provider := NewVPodProvider("default", "127.0.0.1", "123", nil, tl)
+	provider := NewVPodProvider("default", "127.0.0.1", "123", nil, &informertest.FakeInformers{}, tl)
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			CreationTimestamp: metav1.Time{Time: time.Now()},
@@ -61,13 +62,14 @@ func TestSyncAllContainerInfo(t *testing.T) {
 			Key: tl.GetBizUniqueKey(&corev1.Container{
 				Name: "test-container",
 			}),
+			PodKey: "namespace/name",
 		},
 	})
 }
 
 func TestUpdateDeletedPod(t *testing.T) {
 	tl := &tunnel.MockTunnel{}
-	provider := NewVPodProvider("default", "127.0.0.1", "123", nil, tl)
+	provider := NewVPodProvider("default", "127.0.0.1", "123", nil, nil, tl)
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			CreationTimestamp: metav1.Time{Time: time.Now()},

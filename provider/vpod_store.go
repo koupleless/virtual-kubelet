@@ -109,8 +109,9 @@ func (r *VPodStore) CheckContainerStatusNeedSync(pod *corev1.Pod, bizStatusData 
 		}
 	}
 
-	// TODO: 优化 bizStatusData.ChangeTime，只有 bizState 变化的时间才需要更新
-	if bizStatusData.ChangeTime.After(oldChangeTime) {
+	// 优化 bizStatusData.ChangeTime，只有 bizState 变化的时间才需要更新
+	// 由于 k8s 里记录的时间只到秒，需要先对齐时间精度再进行比较
+	if bizStatusData.ChangeTime.Second() > oldChangeTime.Second() {
 		return true
 	} else {
 		return false

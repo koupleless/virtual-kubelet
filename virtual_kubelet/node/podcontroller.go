@@ -346,14 +346,6 @@ func (pc *PodController) DeletePodsFromKubernetesForget(ctx context.Context, key
 	pc.deletePodsFromKubernetes.Forget(ctx, key)
 }
 
-func (pc *PodController) DeletePodsFromKubernetesEnqueue(ctx context.Context, key string) {
-	pc.deletePodsFromKubernetes.Enqueue(ctx, key)
-}
-
-func (pc *PodController) SyncPodStatusFromProviderEnqueue(ctx context.Context, key string) {
-	pc.syncPodStatusFromProvider.Enqueue(ctx, key)
-}
-
 // syncPodsFromKubernetesHandler compares the actual state with the desired, and attempts to converge the two.
 func (pc *PodController) syncPodsFromKubernetesHandler(ctx context.Context, key string) error {
 	ctx, span := trace.StartSpan(ctx, "syncPodsFromKubernetesHandler")

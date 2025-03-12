@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
+	"github.com/virtual-kubelet/virtual-kubelet/log"
 	corev1 "k8s.io/api/core/v1"
 	"sync"
 	"time"
@@ -145,12 +146,13 @@ func (m *MockTunnel) StopBiz(nodeName, podKey string, container *corev1.Containe
 	defer m.Unlock()
 	containerMap := m.bizStatusStorage[nodeName]
 	key := utils.GetBizUniqueKey(container)
-	data := containerMap[key]
-	delete(containerMap, key)
-	m.bizStatusStorage[nodeName] = containerMap
-	data.State = string(model.BizStateStopped)
-	data.ChangeTime = time.Now()
-	m.OnSingleBizStatusArrived(nodeName, data)
+	if data, found := containerMap[key]; found {
+		delete(containerMap, key)
+		m.bizStatusStorage[nodeName] = containerMap
+		data.State = string(model.BizStateStopped)
+		data.ChangeTime = time.Now()
+		m.OnSingleBizStatusArrived(nodeName, data)
+	}
 	return nil
 }
 

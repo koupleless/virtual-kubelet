@@ -261,7 +261,7 @@ func (vNode *VNode) SyncOneNodeBizStatusToKube(ctx context.Context, toUpdateInKu
 func (vNode *VNode) syncNotExistBizPodToProvider(ctx context.Context, toDeleteInProvider []model.BizStatusData) {
 	for _, bizStatus := range toDeleteInProvider {
 		bizName, bizVersion := utils.GetBizNameAndVersionFromUniqueKey(bizStatus.Key)
-		vNode.podProvider.DeletePod(ctx, &corev1.Pod{
+		err := vNode.podProvider.DeletePod(ctx, &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "not-exist-pod",
 				Namespace: corev1.NamespaceDefault,
@@ -278,6 +278,9 @@ func (vNode *VNode) syncNotExistBizPodToProvider(ctx context.Context, toDeleteIn
 				},
 			},
 		})
+		if err != nil {
+			log.G(ctx).WithError(err).Error("Failed to delete not-exist-pod in provider")
+		}
 	}
 }
 

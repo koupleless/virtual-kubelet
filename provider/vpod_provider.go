@@ -353,7 +353,7 @@ func (b *VPodProvider) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 	// delete from curr provider
 	b.vPodStore.DeletePod(podKey)
 	// should not stop biz when delete pod, it should stopped when pod
-	//b.handleBizBatchStop(ctx, pod, pod.Spec.Containers)
+	b.handleBizBatchStop(ctx, pod, pod.Spec.Containers)
 	b.notify(pod)
 	return nil
 }

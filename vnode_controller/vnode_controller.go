@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/google/go-cmp/cmp"
 	"github.com/koupleless/virtual-kubelet/tunnel"
 	"github.com/koupleless/virtual-kubelet/vnode_controller/predicates"
 	coordinationv1 "k8s.io/api/coordination/v1"
@@ -266,9 +267,9 @@ func (vNodeController *VNodeController) onAllBizStatusArrived(nodeName string, b
 	if vNode.IsLeader(vNodeController.clientID) {
 		ctx := context.Background()
 		pods, _ := vNodeController.listPodFromKube(ctx, nodeName)
-		bizStatusDatasWithPodKey, _ := utils.FillPodKey(pods, bizStatusDatas)
+		bizStatusDatasWithPodKey, bizStatusDatasWithNoPodKey := utils.FillPodKey(pods, bizStatusDatas)
 
-		vNode.SyncAllContainerInfo(ctx, bizStatusDatasWithPodKey)
+		vNode.SyncBatchBizStatusToKube(ctx, bizStatusDatasWithPodKey, bizStatusDatasWithNoPodKey)
 	}
 }
 
@@ -285,13 +286,8 @@ func (vNodeController *VNodeController) onSingleBizStatusArrived(nodeName string
 	if vNode.IsLeader(vNodeController.clientID) {
 		ctx := context.Background()
 		pods, _ := vNodeController.listPodFromKube(ctx, nodeName)
-		bizStatusDatasWithPodKey, _ := utils.FillPodKey(pods, []model.BizStatusData{bizStatusData})
-
-		if len(bizStatusDatasWithPodKey) == 0 {
-			return
-		}
-
-		vNode.SyncOneContainerInfo(context.TODO(), bizStatusDatasWithPodKey[0])
+		bizStatusDatasWithPodKey, bizStatusDatasWithNoPodKey := utils.FillPodKey(pods, []model.BizStatusData{bizStatusData})
+		vNode.SyncOneNodeBizStatusToKube(context.TODO(), bizStatusDatasWithPodKey, bizStatusDatasWithNoPodKey)
 	}
 }
 
@@ -314,7 +310,7 @@ func (vNodeController *VNodeController) podAddHandler(ctx context.Context, podFr
 		vNode.AddKnowPod(podFromKubernetes)
 	}
 
-	log.G(ctx).Infof("try to add pod %s with handler in vnode: %s", podKey, vNode.GetNodeName())
+	log.G(ctx).Infof("try to add pod %s/%s in podAddHandler.", vNode.GetNodeName(), podKey)
 	if !vNode.IsLeader(vNodeController.clientID) {
 		log.G(ctx).Infof("can not add pod %s because is not the leader of vnode: %s", podKey, vNode.GetNodeName())
 		return
@@ -374,7 +370,9 @@ func (vNodeController *VNodeController) podUpdateHandler(ctx context.Context, ol
 		vNode.AddKnowPod(newPodFromKubernetes)
 	}
 
-	log.G(ctx).Infof("try to update pod %s with handler in vnode: %s", podKey, vNode.GetNodeName())
+	// get the diff of oldPod and new Pod
+	diff := cmp.Diff(oldPodFromKubernetes, newPodFromKubernetes)
+	log.G(ctx).Infof("try to update pod %s/%s with diff %s in podUpdateHandler.", vNode.GetNodeName(), podKey, diff)
 	if !vNode.IsLeader(vNodeController.clientID) {
 		log.G(ctx).Infof("can not update pod %s because is not the leader of vnode: %s", podKey, vNode.GetNodeName())
 		return
@@ -390,7 +388,7 @@ func (vNodeController *VNodeController) podUpdateHandler(ctx context.Context, ol
 
 	// At this point we know that something in .metadata or .spec has changed, so we must proceed to sync the pod.
 	ctx = span.WithField(ctx, "key", podKey)
-	vNode.CheckAndUpdatePodStatus(ctx, podKey, newPodFromKubernetes)
+	//vNode.CheckAndUpdatePodStatus(ctx, podKey, newPodFromKubernetes)
 
 	if podShouldEnqueue(oldPodFromKubernetes, newPodFromKubernetes) {
 		log.G(ctx).Infof("start to update pod %s(old) -> %s(new) with handler in node: %s", utils.GetPodKey(oldPodFromKubernetes), utils.GetPodKey(newPodFromKubernetes), vNode.GetNodeName())
@@ -422,7 +420,7 @@ func (vNodeController *VNodeController) podDeleteHandler(ctx context.Context, po
 		return
 	}
 
-	log.G(ctx).Infof("start to delete pod %s with handler in node: %s", utils.GetPodKey(podFromKubernetes), vNode.GetNodeName())
+	log.G(ctx).Infof("start to delete pod %s/%s in podDeleteHandler", vNode.GetNodeName(), utils.GetPodKey(podFromKubernetes))
 
 	ctx, span := trace.StartSpan(ctx, "DeleteFunc")
 	defer span.End()

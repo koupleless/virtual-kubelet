@@ -240,17 +240,44 @@ func (vNode *VNode) SyncNodeStatus(data model.NodeStatusData) {
 	}
 }
 
-// SyncAllContainerInfo syncs the status of all containers
-func (vNode *VNode) SyncAllContainerInfo(ctx context.Context, infos []model.BizStatusData) {
+// SyncBatchBizStatusToKube syncs the status of all containers
+func (vNode *VNode) SyncBatchBizStatusToKube(ctx context.Context, toUpdateInKube []model.BizStatusData, toDeleteInProvider []model.BizStatusData) {
 	if vNode.podProvider != nil {
-		vNode.podProvider.SyncAllBizStatusToKube(ctx, infos)
+		vNode.podProvider.SyncAllBizStatusToKube(ctx, toUpdateInKube)
+		vNode.syncNotExistBizPodToProvider(ctx, toDeleteInProvider)
 	}
 }
 
-// SyncOneContainerInfo syncs the status of a single container
-func (vNode *VNode) SyncOneContainerInfo(ctx context.Context, bizStatusData model.BizStatusData) {
+// SyncOneNodeBizStatusToKube syncs the status of a single container
+func (vNode *VNode) SyncOneNodeBizStatusToKube(ctx context.Context, toUpdateInKube []model.BizStatusData, toDeleteInProvider []model.BizStatusData) {
 	if vNode.podProvider != nil {
-		vNode.podProvider.SyncBizStatusToKube(ctx, bizStatusData)
+		for _, bizStatus := range toUpdateInKube {
+			vNode.podProvider.SyncBizStatusToKube(ctx, bizStatus)
+		}
+		vNode.syncNotExistBizPodToProvider(ctx, toDeleteInProvider)
+	}
+}
+
+func (vNode *VNode) syncNotExistBizPodToProvider(ctx context.Context, toDeleteInProvider []model.BizStatusData) {
+	for _, bizStatus := range toDeleteInProvider {
+		bizName, bizVersion := utils.GetBizNameAndVersionFromUniqueKey(bizStatus.Key)
+		vNode.podProvider.DeletePod(ctx, &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "not-exist-pod",
+				Namespace: corev1.NamespaceDefault,
+			},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{
+					{
+						Name: bizName,
+						Env: []corev1.EnvVar{{
+							Name:  "BIZ_VERSION",
+							Value: bizVersion,
+						}},
+					},
+				},
+			},
+		})
 	}
 }
 
@@ -327,12 +354,12 @@ func (vNode *VNode) ToDone() {
 	}
 }
 
-// CheckAndUpdatePodStatus checks and updates a pod in the node
-func (vNode *VNode) CheckAndUpdatePodStatus(ctx context.Context, key string, pod *corev1.Pod) {
-	if vNode.node != nil {
-		vNode.node.PodController().CheckAndUpdatePodStatus(ctx, key, pod)
-	}
-}
+//// CheckAndUpdatePodStatus checks and updates a pod in the node
+//func (vNode *VNode) CheckAndUpdatePodStatus(ctx context.Context, key string, pod *corev1.Pod) {
+//	if vNode.node != nil {
+//		vNode.node.PodController().CheckAndUpdatePodStatus(ctx, key, pod)
+//	}
+//}
 
 // SyncPodsFromKubernetesEnqueue syncs pods from Kubernetes to the node
 func (vNode *VNode) SyncPodsFromKubernetesEnqueue(ctx context.Context, key string) {

@@ -361,6 +361,15 @@ func GetBizUniqueKey(container *corev1.Container) string {
 	return getBizIdentity(container.Name, getBizVersionFromContainer(container))
 }
 
+// GetBizNameAndVersionFromUniqueKey extracts the biz name and version from a unique key
+func GetBizNameAndVersionFromUniqueKey(bizUniqueKey string) (string, string) {
+	split := strings.Split(bizUniqueKey, ":")
+	if len(split) == 2 {
+		return split[0], split[1]
+	}
+	return "", ""
+}
+
 func FillPodKey(pods []corev1.Pod, bizStatusDatas []model.BizStatusData) (toUpdate []model.BizStatusData, toDelete []model.BizStatusData) {
 	bizKeyToPodKey := make(map[string]string)
 	// 一个 vnode 上,  所有的 biz container name 是唯一的

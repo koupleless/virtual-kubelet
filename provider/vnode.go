@@ -3,24 +3,24 @@ package provider
 import (
 	"context"
 	"fmt"
-	"github.com/koupleless/virtual-kubelet/tunnel"
-	"github.com/koupleless/virtual-kubelet/virtual_kubelet/node"
-	nodeutil2 "github.com/koupleless/virtual-kubelet/virtual_kubelet/node/nodeutil"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"runtime"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"time"
 
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
+	"github.com/koupleless/virtual-kubelet/tunnel"
+	"github.com/koupleless/virtual-kubelet/virtual_kubelet/node"
+	nodeutil2 "github.com/koupleless/virtual-kubelet/virtual_kubelet/node/nodeutil"
 	"github.com/pkg/errors"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
 	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -357,12 +357,12 @@ func (vNode *VNode) ToDone() {
 	}
 }
 
-//// CheckAndUpdatePodStatus checks and updates a pod in the node
-//func (vNode *VNode) CheckAndUpdatePodStatus(ctx context.Context, key string, pod *corev1.Pod) {
+// // CheckAndUpdatePodStatus checks and updates a pod in the node
+// func (vNode *VNode) CheckAndUpdatePodStatus(ctx context.Context, key string, pod *corev1.Pod) {
 //	if vNode.node != nil {
 //		vNode.node.PodController().CheckAndUpdatePodStatus(ctx, key, pod)
 //	}
-//}
+// }
 
 // SyncPodsFromKubernetesEnqueue syncs pods from Kubernetes to the node
 func (vNode *VNode) SyncPodsFromKubernetesEnqueue(ctx context.Context, key string) {
@@ -416,7 +416,7 @@ func NewVNode(config *model.BuildVNodeConfig, tunnel tunnel.Tunnel) (kn *VNode, 
 			// Create a new VirtualKubeletNode provider with configuration
 			nodeProvider = NewVNodeProvider(config)
 			// Initialize pod provider with node namespace, IP, ID, client, and tunnel
-			podProvider = NewVPodProvider(cfg.Node.Namespace, config.NodeIP, config.NodeName, config.Client, config.KubeCache, tunnel)
+			podProvider = NewVPodProvider(cfg.Node.Namespace, config.BaseIP, config.NodeName, config.Client, config.KubeCache, tunnel)
 
 			if err != nil {
 				return nil, nil, err
@@ -474,7 +474,8 @@ func buildNode(node *corev1.Node, config *model.BuildVNodeConfig) error {
 	oldLabels[model.LabelKeyOfComponent] = model.ComponentVNode
 	oldLabels[model.LabelKeyOfEnv] = config.Env
 	oldLabels[model.LabelKeyOfBaseVersion] = config.NodeVersion
-	oldLabels[corev1.LabelHostname] = config.NodeHostname
+	oldLabels[corev1.LabelHostname] = config.BaseHostName
+	oldLabels[model.LabelKeyOfBaseHostName] = config.BaseHostName
 	for k, v := range config.CustomLabels {
 		oldLabels[k] = v
 	}
@@ -508,11 +509,11 @@ func buildNode(node *corev1.Node, config *model.BuildVNodeConfig) error {
 		Addresses: []corev1.NodeAddress{
 			{
 				Type:    corev1.NodeInternalIP,
-				Address: config.NodeIP,
+				Address: utils.OrElse(config.NodeIP, config.BaseIP),
 			},
 			{
 				Type:    corev1.NodeHostName,
-				Address: config.NodeHostname,
+				Address: config.BaseHostName, // FIXME: should we use a different hostname?
 			},
 		},
 		Conditions: []corev1.NodeCondition{

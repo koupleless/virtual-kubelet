@@ -3,10 +3,12 @@ package utils
 import (
 	"context"
 	"fmt"
-	errpkg "github.com/pkg/errors"
 	"os"
+	"reflect"
 	"strings"
 	"time"
+
+	errpkg "github.com/pkg/errors"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/koupleless/virtual-kubelet/model"
@@ -427,4 +429,12 @@ func ConvertNodeToNodeInfo(node *corev1.Node) model.NodeInfo {
 		CustomTaints:      node.Spec.Taints,
 		State:             model.NodeStateActivated,
 	}
+}
+
+// OrElse returns the value if it is not nil or zero, otherwise returns the default value.
+func OrElse[T any](value T, defaultValue T) T {
+	if reflect.ValueOf(value).IsZero() {
+		return defaultValue
+	}
+	return value
 }

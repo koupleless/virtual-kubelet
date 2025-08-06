@@ -3,14 +3,15 @@ package utils
 import (
 	"context"
 	"errors"
+	"os"
+	"testing"
+	"time"
+
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
-	"os"
-	"testing"
-	"time"
 )
 
 func TestTimedTaskWithInterval(t *testing.T) {
@@ -343,4 +344,12 @@ func TestFillPodKey(t *testing.T) {
 	assert.Equal(t, "ut-ns/ut-pod1", bizStatusDatasWithPodKey[0].PodKey)
 	assert.Equal(t, "ut-ns/ut-pod2", bizStatusDatasWithPodKey[1].PodKey)
 	assert.Equal(t, len(bizStatusDatasWithNoPodKey), 0)
+}
+
+func TestOrElse(t *testing.T) {
+	assert.Equal(t, "default", OrElse("", "default"))
+	assert.EqualValues(t, 1, OrElse(0, 1))
+	assert.EqualValues(t, 1.0, OrElse(0, 1.0))
+	assert.EqualValues(t, ptr.To(1), OrElse(nil, ptr.To(1)))
+	assert.Equal(t, "value", OrElse("value", "default"))
 }

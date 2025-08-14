@@ -16,15 +16,16 @@ package provider
 
 import (
 	"context"
+	"sort"
+	"strings"
+	"time"
+
 	"github.com/koupleless/virtual-kubelet/tunnel"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet/node"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet/node/nodeutil"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
-	"sort"
-	"strings"
-	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/koupleless/virtual-kubelet/common/tracker"
@@ -145,9 +146,8 @@ func (b *VPodProvider) SyncAllBizStatusToKube(ctx context.Context, bizStatusData
 			// If the update was successful, add the container information to the updated list
 			if toUpdate {
 				toUpdateBizStatusDatas = append(toUpdateBizStatusDatas, bizStatusData)
+				log.G(ctx).Infof("container %s/%s need update", podKey, bizKey)
 			}
-
-			log.G(ctx).Infof("container %s/%s need update: %v", podKey, bizKey, toUpdate)
 		}
 	}
 
@@ -168,10 +168,10 @@ func (b *VPodProvider) SyncBizStatusToKube(ctx context.Context, bizStatusData mo
 	}
 
 	needSync := b.vPodStore.CheckContainerStatusNeedSync(pod, bizStatusData)
-	log.G(ctx).Infof("container %s/%s need update: %v", bizStatusData.PodKey, bizStatusData.Key, needSync)
 	if needSync {
 		// only when container status updated, update related pod status
 		b.syncBizStatusToKube(ctx, bizStatusData)
+		log.G(ctx).Infof("container %s/%s need update", bizStatusData.PodKey, bizStatusData.Key)
 	}
 }
 
@@ -291,6 +291,11 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 			shouldStartContainers = append(shouldStartContainers, newContainer)
 		}
 	}
+	for _, cs := range pod.Status.ContainerStatuses {
+		if _, has := newContainerMap[cs.Name]; has && cs.State.Waiting != nil && cs.State.Waiting.Reason == model.StateReasonAwaitingResync {
+			shouldStartContainers = append(shouldStartContainers, newContainerMap[cs.Name])
+		}
+	}
 	if len(shouldStopContainers) > 0 {
 		b.handleBizBatchStop(ctx, oldPod, shouldStopContainers)
 	}
@@ -331,7 +336,7 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 		}
 		return true, nil
 	}, time.Minute, time.Second, func() {
-		b.handleBizBatchStart(ctx, newPod, shouldStopContainers)
+		b.handleBizBatchStart(ctx, newPod, shouldStartContainers)
 	}, func() {
 		logger.Error("stop old containers timeout, not start new containers")
 	})
@@ -388,7 +393,6 @@ func (b *VPodProvider) GetPodStatus(ctx context.Context, pod *corev1.Pod, bizSta
 		nameToContainerStatus[cs.Name] = &cs
 	}
 
-	// TODO: check all containers status only biz jar container
 	for _, container := range pod.Spec.Containers {
 		// only check biz jar container
 		if !strings.Contains(container.Image, ".jar") {

@@ -4,26 +4,26 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/google/go-cmp/cmp"
-	"github.com/koupleless/virtual-kubelet/tunnel"
-	"github.com/koupleless/virtual-kubelet/vnode_controller/predicates"
-	coordinationv1 "k8s.io/api/coordination/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/types"
 	"sync"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/provider"
+	"github.com/koupleless/virtual-kubelet/tunnel"
+	"github.com/koupleless/virtual-kubelet/vnode_controller/predicates"
 	errpkg "github.com/pkg/errors"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
 	"github.com/virtual-kubelet/virtual-kubelet/trace"
+	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -60,6 +60,8 @@ type VNodeController struct {
 	tunnel tunnel.Tunnel
 
 	vNodeStore *provider.VNodeStore // The runtime info store for the controller
+
+	pseudoNodeIP string // The pseudo node IP for the controller, will be used as the node IP for vnodes.
 }
 
 // Reconcile is the main reconcile function for the controller
@@ -96,6 +98,7 @@ func NewVNodeController(config *model.BuildVNodeControllerConfig, tunnel tunnel.
 		workloadMaxLevel: config.WorkloadMaxLevel,
 		vNodeWorkerNum:   config.VNodeWorkerNum,
 		vNodeStore:       provider.NewVNodeStore(),
+		pseudoNodeIP:     config.PseudoNodeIP,
 		ready:            make(chan struct{}),
 		tunnel:           tunnel,
 	}, nil
@@ -388,7 +391,7 @@ func (vNodeController *VNodeController) podUpdateHandler(ctx context.Context, ol
 
 	// At this point we know that something in .metadata or .spec has changed, so we must proceed to sync the pod.
 	ctx = span.WithField(ctx, "key", podKey)
-	//vNode.CheckAndUpdatePodStatus(ctx, podKey, newPodFromKubernetes)
+	// vNode.CheckAndUpdatePodStatus(ctx, podKey, newPodFromKubernetes)
 
 	if podShouldEnqueue(oldPodFromKubernetes, newPodFromKubernetes) {
 		log.G(ctx).Infof("start to update pod %s(old) -> %s(new) with handler in node: %s", utils.GetPodKey(oldPodFromKubernetes), utils.GetPodKey(newPodFromKubernetes), vNode.GetNodeName())
@@ -496,11 +499,12 @@ func (vNodeController *VNodeController) createVNode(vnCtx context.Context, initD
 	vNode, err = provider.NewVNode(&model.BuildVNodeConfig{
 		Client:            vNodeController.client,
 		KubeCache:         vNodeController.cache,
-		NodeIP:            initData.NetworkInfo.NodeIP,
-		NodeHostname:      initData.NetworkInfo.HostName,
+		BaseIP:            initData.NetworkInfo.NodeIP,
+		BaseHostName:      initData.NetworkInfo.HostName,
+		NodeIP:            vNodeController.pseudoNodeIP,
 		NodeName:          initData.Metadata.Name,
-		BaseName:          initData.Metadata.BaseName,
 		NodeVersion:       initData.Metadata.Version,
+		BaseName:          initData.Metadata.BaseName,
 		VPodType:          vNodeController.vPodType,
 		ClusterName:       initData.Metadata.ClusterName,
 		Env:               vNodeController.env,

@@ -45,6 +45,10 @@ const (
 	LabelKeyOfBaseVersion = "base.koupleless.io/version"
 	// LabelKeyOfBaseClusterName is the constant string used as a key for base cluster name.
 	LabelKeyOfBaseClusterName = "base.koupleless.io/cluster-name"
+	// LabelKeyOfBaseHostName is a constant string used as a key for base host name.
+	LabelKeyOfBaseHostName = "base.koupleless.io/host-name"
+	// LabelKeyOfBaseContainerName is a constant string used as a key for base container name.
+	LabelKeyOfBaseContainerName = "base.koupleless.io/container-name"
 )
 
 const (

@@ -1,10 +1,11 @@
 package provider
 
 import (
-	"github.com/koupleless/virtual-kubelet/model"
-	"gotest.tools/assert"
 	"testing"
 	"time"
+
+	"github.com/koupleless/virtual-kubelet/model"
+	"gotest.tools/assert"
 )
 
 func TestNewVNodeStore(t *testing.T) {
@@ -71,7 +72,8 @@ func TestGetLeaseOutdatedVNodeName(t *testing.T) {
 	}
 
 	vNode.lease = vNode.NewLease(clientId)
-	vNode.lease.Spec.RenewTime.Time = time.Now().Add(-time.Second * model.NodeLeaseDurationSeconds)
+	// @fix: make sure the lease is outdated
+	vNode.lease.Spec.RenewTime.Time = time.Now().Add(-2 * time.Second * model.NodeLeaseDurationSeconds)
 	store.AddVNode(nodeName, vNode)
 	nameList := store.GetLeaseOutdatedVNodeNames(clientId)
 	assert.Assert(t, len(nameList) == 1)

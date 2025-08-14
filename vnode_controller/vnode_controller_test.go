@@ -2,6 +2,9 @@ package vnode_controller
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/provider"
@@ -13,8 +16,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache/informertest"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"testing"
-	"time"
 )
 
 func TestNewVNodeController_NoConfig(t *testing.T) {
@@ -128,7 +129,7 @@ func TestRunVNode(t *testing.T) {
 
 	nodeInfo := utils.ConvertNodeToNodeInfo(&node)
 
-	vc.client = fake.NewFakeClient(&node)
+	vc.client = fake.NewFakeClient()
 	vc.cache = &informertest.FakeInformers{}
 
 	// init mocked vNode
@@ -139,15 +140,25 @@ func TestRunVNode(t *testing.T) {
 	// runVNode
 	vc.runVNode(vnCtx, vNode, nodeInfo)
 
-	// case1: leader election success, take over the vnode and run
-	time.Sleep(5 * time.Second)
-	assert.True(t, vNode.TakeOvered)
-	assert.Equal(t, 1, len(vc.vNodeStore.GetVNodes()))
+	t.Run("TestVNodeTakeOver", func(t *testing.T) {
+		// leader election success, take over the vnode and run
+		assert.Eventually(
+			t,
+			func() bool { return vNode.TakeOvered },
+			5*time.Second,
+			50*time.Millisecond,
+		)
+		assert.Equal(t, 1, len(vc.vNodeStore.GetVNodes()))
 
-	// case2: leader election success, take over the vnode but vnode is dead, which triggers vnCtxCancel()
-	vnCtxCancel()
-	time.Sleep(5 * time.Second)
-	assert.False(t, vNode.TakeOvered)
+		// leadership lost
+		vnCtxCancel()
+		assert.Eventually(
+			t,
+			func() bool { return !vNode.TakeOvered },
+			5*time.Second,
+			50*time.Millisecond,
+		)
+	})
 }
 
 func TestDiscoverPreviousPods(t *testing.T) {
@@ -157,7 +168,7 @@ func TestDiscoverPreviousPods(t *testing.T) {
 		VPodType:  "suite",
 	}, &mockTunnel)
 	vn := &provider.VNode{
-		//tunnel: &mockTunnel,
+		// tunnel: &mockTunnel,
 	}
 	vc.vNodeStore.AddVNode("test-node", vn)
 	vc.discoverPreviousPods(context.TODO(), vn, &corev1.PodList{

@@ -59,8 +59,9 @@ type BizStatusData struct {
 type BuildVNodeConfig struct {
 	Client            client.Client     // Runtime client instance
 	KubeCache         cache.Cache       // Cache of kube resources
-	NodeIP            string            // IP of the node
-	NodeHostname      string            // Hostname of the node
+	BaseIP            string            // IP of the base
+	BaseHostName      string            // Hostname of the base
+	NodeIP            string            // NodeIP of the node
 	NodeName          string            // NodeName of the node
 	NodeVersion       string            // NodeVersion of the node
 	BaseName          string            // BaseName of the base, which is the app name of base
@@ -82,6 +83,7 @@ type BuildVNodeControllerConfig struct {
 	IsCluster        bool          // Whether the deployment is in a cluster
 	WorkloadMaxLevel int           // Maximum workload level
 	VNodeWorkerNum   int           // VNode container event processor worker num, default 1, means execute Container events serially
+	PseudoNodeIP     string        // Pseudo node IP, will be used as the node IP for vnodes.
 }
 
 // QueryBaselineRequest is the request parameters of query baseline func

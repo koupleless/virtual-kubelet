@@ -239,7 +239,9 @@ func ConvertBizStatusToContainerStatus(
 	data *model.BizStatusData,
 ) (*corev1.ContainerStatus, error) {
 	// this may be a little complex to handle the case that parameters is not nil or for same container name
+	onInit := false
 	if containerStatus == nil {
+		onInit = true
 		if data == nil || (container.Name != data.Name) {
 			started := false
 			return &corev1.ContainerStatus{
@@ -295,7 +297,7 @@ func ConvertBizStatusToContainerStatus(
 		//  biz module installs (when a new replica is scheduled) -> biz module uninstalls (when the old replica is scheduled)
 		// This can cause the biz module to remain in the UNRESOLVED state permanently, so we need to notify the pod controller
 		// to reinstall the biz module.
-		if containerStatus != nil {
+		if !onInit {
 			// Always indicate Waiting to drive the re-sync path, even if there was no previous status.
 			msg := "Biz module is in UNRESOLVED state, resync needed"
 			if data.Message != "" {

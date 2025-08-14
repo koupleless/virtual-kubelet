@@ -296,10 +296,15 @@ func ConvertBizStatusToContainerStatus(
 		// This can cause the biz module to remain in the UNRESOLVED state permanently, so we need to notify the pod controller
 		// to reinstall the biz module.
 		if containerStatus != nil {
+			// Always indicate Waiting to drive the re-sync path, even if there was no previous status.
+			msg := "Biz module is in UNRESOLVED state, resync needed"
+			if data.Message != "" {
+				msg = data.Message
+			}
 			ret.State = corev1.ContainerState{
 				Waiting: &corev1.ContainerStateWaiting{
 					Reason:  model.StateReasonAwaitingResync,
-					Message: "Biz module is in UNRESOLVED state, resync needed",
+					Message: msg,
 				},
 			}
 		} else {

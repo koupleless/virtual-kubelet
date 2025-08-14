@@ -17,14 +17,15 @@ package node
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet/internal/queue"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sync"
-	"time"
 
 	"github.com/google/go-cmp/cmp"
 	pkgerrors "github.com/pkg/errors"

@@ -16,15 +16,16 @@ package provider
 
 import (
 	"context"
+	"sort"
+	"strings"
+	"time"
+
 	"github.com/koupleless/virtual-kubelet/tunnel"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet/node"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet/node/nodeutil"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
-	"sort"
-	"strings"
-	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/koupleless/virtual-kubelet/common/tracker"
@@ -145,9 +146,8 @@ func (b *VPodProvider) SyncAllBizStatusToKube(ctx context.Context, bizStatusData
 			// If the update was successful, add the container information to the updated list
 			if toUpdate {
 				toUpdateBizStatusDatas = append(toUpdateBizStatusDatas, bizStatusData)
+				log.G(ctx).Infof("container %s/%s need update", podKey, bizKey)
 			}
-
-			log.G(ctx).Infof("container %s/%s need update: %v", podKey, bizKey, toUpdate)
 		}
 	}
 
@@ -168,10 +168,10 @@ func (b *VPodProvider) SyncBizStatusToKube(ctx context.Context, bizStatusData mo
 	}
 
 	needSync := b.vPodStore.CheckContainerStatusNeedSync(pod, bizStatusData)
-	log.G(ctx).Infof("container %s/%s need update: %v", bizStatusData.PodKey, bizStatusData.Key, needSync)
 	if needSync {
 		// only when container status updated, update related pod status
 		b.syncBizStatusToKube(ctx, bizStatusData)
+		log.G(ctx).Infof("container %s/%s need update", bizStatusData.PodKey, bizStatusData.Key)
 	}
 }
 
@@ -291,6 +291,11 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 			shouldStartContainers = append(shouldStartContainers, newContainer)
 		}
 	}
+	for _, cs := range pod.Status.ContainerStatuses {
+		if _, has := newContainerMap[cs.Name]; has && cs.State.Waiting != nil && cs.State.Waiting.Reason == model.StateReasonAwaitingResync {
+			shouldStartContainers = append(shouldStartContainers, newContainerMap[cs.Name])
+		}
+	}
 	if len(shouldStopContainers) > 0 {
 		b.handleBizBatchStop(ctx, oldPod, shouldStopContainers)
 	}
@@ -331,7 +336,7 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 		}
 		return true, nil
 	}, time.Minute, time.Second, func() {
-		b.handleBizBatchStart(ctx, newPod, shouldStopContainers)
+		b.handleBizBatchStart(ctx, newPod, shouldStartContainers)
 	}, func() {
 		logger.Error("stop old containers timeout, not start new containers")
 	})
@@ -388,7 +393,6 @@ func (b *VPodProvider) GetPodStatus(ctx context.Context, pod *corev1.Pod, bizSta
 		nameToContainerStatus[cs.Name] = &cs
 	}
 
-	// TODO: check all containers status only biz jar container
 	for _, container := range pod.Spec.Containers {
 		// only check biz jar container
 		if !strings.Contains(container.Image, ".jar") {
@@ -417,7 +421,8 @@ func (b *VPodProvider) GetPodStatus(ctx context.Context, pod *corev1.Pod, bizSta
 
 	podStatus.Phase = corev1.PodPending
 
-	if bizJarContainerCount == 0 || bizJarContainerCount == terminatedBizJarContainerCount {
+	switch {
+	case bizJarContainerCount == 0 || bizJarContainerCount == terminatedBizJarContainerCount:
 		// if no biz jar container or all biz jar container terminated, pod is terminated
 		podStatus.Phase = corev1.PodSucceeded
 		podStatus.Conditions = []corev1.PodCondition{
@@ -433,7 +438,8 @@ func (b *VPodProvider) GetPodStatus(ctx context.Context, pod *corev1.Pod, bizSta
 			},
 		}
 		return podStatus, nil
-	} else if notInitedBizJarContainerCount == bizJarContainerCount {
+	case notInitedBizJarContainerCount == bizJarContainerCount:
+		// all biz jar containers not inited
 		podStatus.Phase = corev1.PodPending
 		podStatus.Conditions = []corev1.PodCondition{
 			{
@@ -447,8 +453,8 @@ func (b *VPodProvider) GetPodStatus(ctx context.Context, pod *corev1.Pod, bizSta
 				LastProbeTime: metav1.NewTime(time.Now()),
 			},
 		}
-	} else if bizJarContainerCount == readyBizJarContainerCount {
-		// all biz jar container is ready
+	case bizJarContainerCount == readyBizJarContainerCount:
+		// all biz jar containers are ready
 		podStatus.Phase = corev1.PodRunning
 		podStatus.Conditions = []corev1.PodCondition{
 			{
@@ -462,7 +468,8 @@ func (b *VPodProvider) GetPodStatus(ctx context.Context, pod *corev1.Pod, bizSta
 				LastProbeTime: metav1.NewTime(time.Now()),
 			},
 		}
-	} else if notReadyBizJarContainerCount > 0 || (readyBizJarContainerCount > 0 && readyBizJarContainerCount < bizJarContainerCount) {
+	case notReadyBizJarContainerCount > 0 || (readyBizJarContainerCount > 0 && readyBizJarContainerCount < bizJarContainerCount):
+		// partially ready
 		podStatus.Phase = corev1.PodRunning
 		podStatus.Conditions = []corev1.PodCondition{
 			{
@@ -476,7 +483,7 @@ func (b *VPodProvider) GetPodStatus(ctx context.Context, pod *corev1.Pod, bizSta
 				LastProbeTime: metav1.NewTime(time.Now()),
 			},
 		}
-	} else {
+	default:
 		podStatus.Phase = corev1.PodPending
 		podStatus.Conditions = []corev1.PodCondition{
 			{

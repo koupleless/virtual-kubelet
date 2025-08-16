@@ -2,11 +2,12 @@ package tunnel
 
 import (
 	"context"
+	"sync"
+	"time"
+
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
 	corev1 "k8s.io/api/core/v1"
-	"sync"
-	"time"
 )
 
 var _ Tunnel = &MockTunnel{}
@@ -123,10 +124,11 @@ func (m *MockTunnel) StartBiz(nodeName, podKey string, container *corev1.Contain
 		containerMap = map[string]model.BizStatusData{}
 	}
 	data := model.BizStatusData{
-		Key:        key,
-		Name:       container.Name,
-		PodKey:     podKey,
-		State:      string(model.BizStateUnResolved),
+		Key:    key,
+		Name:   container.Name,
+		PodKey: podKey,
+		// @fix: should be resolved state when biz start
+		State:      string(model.BizStateResolved),
 		ChangeTime: time.Now(),
 		Reason:     "mock_resolved",
 		Message:    "mock resolved",

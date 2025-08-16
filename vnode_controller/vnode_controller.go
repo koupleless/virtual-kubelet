@@ -8,22 +8,23 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/koupleless/virtual-kubelet/common/utils"
-	"github.com/koupleless/virtual-kubelet/model"
-	"github.com/koupleless/virtual-kubelet/provider"
 	"github.com/koupleless/virtual-kubelet/tunnel"
 	"github.com/koupleless/virtual-kubelet/vnode_controller/predicates"
-	errpkg "github.com/pkg/errors"
-	"github.com/virtual-kubelet/virtual-kubelet/log"
-	"github.com/virtual-kubelet/virtual-kubelet/trace"
 	coordinationv1 "k8s.io/api/coordination/v1"
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/types"
+
+	"github.com/koupleless/virtual-kubelet/common/utils"
+	"github.com/koupleless/virtual-kubelet/model"
+	"github.com/koupleless/virtual-kubelet/provider"
+	errpkg "github.com/pkg/errors"
+	"github.com/virtual-kubelet/virtual-kubelet/log"
+	"github.com/virtual-kubelet/virtual-kubelet/trace"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -374,8 +375,9 @@ func (vNodeController *VNodeController) podUpdateHandler(ctx context.Context, ol
 	}
 
 	// get the diff of oldPod and new Pod
+
 	diff := cmp.Diff(oldPodFromKubernetes, newPodFromKubernetes)
-	log.G(ctx).Infof("try to update pod %s/%s with diff %s in podUpdateHandler.", vNode.GetNodeName(), podKey, diff)
+	log.G(ctx).Debugf("try to update pod %s/%s with diff %s in podUpdateHandler.", vNode.GetNodeName(), podKey, diff)
 	if !vNode.IsLeader(vNodeController.clientID) {
 		log.G(ctx).Infof("can not update pod %s because is not the leader of vnode: %s", podKey, vNode.GetNodeName())
 		return
@@ -663,7 +665,7 @@ func (vNodeController *VNodeController) connectWithInterval(takeOverVnCtx contex
 
 	// Start a new goroutine to fetch node health data every NodeToFetchHeartBeatInterval seconds
 	go utils.TimedTaskWithInterval(takeOverVnCtx, time.Second*model.NodeToFetchHeartBeatInterval, func(ctx context.Context) {
-		log.G(takeOverVnCtx).Info("fetch node health data for node ", nodeName)
+		log.G(takeOverVnCtx).Debug("fetch node health data for node ", nodeName)
 		err = vNodeController.tunnel.FetchHealthData(nodeName)
 		if err != nil {
 			log.G(takeOverVnCtx).WithError(err).Errorf("Failed to fetch node health info from %s", nodeName)
@@ -672,7 +674,7 @@ func (vNodeController *VNodeController) connectWithInterval(takeOverVnCtx contex
 
 	// Start a new goroutine to query all container status data every NodeToFetchAllBizStatusInterval seconds
 	go utils.TimedTaskWithInterval(takeOverVnCtx, time.Second*model.NodeToFetchAllBizStatusInterval, func(context.Context) {
-		log.G(takeOverVnCtx).Info("query all container status data for node ", nodeName)
+		log.G(takeOverVnCtx).Debug("query all container status data for node ", nodeName)
 		err = vNodeController.tunnel.QueryAllBizStatusData(nodeName)
 		if err != nil {
 			log.G(takeOverVnCtx).WithError(err).Errorf("Failed to query containers info from %s", nodeName)
@@ -768,9 +770,12 @@ func podShouldEnqueue(oldPod, newPod *corev1.Pod) bool {
 		log.L.Infof("pod will update for delete %s", utils.GetPodKey(oldPod))
 		return true
 	}
-
 	if podShouldEnqueueForAdd(oldPod, newPod) {
 		log.L.Infof("pod will update for add %s", utils.GetPodKey(oldPod))
+		return true
+	}
+	if podShouldEnqueueForBizContainerSync(newPod) {
+		log.L.Infof("pod will update for reinstall biz module %s", utils.GetPodKey(newPod))
 		return true
 	}
 
@@ -791,6 +796,15 @@ func podShouldEnqueueForDelete(oldPod, newPod *corev1.Pod) bool {
 func podShouldEnqueueForAdd(oldPod, newPod *corev1.Pod) bool {
 	if oldPod.Spec.NodeName == "" && newPod.Spec.NodeName != "" {
 		return true
+	}
+	return false
+}
+
+func podShouldEnqueueForBizContainerSync(po *corev1.Pod) bool {
+	for _, cs := range po.Status.ContainerStatuses {
+		if cs.State.Waiting != nil && cs.State.Waiting.Reason == model.StateReasonAwaitingResync {
+			return true
+		}
 	}
 	return false
 }

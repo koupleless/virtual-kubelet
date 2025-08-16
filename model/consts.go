@@ -127,3 +127,8 @@ const (
 	// NodeToCheckUnreachableAndDeadStatusInterval is the interval to check if node status is unreachable or dead
 	NodeToCheckUnreachableAndDeadStatusInterval = 3
 )
+
+const (
+	// StateReasonAwaitingResync is a constant string used to indicate that a resource is awaiting resynchronization.
+	StateReasonAwaitingResync = "AwaitingResync"
+)

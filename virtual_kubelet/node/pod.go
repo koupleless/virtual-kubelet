@@ -17,13 +17,15 @@ package node
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/koupleless/virtual-kubelet/common/utils"
+	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet/internal/queue"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strings"
-	"time"
 
 	"github.com/google/go-cmp/cmp"
 	pkgerrors "github.com/pkg/errors"
@@ -82,7 +84,7 @@ func (pc *PodController) createOrUpdatePod(ctx context.Context, pod *corev1.Pod)
 	// NOTE: Some providers return a non-nil error in their GetPod implementation when the pod is not found while some other don't.
 	// Hence, we ignore the error and just act upon the pod if it is non-nil (meaning that the provider still knows about the pod).
 	if podFromProvider, _ := pc.provider.GetPod(ctx, pod.Namespace, pod.Name); podFromProvider != nil {
-		if !utils.PodsEqual(podFromProvider, podForProvider) {
+		if !utils.PodsEqual(podFromProvider, podForProvider) || shouldReSyncBizContainer(podForProvider) {
 			log.G(ctx).Debugf("Pod %s exists, updating pod in provider", podFromProvider.Name)
 			if origErr := pc.provider.UpdatePod(ctx, podForProvider); origErr != nil {
 				pc.handleProviderError(ctx, span, origErr, pod)
@@ -381,4 +383,14 @@ func getUIDAndMetaNamespaceKey(key string) (string, string) {
 func shouldSkipPodStatusUpdate(pod *corev1.Pod) bool {
 	return pod.Status.Phase == corev1.PodSucceeded ||
 		pod.Status.Phase == corev1.PodFailed
+}
+
+// shouldReSyncBizContainer checks if a pod's container should be synchronized based on its status.
+func shouldReSyncBizContainer(pod *corev1.Pod) bool {
+	for _, container := range pod.Status.ContainerStatuses {
+		if container.State.Waiting != nil && container.State.Waiting.Reason == model.StateReasonAwaitingResync {
+			return true
+		}
+	}
+	return false
 }

@@ -233,9 +233,15 @@ func MergeNodeFromProvider(node *corev1.Node, data model.NodeStatusData) *corev1
 }
 
 // ConvertBizStatusToContainerStatus converts tunnel container status to Kubernetes container status, if not the status for the container, then create a empty state container status
-func ConvertBizStatusToContainerStatus(container *corev1.Container, containerStatus *corev1.ContainerStatus, data *model.BizStatusData) (*corev1.ContainerStatus, error) {
+func ConvertBizStatusToContainerStatus(
+	container *corev1.Container,
+	containerStatus *corev1.ContainerStatus,
+	data *model.BizStatusData,
+) (*corev1.ContainerStatus, error) {
 	// this may be a little complex to handle the case that parameters is not nil or for same container name
+	onInit := false
 	if containerStatus == nil {
+		onInit = true
 		if data == nil || (container.Name != data.Name) {
 			started := false
 			return &corev1.ContainerStatus{
@@ -286,7 +292,26 @@ func ConvertBizStatusToContainerStatus(container *corev1.Container, containerSta
 	if strings.EqualFold(data.State, string(model.BizStateUnResolved)) {
 		// Handle the case where data is nil, indicating the container is pending
 		// no biz info yet
-		ret.State = corev1.ContainerState{}
+
+		// @fix: For the rolling update strategy, the timing sequence on the module controller side does not work as expected:
+		//  biz module installs (when a new replica is scheduled) -> biz module uninstalls (when the old replica is scheduled)
+		// This can cause the biz module to remain in the UNRESOLVED state permanently, so we need to notify the pod controller
+		// to reinstall the biz module.
+		if !onInit {
+			// Always indicate Waiting to drive the re-sync path, even if there was no previous status.
+			msg := "Biz module is in UNRESOLVED state, resync needed"
+			if data.Message != "" {
+				msg = data.Message
+			}
+			ret.State = corev1.ContainerState{
+				Waiting: &corev1.ContainerStateWaiting{
+					Reason:  model.StateReasonAwaitingResync,
+					Message: msg,
+				},
+			}
+		} else {
+			ret.State = corev1.ContainerState{}
+		}
 		return &ret, nil
 	} else if strings.EqualFold(data.State, string(model.BizStateResolved)) ||
 		strings.EqualFold(data.State, string(model.BizStateBroken)) ||

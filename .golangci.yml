@@ -12,6 +12,10 @@ linters:
     - unconvert
     - unparam
     - whitespace
+  settings:
+    cyclop:
+      # The maximal code complexity to report.
+      max-complexity: 18
 
 formatters:
   enable:

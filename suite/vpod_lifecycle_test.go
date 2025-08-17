@@ -2,6 +2,8 @@ package suite
 
 import (
 	"context"
+	"time"
+
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
 	. "github.com/onsi/ginkgo/v2"
@@ -9,7 +11,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	"time"
 )
 
 var _ = Describe("VPod Lifecycle Test", func() {
@@ -79,7 +80,6 @@ var _ = Describe("VPod Lifecycle Test", func() {
 			for _, container := range basicPod.Spec.Containers {
 				podKey := utils.GetPodKey(&basicPod)
 				key := tl.GetBizUniqueKey(&container)
-				time.Sleep(time.Second)
 				tl.UpdateBizStatus(nodeName, key, model.BizStatusData{
 					Key:        key,
 					Name:       container.Name,
@@ -130,7 +130,6 @@ var _ = Describe("VPod Lifecycle Test", func() {
 				State:      string(model.BizStateActivated),
 				ChangeTime: time.Now(),
 			})
-			time.Sleep(time.Second)
 			Eventually(func() bool {
 				podFromKubernetes := &v1.Pod{}
 				err := k8sClient.Get(ctx, types.NamespacedName{
@@ -152,7 +151,6 @@ var _ = Describe("VPod Lifecycle Test", func() {
 				State:      string(model.BizStateActivated),
 				ChangeTime: time.Now(),
 			})
-			time.Sleep(time.Second)
 			Eventually(func() bool {
 				podFromKubernetes := &v1.Pod{}
 				err := k8sClient.Get(ctx, types.NamespacedName{
@@ -247,7 +245,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 		})
 	})
 
-	//It("evict pod after node shutdown", func() {
+	// It("evict pod after node shutdown", func() {
 	//	Eventually(func() bool {
 	//		podFromKubernetes := &v1.Pod{}
 	//
@@ -262,5 +260,5 @@ var _ = Describe("VPod Lifecycle Test", func() {
 	//		}, nodeFromKubernetes)
 	//		return err == nil && podFromKubernetes.DeletionTimestamp != nil
 	//	}, time.Minute*10, time.Second).Should(BeTrue())
-	//})
+	// })
 })

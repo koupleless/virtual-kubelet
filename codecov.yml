@@ -1,0 +1,9 @@
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+    patch:
+      default:
+        target: 80%   # 新增代码行覆盖率目标
+        threshold: 1% # 允许波动范围

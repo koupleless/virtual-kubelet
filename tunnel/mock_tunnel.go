@@ -29,6 +29,19 @@ type MockTunnel struct {
 	NodeNotReady     map[string]bool
 }
 
+func NewMockTunnel() *MockTunnel {
+	return &MockTunnel{
+		bizStatusStorage: map[string]map[string]model.BizStatusData{},
+		nodeStorage:      map[string]Node{},
+		NodeNotReady:     map[string]bool{},
+
+		OnBaseDiscovered:         func(model.NodeInfo) {},
+		OnBaseStatusArrived:      func(string, model.NodeStatusData) {},
+		OnSingleBizStatusArrived: func(string, model.BizStatusData) {},
+		OnAllBizStatusArrived:    func(string, []model.BizStatusData) {},
+	}
+}
+
 func (m *MockTunnel) OnNodeNotReady(nodeName string) {
 	m.Lock()
 	defer m.Unlock()
@@ -159,6 +172,18 @@ func (m *MockTunnel) StopBiz(nodeName, podKey string, container *corev1.Containe
 
 func (m *MockTunnel) GetBizUniqueKey(container *corev1.Container) string {
 	return utils.GetBizUniqueKey(container)
+}
+
+func (m *MockTunnel) GetBizStatusStorage() map[string]map[string]model.BizStatusData {
+	m.Lock()
+	defer m.Unlock()
+	return m.bizStatusStorage
+}
+
+func (m *MockTunnel) GetNodeStorage() map[string]Node {
+	m.Lock()
+	defer m.Unlock()
+	return m.nodeStorage
 }
 
 func convertContainerMap2ContainerList(containerMap map[string]model.BizStatusData) []model.BizStatusData {

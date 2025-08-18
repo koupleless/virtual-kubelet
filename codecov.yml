@@ -6,6 +6,11 @@ comment:
   require_head: true       # Require head branch coverage
 
 coverage:
+  ignore:
+    - 'vendor/**'
+    - '**/*_generated.go'
+    - '**/zz_generated.*'
+    - '**/mock_*.go'
   status:
     project:
       default:

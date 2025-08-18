@@ -378,4 +378,32 @@ func TestPodShouldEnqueue(t *testing.T) {
 			},
 		},
 	}))
+	t.Run("podShouldEnqueueForAdd", func(t *testing.T) {
+		assert.True(t, podShouldEnqueue(
+			&corev1.Pod{},
+			&corev1.Pod{
+				Spec: corev1.PodSpec{
+					NodeName: "vnode.test-node.env",
+				},
+			},
+		))
+	})
+	t.Run("podShouldEnqueueForBizContainerSync", func(t *testing.T) {
+		assert.True(t, podShouldEnqueue(
+			&corev1.Pod{},
+			&corev1.Pod{
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							State: corev1.ContainerState{
+								Waiting: &corev1.ContainerStateWaiting{
+									Reason: model.StateReasonAwaitingResync,
+								},
+							},
+						},
+					},
+				},
+			},
+		))
+	})
 }

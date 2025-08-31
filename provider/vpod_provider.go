@@ -16,15 +16,16 @@ package provider
 
 import (
 	"context"
+	"sort"
+	"strings"
+	"time"
+
 	"github.com/koupleless/virtual-kubelet/tunnel"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet/node"
 	"github.com/koupleless/virtual-kubelet/virtual_kubelet/node/nodeutil"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
-	"sort"
-	"strings"
-	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/koupleless/virtual-kubelet/common/tracker"
@@ -337,7 +338,7 @@ func (b *VPodProvider) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 		}
 		return true, nil
 	}, time.Minute, time.Second, func() {
-		b.handleBizBatchStart(ctx, newPod, shouldStopContainers)
+		b.handleBizBatchStart(ctx, newPod, shouldStartContainers)
 	}, func() {
 		logger.Error("stop old containers timeout, not start new containers")
 	})

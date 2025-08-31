@@ -263,7 +263,7 @@ func (vNode *VNode) syncNotExistBizPodToProvider(ctx context.Context, toDeleteIn
 		bizName, bizVersion := utils.GetBizNameAndVersionFromUniqueKey(bizStatus.Key)
 		err := vNode.podProvider.DeletePod(ctx, &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "not-exist-pod",
+				Name:      model.ObjectMetaNameNotExistPod,
 				Namespace: corev1.NamespaceDefault,
 			},
 			Spec: corev1.PodSpec{

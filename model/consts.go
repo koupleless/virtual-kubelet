@@ -123,3 +123,7 @@ const (
 	// NodeToCheckUnreachableAndDeadStatusInterval is the interval to check if node status is unreachable or dead
 	NodeToCheckUnreachableAndDeadStatusInterval = 3
 )
+
+const (
+	ObjectMetaNameNotExistPod = "not-exist-pod"
+)

@@ -220,7 +220,13 @@ func (b *VPodProvider) handleBizBatchStop(ctx context.Context, pod *corev1.Pod, 
 	for _, container := range containers {
 		err := tracker.G().FuncTrack(labelMap[model.LabelKeyOfTraceID], model.TrackSceneVPodDeploy, model.TrackEventContainerShutdown, labelMap, func() (error, model.ErrorCode) {
 			err := utils.CallWithRetry(ctx, func(_ int) (bool, error) {
-				innerErr := b.tunnel.StopBiz(b.nodeName, podKey, &container)
+				var podKeyToStopBiz string
+				if strings.HasSuffix(podKey, model.ObjectMetaNameNotExistPod) {
+					podKeyToStopBiz = ""
+				} else {
+					podKeyToStopBiz = podKey
+				}
+				innerErr := b.tunnel.StopBiz(b.nodeName, podKeyToStopBiz, &container)
 
 				return innerErr != nil, innerErr
 			}, nil)

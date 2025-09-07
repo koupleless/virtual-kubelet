@@ -2,6 +2,8 @@ package suite
 
 import (
 	"context"
+	"time"
+
 	"github.com/koupleless/virtual-kubelet/common/utils"
 	"github.com/koupleless/virtual-kubelet/model"
 	. "github.com/onsi/ginkgo/v2"
@@ -9,7 +11,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	"time"
 )
 
 var _ = Describe("VPod Lifecycle Test", func() {
@@ -236,6 +237,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 
 		It(tasks[8], func() {
 			nodeInfo.State = model.NodeStateDeactivated
+			nodeInfo.NodeState = model.NodeStateDeactivated
 			tl.PutNode(ctx, nodeName, nodeInfo)
 			Eventually(func() bool {
 				node := &v1.Node{}
@@ -247,7 +249,7 @@ var _ = Describe("VPod Lifecycle Test", func() {
 		})
 	})
 
-	//It("evict pod after node shutdown", func() {
+	// It("evict pod after node shutdown", func() {
 	//	Eventually(func() bool {
 	//		podFromKubernetes := &v1.Pod{}
 	//
@@ -262,5 +264,5 @@ var _ = Describe("VPod Lifecycle Test", func() {
 	//		}, nodeFromKubernetes)
 	//		return err == nil && podFromKubernetes.DeletionTimestamp != nil
 	//	}, time.Minute*10, time.Second).Should(BeTrue())
-	//})
+	// })
 })

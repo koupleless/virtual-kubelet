@@ -254,6 +254,7 @@ func (vNodeController *VNodeController) onBaseStatusArrived(nodeName string, dat
 
 	if vNode.IsLeader(vNodeController.clientID) {
 		vNode.SyncNodeStatus(data)
+		vNodeController.vNodeStore.UpdateNodeStateOnProviderArrived(nodeName, data.NodeState)
 	}
 }
 
@@ -373,13 +374,14 @@ func (vNodeController *VNodeController) podUpdateHandler(ctx context.Context, ol
 		vNode.AddKnowPod(newPodFromKubernetes)
 	}
 
-	// get the diff of oldPod and new Pod
-	diff := cmp.Diff(oldPodFromKubernetes, newPodFromKubernetes)
-	log.G(ctx).Infof("try to update pod %s/%s with diff %s in podUpdateHandler.", vNode.GetNodeName(), podKey, diff)
 	if !vNode.IsLeader(vNodeController.clientID) {
 		log.G(ctx).Infof("can not update pod %s because is not the leader of vnode: %s", podKey, vNode.GetNodeName())
 		return
 	}
+
+	// get the diff of oldPod and new Pod
+	diff := cmp.Diff(oldPodFromKubernetes, newPodFromKubernetes)
+	log.G(ctx).Infof("try to update pod %s/%s with diff %s in podUpdateHandler.", vNode.GetNodeName(), podKey, diff)
 
 	if !vNodeController.isValidStatus(ctx, vNode) {
 		log.G(ctx).Warnf("can not update pod %s because vnode %s is invalid: ", podKey, vNode.GetNodeName())
@@ -555,6 +557,7 @@ func (vNodeController *VNodeController) createOrRetryUpdateLease(vnCtx context.C
 	for i := 0; i < model.NodeLeaseMaxRetryTimes; i++ {
 		time.Sleep(time.Millisecond * 200) // TODO: add random sleep time for reduce the client rate
 		lease := &coordinationv1.Lease{}
+		created := false
 		err := vNodeController.client.Get(vnCtx, types.NamespacedName{
 			Name:      vNode.GetNodeName(),
 			Namespace: corev1.NamespaceNodeLease,
@@ -570,13 +573,14 @@ func (vNodeController *VNodeController) createOrRetryUpdateLease(vnCtx context.C
 				if err != nil {
 					// Log the error if there's a problem creating the lease
 					log.G(vnCtx).WithError(err).Errorf("node lease %s creating error", vNode.GetNodeName())
+					continue
 				}
+				created = true
 				log.G(vnCtx).Infof("node lease %s created: %s", vNode.GetNodeName(), lease.Spec.RenewTime)
+			} else {
+				log.G(vnCtx).WithError(err).WithField("retries", i).Error("failed to get node lease when updating node lease")
 				continue
 			}
-
-			log.G(vnCtx).WithError(err).WithField("retries", i).Error("failed to get node lease when updating node lease")
-			continue
 		}
 
 		isLeaderBefore := vNode.IsLeader(vNodeController.clientID)
@@ -591,6 +595,12 @@ func (vNodeController *VNodeController) createOrRetryUpdateLease(vnCtx context.C
 			log.G(vnCtx).Infof("node lease %s acquired by %s", vNode.GetNodeName(), vNodeController.clientID)
 			vNode.LeaderAcquiredByMe()
 			log.G(vnCtx).Infof("node %s inited after leader acquired", vNode.GetNodeName())
+		}
+
+		if created || !isLeaderNow {
+			// If we just created the lease, no need to update it again immediately,
+			// or we are not the leader, no need to update the lease
+			return
 		}
 
 		newLease := lease.DeepCopy()

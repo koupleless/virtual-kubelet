@@ -2,6 +2,8 @@ package suite
 
 import (
 	"context"
+	"time"
+
 	"github.com/koupleless/virtual-kubelet/model"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -9,7 +11,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	"time"
 )
 
 var _ = Describe("VNode Lifecycle Test", func() {
@@ -27,6 +28,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 	Context("node online and deactive finally", func() {
 		It("node should become a ready node eventually", func() {
 			nodeInfo.NodeInfo.State = model.NodeStateActivated
+			nodeInfo.NodeState = model.NodeStateActivated
 			tl.PutNode(ctx, nodeName, nodeInfo)
 
 			Eventually(func() bool {
@@ -92,6 +94,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 
 		It("node offline with deactive message and finally exit", func() {
 			nodeInfo.NodeInfo.State = model.NodeStateDeactivated
+			nodeInfo.NodeState = model.NodeStateDeactivated
 			tl.PutNode(ctx, nodeName, nodeInfo)
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
@@ -131,6 +134,7 @@ var _ = Describe("VNode Lifecycle Test", func() {
 		// TODO: enable this by update node status when deactivated
 		It("node offline with deactive message and finally exit", func() {
 			nodeInfo.NodeInfo.State = model.NodeStateDeactivated
+			nodeInfo.NodeState = model.NodeStateDeactivated
 			tl.PutNode(ctx, nodeName, nodeInfo)
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{

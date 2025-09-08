@@ -254,7 +254,9 @@ func (vNodeController *VNodeController) onBaseStatusArrived(nodeName string, dat
 
 	if vNode.IsLeader(vNodeController.clientID) {
 		vNode.SyncNodeStatus(data)
-		vNodeController.vNodeStore.UpdateNodeStateOnProviderArrived(nodeName, data.NodeState)
+		if data.NodeState != "" {
+			vNodeController.vNodeStore.UpdateNodeStateOnProviderArrived(nodeName, data.NodeState)
+		}
 	}
 }
 

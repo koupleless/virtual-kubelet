@@ -2,6 +2,9 @@ package suite
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/koupleless/virtual-kubelet/model"
 	"github.com/koupleless/virtual-kubelet/tunnel"
 	"github.com/koupleless/virtual-kubelet/vnode_controller"
@@ -15,8 +18,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"testing"
-	"time"
 
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -52,10 +53,10 @@ var _ = BeforeSuite(func() {
 	log.L = logruslogger.FromLogrus(logrus.NewEntry(logrus.StandardLogger()))
 
 	By("bootstrapping suite environment")
-	//usingExistingCluster := true
+	// usingExistingCluster := true
 	testEnv = &envtest.Environment{
 		// set using existing cluster to true to use the current kubeconfig, like minikube
-		//UseExistingCluster: &usingExistingCluster,
+		// UseExistingCluster: &usingExistingCluster,
 	}
 
 	var err error
@@ -159,6 +160,7 @@ func prepareNode(name, version, baseName, clusterName string) tunnel.Node {
 					LastTransitionTime: metav1.Now(),
 				},
 			},
+			NodeState: model.NodeStateActivated,
 		},
 	}
 }

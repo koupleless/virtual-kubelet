@@ -386,7 +386,7 @@ func FillPodKey(pods []corev1.Pod, bizStatusDatas []model.BizStatusData) (toUpda
 	// if bizStatusData.PodKey is empty, try to find it from bizKeyToPodKey
 	bizStatusDatasWithPodKey := make([]model.BizStatusData, 0, len(bizStatusDatas))
 	bizStatusDatasWithNoPodKey := make([]model.BizStatusData, 0, len(bizStatusDatas))
-	for i, _ := range bizStatusDatas {
+	for i := range bizStatusDatas {
 		if podKey, ok := bizKeyToPodKey[bizStatusDatas[i].Key]; ok && bizStatusDatas[i].PodKey == "" {
 			bizStatusDatas[i].PodKey = podKey
 		}

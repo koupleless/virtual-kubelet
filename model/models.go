@@ -43,6 +43,7 @@ type NodeResource struct {
 type NodeStatusData struct {
 	Resources        map[v1.ResourceName]NodeResource // Resources of the node
 	CustomConditions []v1.NodeCondition               // Custom conditions set by the tunnel
+	NodeState        NodeState                        // Current state of the vnode
 }
 
 // BizStatusData is the status data of a container

@@ -297,7 +297,7 @@ func (vNode *VNode) Exit() <-chan struct{} {
 func (vNode *VNode) IsLeader(clientId string) bool {
 	// current time is not after the lease renew time and the lease holder time
 	if vNode.lease == nil {
-		log.L.Warnf("vnode %s does not have lease", vNode.name)
+		log.L.Warnf("vnode %s may not have lease", vNode.name)
 		return false
 	}
 

@@ -90,6 +90,29 @@ func TestUpdateDeletedPod(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestDeletedPodNotExist(t *testing.T) {
+	tl := &tunnel.MockTunnel{}
+	provider := NewVPodProvider("default", "127.0.0.1", "123", nil, nil, tl)
+	provider.notify = func(pod *corev1.Pod) {}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              model.ObjectMetaNameNotExistPod,
+			CreationTimestamp: metav1.Time{Time: time.Now()},
+			DeletionTimestamp: &metav1.Time{Time: time.Now()},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:  "test-container",
+					Image: "test-image",
+				},
+			},
+		},
+	}
+	err := provider.DeletePod(context.TODO(), pod)
+	assert.NoError(t, err)
+}
+
 func TestUpdatePod(t *testing.T) {
 	tl := &tunnel.MockTunnel{}
 	_ = tl.Start("test", "test")
@@ -114,7 +137,6 @@ func TestUpdatePod(t *testing.T) {
 			},
 		},
 	}
-
 	fakeCli := fake.NewFakeClient(oldPod)
 
 	provider := NewVPodProvider("default", "127.0.0.1", "123", fakeCli, nil, tl)
